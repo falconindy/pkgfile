@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <archive.h>
 #include <archive_entry.h>
@@ -214,6 +215,11 @@ static void *load_repo(void *repo)
 	char reponame[1024];
 	struct archive *a;
 	struct archive_entry *e;
+
+	if(access(repo, R_OK)) {
+		fprintf(stderr, "error: failed to load repo: %s\n", (const char*)repo);
+		return NULL;
+	}
 
 	filename = (char *)repo;
 	snprintf(reponame, strcspn(filename, ".") + 1, "%s", filename);
