@@ -127,6 +127,18 @@ static size_t strip_newline(char *str)
 	return len;
 }
 
+static int is_binary(const char *line)
+{
+	if(config.binaries &&
+			(line[strlen(line)-1] == '/' ||
+			!(strncmp(line, "bin/", 4) == 0 || strstr(line, "/bin/") ||
+			strncmp(line, "sbin/", 5) == 0 || strstr(line, "/sbin/")))) {
+		return 0;
+	}
+
+	return 1;
+}
+
 static int search_metafile(const char *repo, const char *pkgname,
 		struct archive *a) {
 	int ret, icase;
@@ -141,6 +153,10 @@ static int search_metafile(const char *repo, const char *pkgname,
 		size_t len = strip_newline(buf.line);
 
 		if(!len || buf.line[len-1] == '/' || strcmp(buf.line, files) == 0) {
+			continue;
+		}
+
+		if(config.binaries && !is_binary(buf.line)) {
 			continue;
 		}
 
@@ -170,6 +186,10 @@ static int list_metafile(const char UNUSED *repo, const char *pkgname,
 		size_t len = strip_newline(buf.line);
 
 		if(!len || strcmp(buf.line, files) == 0) {
+			continue;
+		}
+
+		if(config.binaries && !is_binary(buf.line)) {
 			continue;
 		}
 
@@ -310,6 +330,7 @@ static int parse_opts(int argc, char **argv)
 {
 	int opt, opt_idx;
 	static struct option opts[] = {
+		{"binaries",    no_argument,        0, 'b'},
 		{"glob",        no_argument,        0, 'g'},
 		{"help",        no_argument,        0, 'h'},
 		{"ignorecase",  no_argument,        0, 'i'},
@@ -318,8 +339,11 @@ static int parse_opts(int argc, char **argv)
 		{0,0,0,0}
 	};
 
-	while((opt = getopt_long(argc, argv, "ghirl", opts, &opt_idx)) != -1) {
+	while((opt = getopt_long(argc, argv, "bghirl", opts, &opt_idx)) != -1) {
 		switch(opt) {
+			case 'b':
+				config.binaries = 1;
+				break;
 			case 'g':
 				config.filterby = FILTER_GLOB;
 				break;
