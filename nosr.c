@@ -143,25 +143,9 @@ static int search_metafile(const char *repo, const char *pkgname,
 			continue;
 		}
 
-		switch(config.filterby) {
-			case FILTER_REGEX:
-				if(match_regex((void *)&config.filter.re, buf.line, icase) == 0) {
-					printf("%s/%s\n", repo, pkgname);
-					return 1;
-				}
-				break;
-			case FILTER_GLOB:
-				if(match_glob(config.filter.glob, buf.line, icase) == 0) {
-					printf("%s/%s\n", repo, pkgname);
-					return 1;
-				}
-				break;
-			case FILTER_EXACT:
-				if(match_exact(config.filter.glob, buf.line, icase) == 0) {
-					printf("%s/%s\n", repo, pkgname);
-					return 1;
-				}
-				break;
+		if(config.filterfunc(&config.filter, buf.line, icase) == 0) {
+			printf("%s/%s\n", repo, pkgname);
+			return 1;
 		}
 	}
 
@@ -380,13 +364,16 @@ int main(int argc, char *argv[])
 		case FILTER_EXACT:
 			config.icase_flag = 1;
 			config.filter.glob = argv[optind];
+			config.filterfunc = match_exact;
 			break;
 		case FILTER_GLOB:
 			config.icase_flag = FNM_CASEFOLD;
 			config.filter.glob = argv[optind];
+			config.filterfunc = match_glob;
 			break;
 		case FILTER_REGEX:
 			config.icase_flag = PCRE_CASELESS;
+			config.filterfunc = match_regex;
 			if(compile_pcre_expr(&config.filter.re, argv[optind], 0) != 0) {
 				return 1;
 			}

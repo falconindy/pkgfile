@@ -5,19 +5,19 @@
 #include "match.h"
 #include "nosr.h"
 
-int match_glob(void *pattern, const char *line, int flags) {
-	const char *glob = (const char *)pattern;
+int match_glob(filterpattern_t *pattern, const char *line, int flags) {
+	const char *glob = pattern->glob;
 	return fnmatch(glob, line, flags);
 }
 
-int match_regex(void *pattern, const char *line, int flags) {
-	struct pcre_data *re = (struct pcre_data *)pattern;
+int match_regex(filterpattern_t *pattern, const char *line, int flags) {
+	struct pcre_data *re = &pattern->re;
 	return !(pcre_exec(re->re, re->re_extra, line, strlen(line),
 			0, flags, NULL, 0) >= 0);
 }
 
-int match_exact(void *pattern, const char *line, int flags) {
-	const char *ptr, *match = (const char *)pattern;
+int match_exact(filterpattern_t *pattern, const char *line, int flags) {
+	const char *ptr, *match = pattern->glob;
 
 	/* if the search string contains a /, don't just search on basenames. since
 	 * our files DB doesn't contain leading slashes (for good reason), advance

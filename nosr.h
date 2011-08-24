@@ -34,15 +34,16 @@ typedef enum _filterstyle_t {
 	FILTER_REGEX
 } filterstyle_t;
 
+typedef union _filterpattern_t {
+	struct pcre_data re;
+	char *glob;
+} filterpattern_t;
+
 struct config_t {
 	filterstyle_t filterby;
+	filterpattern_t filter;
 	int (*filefunc)(const char *repo, const char *entryname, struct archive* a);
-
-	union {
-		struct pcre_data re;
-		char *glob;
-	} filter;
-
+	int (*filterfunc)(filterpattern_t *filter, const char *line, int flags);
 	int icase;
 	int icase_flag;
 };
