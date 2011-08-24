@@ -1,3 +1,6 @@
+#ifndef _NOSR_H
+#define _NOSR_H
+
 #include <archive.h>
 #include <pcre.h>
 
@@ -44,3 +47,5 @@ struct config_t {
 	int icase_flag;
 };
 
+#endif /* _NOSR_H */
+/* vim: set ts=2 sw=2 noet: */
