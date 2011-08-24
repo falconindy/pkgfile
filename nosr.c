@@ -157,7 +157,7 @@ static int search_metafile(const char *repo, const char *pkgname,
 				}
 				break;
 			case FILTER_EXACT:
-				if(match_exact(config.filter.glob, strrchr(buf.line, '/') + 1, icase) == 0) {
+				if(match_exact(config.filter.glob, buf.line, icase) == 0) {
 					printf("%s/%s\n", repo, pkgname);
 					return 1;
 				}

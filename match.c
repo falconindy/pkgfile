@@ -17,7 +17,25 @@ int match_regex(void *pattern, const char *line, int flags) {
 }
 
 int match_exact(void *pattern, const char *line, int flags) {
-	const char *match = (const char *)pattern;
-	return flags ? strcasecmp(match, line) : strcmp(match, line);
+	const char *ptr, *match = (const char *)pattern;
+
+	/* if the search string contains a /, don't just search on basenames. since
+	 * our files DB doesn't contain leading slashes (for good reason), advance
+	 * the pointer on the line to compare against */
+	if(match[0] == '/') {
+		ptr = line;
+		match++;
+	} else {
+		ptr = strrchr(line, '/');
+		if(ptr) {
+			ptr++;
+		} else {
+			/* invalid? we should never hit this */
+			return 1;
+		}
+	}
+
+	return flags ? strcasecmp(match, ptr) : strcmp(match, ptr);
 }
 
+/* vim: set ts=2 sw=2 noet: */
