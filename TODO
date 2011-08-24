@@ -1,0 +1,5 @@
+- return package filelists and print from single threaded context
+- pick a location for files.tar.gz's (and read from there instead of hardcoding)
+- download files.tar.gz's from a mirror (bleh)
+- allow $repo/$pkgname syntax for --list option
+- write a manpage
