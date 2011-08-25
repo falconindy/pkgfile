@@ -44,6 +44,7 @@ struct config_t {
 	filterpattern_t filter;
 	int (*filefunc)(const char *repo, const char *entryname, struct archive* a);
 	int (*filterfunc)(filterpattern_t *filter, const char *line, int flags);
+	void (*filterfree)(filterpattern_t *filter);
 	int binaries;
 	int icase;
 	int icase_flag;

@@ -16,6 +16,12 @@ int match_regex(filterpattern_t *pattern, const char *line, int flags) {
 			0, flags, NULL, 0) >= 0);
 }
 
+void free_regex(filterpattern_t *pattern) {
+	struct pcre_data *re = &pattern->re;
+	pcre_free(re->re);
+	pcre_free(re->re_extra);
+}
+
 int match_exact(filterpattern_t *pattern, const char *line, int flags) {
 	const char *ptr, *match = pattern->glob;
 

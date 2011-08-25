@@ -294,7 +294,7 @@ cleanup:
 	return NULL;
 }
 
-static int compile_pcre_expr(struct UNUSED pcre_data *re, const char *preg, int UNUSED flags)
+static int compile_pcre_expr(struct pcre_data *re, const char *preg, int UNUSED flags)
 {
 	const char *err;
 	int err_offset;
@@ -404,6 +404,7 @@ int main(int argc, char *argv[])
 		case FILTER_REGEX:
 			config.icase_flag = PCRE_CASELESS;
 			config.filterfunc = match_regex;
+			config.filterfree = free_regex;
 			if(compile_pcre_expr(&config.filter.re, argv[optind], 0) != 0) {
 				return 1;
 			}
@@ -419,6 +420,10 @@ int main(int argc, char *argv[])
 	/* TODO: gather results, sort them */
 	for(i = 0; i < 5; i++) {
 		pthread_join(t[i], NULL);
+	}
+
+	if(config.filterfree) {
+		config.filterfree(&config.filter);
 	}
 
 	return 0;
