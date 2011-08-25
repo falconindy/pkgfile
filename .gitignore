@@ -1,0 +1,4 @@
+*.files.tar.gz
+*.o
+nosr
+tags
