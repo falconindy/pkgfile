@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fnmatch.h>
 #include <getopt.h>
+#include <glob.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -371,17 +372,59 @@ static int parse_opts(int argc, char **argv)
 	return 0;
 }
 
+static void free_repos(char **repos, int count) {
+	int i;
+
+	for(i = 0; i < count; i++) {
+		free(repos[i]);
+	}
+
+	free(repos);
+}
+
+static int find_repos(char ***repos)
+{
+	int count;
+	unsigned i;
+	glob_t g;
+
+	if(glob("*.files.tar.gz", 0, NULL, &g) != 0) {
+		return -1;
+	}
+
+	count = g.gl_pathc;
+	CALLOC(*repos, count, sizeof(char *), return -1);
+
+	for(i = 0; i < g.gl_pathc; i++) {
+		(*repos)[i] = strdup(g.gl_pathv[i]);
+		if(!(*repos)[i]) {
+			free_repos(*repos, count);
+			return -1;
+		}
+	}
+
+	globfree(&g);
+
+	return count;
+}
+
 int main(int argc, char *argv[])
 {
-	int i;
-	pthread_t t[5];
-	const char *files[] = {
-		"testing.files.tar.gz",
-		"core.files.tar.gz",
-		"extra.files.tar.gz",
-		"community-testing.files.tar.gz",
-		"community.files.tar.gz"
-	};
+	int i, repocount;
+	pthread_t *t;
+	char **files = NULL;
+
+	if(chdir("/var/lib/pacman/sync")) {
+		perror("chdir");
+		return 2;
+	}
+	repocount = find_repos(&files);
+	if(repocount <= 0) {
+		fprintf(stderr, "error: no repos found. run `nosr --update'\n");
+		return 1;
+	}
+
+	CALLOC(t, repocount, sizeof(pthread_t *), return 1);
 
 	config.filefunc = search_metafile;
 	if(parse_opts(argc, argv) != 0) {
@@ -413,25 +456,29 @@ int main(int argc, char *argv[])
 			config.filterfunc = match_regex;
 			config.filterfree = free_regex;
 			if(compile_pcre_expr(&config.filter.re, argv[optind], 0) != 0) {
-				return 1;
+				goto cleanup;
 			}
 			break;
 	}
 
 	/* load and process DBs */
-	for(i = 0; i < 5; i++) {
+	for(i = 0; i < repocount; i++) {
 		pthread_create(&t[i], NULL, load_repo, (void *)files[i]);
 	}
 
 	/* wait for threads to finish, ignoring what they have to say */
 	/* TODO: gather results, sort them */
-	for(i = 0; i < 5; i++) {
+	for(i = 0; i < repocount; i++) {
 		pthread_join(t[i], NULL);
 	}
 
 	if(config.filterfree) {
 		config.filterfree(&config.filter);
 	}
+
+cleanup:
+	free_repos(files, repocount);
+	free(t);
 
 	return 0;
 }
