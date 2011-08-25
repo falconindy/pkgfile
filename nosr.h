@@ -48,6 +48,7 @@ struct config_t {
 	int binaries;
 	int icase;
 	int icase_flag;
+	int doupdate;
 };
 
 #endif /* _NOSR_H */

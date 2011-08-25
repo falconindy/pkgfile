@@ -334,12 +334,13 @@ static int parse_opts(int argc, char **argv)
 		{"glob",        no_argument,        0, 'g'},
 		{"help",        no_argument,        0, 'h'},
 		{"ignorecase",  no_argument,        0, 'i'},
-		{"regex",       no_argument,        0, 'r'},
 		{"list",        no_argument,        0, 'l'},
+		{"regex",       no_argument,        0, 'r'},
+		{"update",      no_argument,        0, 'u'},
 		{0,0,0,0}
 	};
 
-	while((opt = getopt_long(argc, argv, "bghirl", opts, &opt_idx)) != -1) {
+	while((opt = getopt_long(argc, argv, "bghilru", opts, &opt_idx)) != -1) {
 		switch(opt) {
 			case 'b':
 				config.binaries = 1;
@@ -353,11 +354,14 @@ static int parse_opts(int argc, char **argv)
 			case 'i':
 				config.icase = 1;
 				break;
+			case 'l':
+				config.filefunc = list_metafile;
+				break;
 			case 'r':
 				config.filterby = FILTER_REGEX;
 				break;
-			case 'l':
-				config.filefunc = list_metafile;
+			case 'u':
+				config.doupdate = 1;
 				break;
 			default:
 				return 1;
@@ -382,6 +386,10 @@ int main(int argc, char *argv[])
 	config.filefunc = search_metafile;
 	if(parse_opts(argc, argv) != 0) {
 		return 2;
+	}
+
+	if(config.doupdate) {
+		return nosr_update();
 	}
 
 	if(optind == argc) {

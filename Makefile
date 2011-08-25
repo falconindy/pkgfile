@@ -1,6 +1,6 @@
 OUT        = nosr
 CFLAGS    := --std=c99 -g -pedantic -Wall -Wextra -Werror -pthread $(CFLAGS) $(CPPFLAGS)
-LDFLAGS   := -larchive -lpcre $(LDFLAGS)
+LDFLAGS   := -larchive -lpcre -lcurl $(LDFLAGS)
 
 SRC = $(wildcard *.c)
 OBJ = $(SRC:.c=.o)
