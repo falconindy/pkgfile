@@ -211,20 +211,28 @@ static int do_update(const char *filename)
 	return 0;
 }
 
-int nosr_update()
+int nosr_update(const char *download_dir)
 {
+	int ret;
+
+	if(access(".", W_OK)) {
+		fprintf(stderr, "error: unable to write to %s: ", download_dir);
+		perror("");
+		return 1;
+	}
+
 	curl_global_init(CURL_GLOBAL_ALL);
 	curl = curl_easy_init();
 
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
 	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 
-	do_update(PACMANCONFIG);
+	ret = do_update(PACMANCONFIG);
 
 	curl_easy_cleanup(curl);
 	curl_global_cleanup();
 
-	return 0;
+	return ret;
 }
 
 /* vim: set ts=2 sw=2 noet: */

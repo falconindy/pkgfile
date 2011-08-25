@@ -4,6 +4,8 @@
 #include <archive.h>
 #include <pcre.h>
 
+#define DBPATH  "/var/lib/pacman/sync"
+
 struct archive_read_buffer {
 	char *line;
 	char *line_offset;

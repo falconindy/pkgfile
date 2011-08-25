@@ -432,7 +432,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(config.doupdate) {
-		return nosr_update();
+		return nosr_update(DBPATH);
 	}
 
 	if(optind == argc) {

@@ -7,7 +7,7 @@
 #define FREE(p) do { free(p); p = NULL; } while(0)
 #define UNUSED __attribute__((unused))
 
-int nosr_update(void);
+int nosr_update(const char *download_dir);
 char *strreplace(const char *str, const char *needle, const char *replace);
 char *strtrim(char *str);
 
