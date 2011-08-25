@@ -2,7 +2,6 @@
 #include <errno.h>
 #include <fnmatch.h>
 #include <getopt.h>
-#include <glob.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +15,7 @@
 
 #include "nosr.h"
 #include "match.h"
+#include "update.h"
 #include "util.h"
 
 static struct config_t config;
@@ -232,25 +232,24 @@ static void *load_repo(void *repo)
 {
 	int ret = 0, ok;
 	const char *entryname, *slash;
-	char *filename, *pkgname;
-	char reponame[1024];
+	char *pkgname;
+	char repofile[1024];
 	struct archive *a;
 	struct archive_entry *e;
 
-	if(access(repo, R_OK)) {
-		fprintf(stderr, "error: failed to load repo: %s\n", (const char*)repo);
-		return NULL;
-	}
-
-	filename = (char *)repo;
-	snprintf(reponame, strcspn(filename, ".") + 1, "%s", filename);
+	snprintf(repofile, 1024, "%s.files.tar.gz", (char *)repo);
 
 	a = archive_read_new();
 	archive_read_support_compression_all(a);
 	archive_read_support_format_all(a);
 
-	ok = archive_read_open_filename(a, filename, ARCHIVE_DEFAULT_BYTES_PER_BLOCK);
+	ok = archive_read_open_filename(a, repofile, ARCHIVE_DEFAULT_BYTES_PER_BLOCK);
 	if(ok != ARCHIVE_OK) {
+		/* fail silently if the file doesn't exist */
+		if(access(repofile, F_OK) == 0) {
+			fprintf(stderr, "error: failed to load repo: %s: %s\n", repofile,
+					archive_error_string(a));
+		}
 		goto cleanup;
 	}
 
@@ -271,7 +270,7 @@ static void *load_repo(void *repo)
 			continue;
 		}
 
-		ret = config.filefunc(reponame, pkgname, a);
+		ret = config.filefunc(repo, pkgname, a);
 		free(pkgname);
 
 		switch(ret) {
@@ -372,73 +371,41 @@ static int parse_opts(int argc, char **argv)
 	return 0;
 }
 
-static void free_repos(char **repos, int count) {
-	int i;
-
-	for(i = 0; i < count; i++) {
-		free(repos[i]);
-	}
-
-	free(repos);
-}
-
-static int find_repos(char ***repos)
-{
-	int count;
-	unsigned i;
-	glob_t g;
-
-	if(glob("*.files.tar.gz", 0, NULL, &g) != 0) {
-		return -1;
-	}
-
-	count = g.gl_pathc;
-	CALLOC(*repos, count, sizeof(char *), return -1);
-
-	for(i = 0; i < g.gl_pathc; i++) {
-		(*repos)[i] = strdup(g.gl_pathv[i]);
-		if(!(*repos)[i]) {
-			free_repos(*repos, count);
-			return -1;
-		}
-	}
-
-	globfree(&g);
-
-	return count;
-}
-
 int main(int argc, char *argv[])
 {
-	int i, repocount;
-	pthread_t *t;
-	char **files = NULL;
-
-	if(chdir("/var/lib/pacman/sync")) {
-		perror("chdir");
-		return 2;
-	}
-	repocount = find_repos(&files);
-	if(repocount <= 0) {
-		fprintf(stderr, "error: no repos found. run `nosr --update'\n");
-		return 1;
-	}
-
-	CALLOC(t, repocount, sizeof(pthread_t *), return 1);
+	int i, repocount = 0;
+	pthread_t *t = NULL;
+	struct repo_t **repo, **repos = NULL;
 
 	config.filefunc = search_metafile;
 	if(parse_opts(argc, argv) != 0) {
 		return 2;
 	}
 
+	if(chdir(DBPATH)) {
+		fprintf(stderr, "chdir: " DBPATH ": %s", strerror(errno));
+		return 2;
+	}
+
+	repos = find_active_repos(PACMANCONFIG);
+
 	if(config.doupdate) {
-		return nosr_update(DBPATH);
+		nosr_update(repos);
+		goto cleanup;
 	}
 
 	if(optind == argc) {
 		fprintf(stderr, "error: no target specified (use -h for help)\n");
-		return 1;
+		goto cleanup;
 	}
+
+	for(repo = repos; *repo; repocount++, repo++);
+	if(repocount <= 0) {
+		fprintf(stderr, "error: no repos found. run `nosr --update'\n");
+		goto cleanup;
+	}
+
+	CALLOC(t, repocount, sizeof(pthread_t *), return 1);
 
 	switch(config.filterby) {
 		case FILTER_EXACT:
@@ -463,7 +430,8 @@ int main(int argc, char *argv[])
 
 	/* load and process DBs */
 	for(i = 0; i < repocount; i++) {
-		pthread_create(&t[i], NULL, load_repo, (void *)files[i]);
+		const char *filename = repos[i]->name;
+		pthread_create(&t[i], NULL, load_repo, (void *)filename);
 	}
 
 	/* wait for threads to finish, ignoring what they have to say */
@@ -477,8 +445,11 @@ int main(int argc, char *argv[])
 	}
 
 cleanup:
-	free_repos(files, repocount);
 	free(t);
+	for(repo = repos; *repo; repo++) {
+		repo_free(*repo);
+	}
+	free(repos);
 
 	return 0;
 }

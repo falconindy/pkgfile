@@ -4,7 +4,7 @@
 #include <archive.h>
 #include <pcre.h>
 
-#define DBPATH  "/var/lib/pacman/sync"
+#define DBPATH  "/var/cache/nosr"
 
 struct archive_read_buffer {
 	char *line;

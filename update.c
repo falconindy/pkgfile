@@ -8,12 +8,57 @@
 
 #include <curl/curl.h>
 
+#include "nosr.h"
+#include "update.h"
 #include "util.h"
 
-#define PACMANCONFIG "/etc/pacman.conf"
-#define DBPATH       "/var/lib/pacman/sync"
-
 static CURL *curl;
+
+struct repo_t *repo_new(const char *reponame)
+{
+	struct repo_t *repo;
+
+	CALLOC(repo, 1, sizeof(struct repo_t *), return NULL);
+
+	if(asprintf(&repo->name, "%s", reponame) == -1) {
+		free(repo);
+		return NULL;
+	}
+
+	if(!repo->name) {
+		free(repo);
+		return NULL;
+	}
+
+	return repo;
+}
+
+void repo_free(struct repo_t *repo)
+{
+	size_t i;
+
+	free(repo->name);
+	for(i = 0; i < repo->servercount; i++) {
+		free(repo->servers[i]);
+	}
+
+	free(repo);
+}
+
+int repo_add_server(struct repo_t *repo, const char *server)
+{
+	if(!repo) {
+		return 1;
+	}
+
+	repo->servers = realloc(repo->servers,
+			sizeof(struct repo_t *) * (repo->servercount + 1));
+
+	repo->servers[repo->servercount] = strdup(server);
+	repo->servercount++;
+
+	return 0;
+}
 
 static int download(const char *urlbase, const char *repo)
 {
@@ -66,7 +111,7 @@ static int download(const char *urlbase, const char *repo)
 	return !(ret == CURLE_OK);
 }
 
-static char *prepare_url(char *url, const char *repo)
+static char *prepare_url(const char *url, const char *repo)
 {
 	char *string, *temp = NULL;
 	const char * const archvar = "$arch";
@@ -96,28 +141,11 @@ static char *line_get_val(char *line, const char *sep)
 	return line;
 }
 
-static int parse_server_line(const char *repo, char *server)
+static int add_servers_from_include(struct repo_t *repo, char *file)
 {
-	char *url;
-	int ret;
-
-	url = prepare_url(server, repo);
-	if(!url) {
-		return 1;
-	}
-
-	ret = download(url, repo);
-	free(url);
-
-	return ret;
-}
-
-static int parse_include_file(const char *repo, char *file)
-{
-	char *ptr, *url;
+	char *ptr;
 	char line[4096];
 	const char * const server = "Server";
-	int ret = 1;
 	FILE *fp;
 
 	fp = fopen(file, "r");
@@ -131,41 +159,40 @@ static int parse_include_file(const char *repo, char *file)
 		if (!strlen(line) || line[0] == '#') {
 			continue;
 		}
-		if ((ptr = strchr(line, '#'))) {
+		if((ptr = strchr(line, '#'))) {
 			*ptr = '\0';
 			strtrim(line);
 		}
 
 		if(strncmp(line, server, strlen(server)) == 0) {
 			ptr = line_get_val(line, "=");
-			url = prepare_url(ptr, repo);
-			ret = download(url, repo);
-			free(url);
-			if(ret == 0) {
-				break;
-			}
+			repo_add_server(repo, ptr);
 		}
 	}
 
 	fclose(fp);
 
-	return ret;
+	return 0;
 }
 
-static int do_update(const char *filename)
+struct repo_t **find_active_repos(const char *filename)
 {
 	FILE *fp;
-	char *section = NULL, *ptr;
+	char *ptr, *section = NULL;
 	char line[4096];
 	const char * const server = "Server";
 	const char * const include = "Include";
-	int section_done = 0;
+	struct repo_t **active_repos = NULL;
+	size_t repo_sz = 1;
+	int in_options = 0;
 
 	fp = fopen(filename, "r");
 	if(!fp) {
 		fprintf(stderr, "error: failed to open %s: %s\n", filename, strerror(errno));
-		return 1;
+		return NULL;
 	}
+
+	CALLOC(active_repos, 1, sizeof(struct repo_t *), return NULL);
 
 	while(fgets(line, 4096, fp)) {
 		strtrim(line);
@@ -180,11 +207,20 @@ static int do_update(const char *filename)
 
 		if (line[0] == '[' && line[strlen(line) - 1] == ']') {
 			free(section);
-			section_done = 0;
 			section = strndup(&line[1], strlen(line) - 2);
+			if(strcmp(section, "options") == 0) {
+				in_options = 1;
+				continue;
+			} else {
+				in_options = 0;
+				active_repos = realloc(active_repos, sizeof(struct repo_t *) * (repo_sz + 1));
+				active_repos[repo_sz - 1] = repo_new(section);
+				active_repos[repo_sz] = NULL;
+				repo_sz++;
+			}
 		}
 
-		if(section_done || strcmp(section, "options") == 0) {
+		if(in_options) {
 			continue;
 		}
 
@@ -194,13 +230,9 @@ static int do_update(const char *filename)
 			strtrim(key);
 
 			if(strcmp(key, server) == 0) {
-				if(parse_server_line(section, val) == 0) {
-					section_done = 1;
-				}
+				repo_add_server(active_repos[repo_sz - 2], val);
 			} else if(strcmp(line, include) == 0) {
-				if(parse_include_file(section, val) == 0) {
-					section_done = 1;
-				}
+				add_servers_from_include(active_repos[repo_sz - 2], val);
 			}
 		}
 	}
@@ -208,15 +240,31 @@ static int do_update(const char *filename)
 	free(section);
 	fclose(fp);
 
-	return 0;
+	return active_repos;
 }
 
-int nosr_update(const char *download_dir)
+int download_repo_files(struct repo_t *repo)
 {
-	int ret;
+	char **server;
+	char *url;
 
-	if(access(".", W_OK)) {
-		fprintf(stderr, "error: unable to write to %s: ", download_dir);
+	for(server = repo->servers; *server; server++) {
+		url = prepare_url(*server, repo->name);
+		if(download(url, repo->name) == 0) {
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+int nosr_update(struct repo_t **repos)
+{
+	struct repo_t **repo;
+	int ret = 0;
+
+	if(access(DBPATH, W_OK)) {
+		fprintf(stderr, "error: unable to write to %s: ", DBPATH);
 		perror("");
 		return 1;
 	}
@@ -227,7 +275,11 @@ int nosr_update(const char *download_dir)
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
 	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 
-	ret = do_update(PACMANCONFIG);
+	for(repo = repos; *repo; repo++) {
+		ret += download_repo_files(*repo);
+	}
+
+	free(repos);
 
 	curl_easy_cleanup(curl);
 	curl_global_cleanup();
