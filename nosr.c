@@ -379,7 +379,6 @@ int main(int argc, char *argv[])
 		"community.files.tar.gz"
 	};
 
-	memset(&config, 0, sizeof(config));
 	config.filefunc = search_metafile;
 	if(parse_opts(argc, argv) != 0) {
 		return 2;
