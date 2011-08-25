@@ -141,7 +141,7 @@ static int is_binary(const char *line)
 
 static int search_metafile(const char *repo, const char *pkgname,
 		struct archive *a) {
-	int ret, icase;
+	int ret, icase, found = 0;
 	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
 
@@ -160,9 +160,9 @@ static int search_metafile(const char *repo, const char *pkgname,
 			continue;
 		}
 
-		if(config.filterfunc(&config.filter, buf.line, icase) == 0) {
+		if(!found && config.filterfunc(&config.filter, buf.line, icase) == 0) {
 			printf("%s/%s\n", repo, pkgname);
-			return 1;
+			found = 1;
 		}
 	}
 
