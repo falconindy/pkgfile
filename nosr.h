@@ -24,12 +24,6 @@ struct pcre_data {
 	pcre_extra *re_extra;
 };
 
-struct task_t {
-	const char *repofile;
-	int (*filterfunc)(void*);
-	void *filterarg;
-};
-
 typedef enum _filterstyle_t {
 	FILTER_EXACT = 0,
 	FILTER_GLOB,
