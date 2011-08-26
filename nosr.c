@@ -404,8 +404,6 @@ int main(int argc, char *argv[])
 		goto cleanup;
 	}
 
-	CALLOC(t, repocount, sizeof(pthread_t *), return 1);
-
 	switch(config.filterby) {
 		case FILTER_EXACT:
 			config.filter.glob = argv[optind];
@@ -425,6 +423,8 @@ int main(int argc, char *argv[])
 			}
 			break;
 	}
+
+	CALLOC(t, repocount, sizeof(pthread_t *), goto cleanup);
 
 	/* load and process DBs */
 	for(i = 0; i < repocount; i++) {
