@@ -4,16 +4,17 @@
 
 #include "match.h"
 #include "nosr.h"
+#include "util.h"
 
 int match_glob(filterpattern_t *pattern, const char *line, int flags) {
 	const char *glob = pattern->glob;
 	return fnmatch(glob, line, flags);
 }
 
-int match_regex(filterpattern_t *pattern, const char *line, int flags) {
+int match_regex(filterpattern_t *pattern, const char *line, int UNUSED flags) {
 	struct pcre_data *re = &pattern->re;
 	return !(pcre_exec(re->re, re->re_extra, line, strlen(line),
-			0, flags, NULL, 0) >= 0);
+			0, 0, NULL, 0) >= 0);
 }
 
 void free_regex(filterpattern_t *pattern) {

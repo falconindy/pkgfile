@@ -142,13 +142,12 @@ static int is_binary(const char *line)
 
 static int search_metafile(const char *repo, const char *pkgname,
 		struct archive *a) {
-	int ret, icase, found = 0;
+	int ret, found = 0;
 	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
 
 	memset(&buf, 0, sizeof(buf));
 	buf.max_line_size = 512 * 1024;
-	icase = config.icase * config.icase_flag;
 
 	while((ret = archive_fgets(a, &buf)) == ARCHIVE_OK) {
 		size_t len = strip_newline(buf.line);
@@ -161,7 +160,7 @@ static int search_metafile(const char *repo, const char *pkgname,
 			continue;
 		}
 
-		if(!found && config.filterfunc(&config.filter, buf.line, icase) == 0) {
+		if(!found && config.filterfunc(&config.filter, buf.line, config.icase_flag) == 0) {
 			printf("%s/%s\n", repo, pkgname);
 			found = 1;
 		}
@@ -294,12 +293,12 @@ cleanup:
 	return NULL;
 }
 
-static int compile_pcre_expr(struct pcre_data *re, const char *preg, int UNUSED flags)
+static int compile_pcre_expr(struct pcre_data *re, const char *preg, int flags)
 {
 	const char *err;
 	int err_offset;
 
-	re->re = pcre_compile(preg, 0, &err, &err_offset, NULL);
+	re->re = pcre_compile(preg, flags, &err, &err_offset, NULL);
 	if(!re->re) {
 		fprintf(stderr, "error: failed to compile regex at char %d: %s\n", err_offset, err);
 		return 1;
@@ -409,20 +408,20 @@ int main(int argc, char *argv[])
 
 	switch(config.filterby) {
 		case FILTER_EXACT:
-			config.icase_flag = 1;
+			config.icase_flag = config.icase * 1;
 			config.filter.glob = argv[optind];
 			config.filterfunc = match_exact;
 			break;
 		case FILTER_GLOB:
-			config.icase_flag = FNM_CASEFOLD;
+			config.icase_flag = config.icase * FNM_CASEFOLD;
 			config.filter.glob = argv[optind];
 			config.filterfunc = match_glob;
 			break;
 		case FILTER_REGEX:
-			config.icase_flag = PCRE_CASELESS;
+			config.icase_flag = config.icase * PCRE_CASELESS;
 			config.filterfunc = match_regex;
 			config.filterfree = free_regex;
-			if(compile_pcre_expr(&config.filter.re, argv[optind], 0) != 0) {
+			if(compile_pcre_expr(&config.filter.re, argv[optind], config.icase_flag) != 0) {
 				goto cleanup;
 			}
 			break;
