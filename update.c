@@ -25,11 +25,6 @@ struct repo_t *repo_new(const char *reponame)
 		return NULL;
 	}
 
-	if(!repo->name) {
-		free(repo);
-		return NULL;
-	}
-
 	return repo;
 }
 
@@ -41,6 +36,7 @@ void repo_free(struct repo_t *repo)
 	for(i = 0; i < repo->servercount; i++) {
 		free(repo->servers[i]);
 	}
+	free(repo->servers);
 
 	free(repo);
 }
@@ -52,7 +48,7 @@ int repo_add_server(struct repo_t *repo, const char *server)
 	}
 
 	repo->servers = realloc(repo->servers,
-			sizeof(struct repo_t *) * (repo->servercount + 1));
+			sizeof(char *) * (repo->servercount + 1));
 
 	repo->servers[repo->servercount] = strdup(server);
 	repo->servercount++;
@@ -225,13 +221,12 @@ struct repo_t **find_active_repos(const char *filename)
 		}
 
 		if(strchr(line, '=')) {
-			char *key = line;
-			char *val = line_get_val(line, "=");
+			char *key = line, *val = line_get_val(line, "=");
 			strtrim(key);
 
 			if(strcmp(key, server) == 0) {
 				repo_add_server(active_repos[repo_sz - 2], val);
-			} else if(strcmp(line, include) == 0) {
+			} else if(strcmp(key, include) == 0) {
 				add_servers_from_include(active_repos[repo_sz - 2], val);
 			}
 		}
@@ -247,10 +242,13 @@ int download_repo_files(struct repo_t *repo)
 {
 	char **server;
 	char *url;
+	int ret;
 
 	for(server = repo->servers; *server; server++) {
 		url = prepare_url(*server, repo->name);
-		if(download(url, repo->name) == 0) {
+		ret = download(url, repo->name);
+		free(url);
+		if(ret == 0) {
 			return 0;
 		}
 	}
