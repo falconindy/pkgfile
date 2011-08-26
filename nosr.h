@@ -46,6 +46,7 @@ struct config_t {
 			struct result_t *result);
 	int (*filterfunc)(filterpattern_t *filter, const char *line, int flags);
 	void (*filterfree)(filterpattern_t *filter);
+	char *targetrepo;
 	int binaries;
 	int icase;
 	int doupdate;

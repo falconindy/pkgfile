@@ -320,6 +320,7 @@ static void usage(void)
 			"  -g, --glob              enable matching with glob characters\n"
 			"  -h, --help              display this help and exit\n"
 			"  -i, --ignorecase        use case insensitive matching\n"
+			"  -R, --repo REPO         search a specific repo\n"
 			"  -r, --regex             enable matching with pcre\n"
 			"  -l, --list              list contents of a package\n\n");
 }
@@ -333,12 +334,13 @@ static int parse_opts(int argc, char **argv)
 		{"help",        no_argument,        0, 'h'},
 		{"ignorecase",  no_argument,        0, 'i'},
 		{"list",        no_argument,        0, 'l'},
+		{"repo",        required_argument,  0, 'R'},
 		{"regex",       no_argument,        0, 'r'},
 		{"update",      no_argument,        0, 'u'},
 		{0,0,0,0}
 	};
 
-	while((opt = getopt_long(argc, argv, "bghilru", opts, &opt_idx)) != -1) {
+	while((opt = getopt_long(argc, argv, "bghilR:ru", opts, &opt_idx)) != -1) {
 		switch(opt) {
 			case 'b':
 				config.binaries = 1;
@@ -355,6 +357,9 @@ static int parse_opts(int argc, char **argv)
 			case 'l':
 				config.filefunc = list_metafile;
 				break;
+			case 'R':
+				config.targetrepo = optarg;
+				break;
 			case 'r':
 				config.filterby = FILTER_REGEX;
 				break;
@@ -369,9 +374,44 @@ static int parse_opts(int argc, char **argv)
 	return 0;
 }
 
+static int search_single_repo(struct repo_t **repos, char *searchstring)
+{
+	char *targetrepo = NULL, *slash;
+
+	if(config.targetrepo) {
+		targetrepo = config.targetrepo;
+		config.filter.glob = searchstring;
+	} else {
+		slash = strchr(searchstring, '/');
+		targetrepo = strdup(searchstring);
+		targetrepo[slash - searchstring] = '\0';
+		config.filter.glob = &slash[1];
+	}
+
+	config.filterby = FILTER_EXACT;
+
+	do {
+		if(strcmp((*repos)->name, targetrepo) == 0) {
+			struct result_t *result = load_repo(targetrepo);
+			result_print(result);
+			result_free(result);
+			return 0;
+		}
+	} while(*(++repos));
+
+	/* repo not found */
+	fprintf(stderr, "error: repo not available: %s\n", targetrepo);
+
+	if(!config.targetrepo) {
+		free(targetrepo);
+	}
+
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
-	int i, repocount;
+	int i, repocount, ret = 0;
 	pthread_t *t = NULL;
 	struct repo_t **repos = NULL;
 	struct result_t **results = NULL;
@@ -424,6 +464,13 @@ int main(int argc, char *argv[])
 			break;
 	}
 
+	/* override behavior on --list with $repo/$pkg syntax */
+	if((config.filefunc == list_metafile && strchr(argv[optind], '/')) ||
+			config.targetrepo) {
+		ret = search_single_repo(repos, argv[optind]);
+		goto cleanup;
+	}
+
 	CALLOC(t, repocount, sizeof(pthread_t *), goto cleanup);
 	CALLOC(results, repocount, sizeof(struct result_t *), goto cleanup);
 
@@ -450,14 +497,14 @@ int main(int argc, char *argv[])
 	}
 
 cleanup:
-	free(t);
 	for(i = 0; i < repocount; i++) {
 		repo_free(repos[i]);
 	}
+	free(t);
 	free(repos);
 	free(results);
 
-	return 0;
+	return ret;
 }
 
 /* vim: set ts=2 sw=2 noet: */
