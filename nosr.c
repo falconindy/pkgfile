@@ -160,7 +160,7 @@ static int search_metafile(const char *repo, const char *pkgname,
 			continue;
 		}
 
-		if(!found && config.filterfunc(&config.filter, buf.line, config.icase_flag) == 0) {
+		if(!found && config.filterfunc(&config.filter, buf.line, config.icase) == 0) {
 			printf("%s/%s\n", repo, pkgname);
 			found = 1;
 		}
@@ -408,20 +408,19 @@ int main(int argc, char *argv[])
 
 	switch(config.filterby) {
 		case FILTER_EXACT:
-			config.icase_flag = config.icase * 1;
 			config.filter.glob = argv[optind];
 			config.filterfunc = match_exact;
 			break;
 		case FILTER_GLOB:
-			config.icase_flag = config.icase * FNM_CASEFOLD;
+			config.icase *= FNM_CASEFOLD;
 			config.filter.glob = argv[optind];
 			config.filterfunc = match_glob;
 			break;
 		case FILTER_REGEX:
-			config.icase_flag = config.icase * PCRE_CASELESS;
+			config.icase *= PCRE_CASELESS;
 			config.filterfunc = match_regex;
 			config.filterfree = free_regex;
-			if(compile_pcre_expr(&config.filter.re, argv[optind], config.icase_flag) != 0) {
+			if(compile_pcre_expr(&config.filter.re, argv[optind], config.icase) != 0) {
 				goto cleanup;
 			}
 			break;

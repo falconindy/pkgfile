@@ -49,7 +49,6 @@ struct config_t {
 	void (*filterfree)(filterpattern_t *filter);
 	int binaries;
 	int icase;
-	int icase_flag;
 	int doupdate;
 };
 
