@@ -166,7 +166,7 @@ static int search_metafile(const char *repo, const char *pkgname,
 	return 1;
 }
 
-static int list_metafile(const char UNUSED *repo, const char *pkgname,
+static int list_metafile(const char *repo, const char *pkgname,
 		struct archive *a) {
 	int ret;
 	const char * const files = "%FILES%";
@@ -190,7 +190,7 @@ static int list_metafile(const char UNUSED *repo, const char *pkgname,
 			continue;
 		}
 
-		printf("%s /%s\n", pkgname, buf.line);
+		printf("%s/%s /%s\n", repo, pkgname, buf.line);
 	}
 
 	return 1;
