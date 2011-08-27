@@ -142,21 +142,18 @@ static int is_binary(const char *line)
 
 static int search_metafile(const char *repo, const char *pkgname,
 		struct archive *a) {
-	int ret, found = 0;
+	int found = 0;
 	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
 
 	memset(&buf, 0, sizeof(buf));
 	buf.max_line_size = 512 * 1024;
 
-	while((ret = archive_fgets(a, &buf)) == ARCHIVE_OK) {
+	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
 		size_t len = strip_newline(buf.line);
 
-		if(!len || buf.line[len-1] == '/' || strcmp(buf.line, files) == 0) {
-			continue;
-		}
-
-		if(config.binaries && !is_binary(buf.line)) {
+		if(!len || buf.line[len-1] == '/' || strcmp(buf.line, files) == 0 ||
+				(config.binaries && !is_binary(buf.line))) {
 			continue;
 		}
 
@@ -229,7 +226,7 @@ static char *parse_pkgname(const char *entryname)
 
 static void *load_repo(void *repo)
 {
-	int ret = 0, ok;
+	int ret;
 	const char *entryname, *slash;
 	char *pkgname;
 	char repofile[1024];
@@ -242,8 +239,8 @@ static void *load_repo(void *repo)
 	archive_read_support_compression_all(a);
 	archive_read_support_format_all(a);
 
-	ok = archive_read_open_filename(a, repofile, ARCHIVE_DEFAULT_BYTES_PER_BLOCK);
-	if(ok != ARCHIVE_OK) {
+	ret = archive_read_open_filename(a, repofile, ARCHIVE_DEFAULT_BYTES_PER_BLOCK);
+	if(ret != ARCHIVE_OK) {
 		/* fail silently if the file doesn't exist */
 		if(access(repofile, F_OK) == 0) {
 			fprintf(stderr, "error: failed to load repo: %s: %s\n", repofile,
@@ -255,11 +252,7 @@ static void *load_repo(void *repo)
 	while(archive_read_next_header(a, &e) == ARCHIVE_OK) {
 		entryname = archive_entry_pathname(e);
 		slash = strrchr(entryname, '/');
-		if(!slash) {
-			continue;
-		}
-
-		if(strcmp(slash, "/files") != 0) {
+		if(!slash || strcmp(slash, "/files") != 0) {
 			continue;
 		}
 
