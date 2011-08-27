@@ -59,10 +59,10 @@ int repo_add_server(struct repo_t *repo, const char *server)
 static int download(const char *urlbase, const char *repo)
 {
 	const char *basename;
-	char *url;
+	char *url = NULL;
 	double bytes_dl;
-	int ret;
-	FILE *fp;
+	int ret = 1;
+	FILE *fp = NULL;
 
 	if(asprintf(&url, "%s/%s.files.tar.gz", urlbase, repo) == -1) {
 		return 1;
@@ -72,19 +72,18 @@ static int download(const char *urlbase, const char *repo)
 	if(basename) {
 		basename++;
 	} else {
-		return 1;
+		goto cleanup;
 	}
 
 	fp = fopen(basename, "wb");
 	if(!fp) {
-		return 1;
+		goto cleanup;
 	}
 
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 
-	printf("==> Downloading %s... ", basename);
-	fflush(stdout);
+	printf("==> Downloading %s\n", basename);
 
 	ret = curl_easy_perform(curl);
 
@@ -93,16 +92,13 @@ static int download(const char *urlbase, const char *repo)
 		unlink(basename);
 	}
 
-	fclose(fp);
-	free(url);
-
-	switch(ret) {
-		case CURLE_OK:
-			printf("done\n");
-			break;
-		default:
-			printf("fail\n");
+	if(ret != CURLE_OK) {
+		printf("warning: failed to download %s\n", url);
 	}
+
+cleanup:
+	free(url);
+	fclose(fp);
 
 	return !(ret == CURLE_OK);
 }
