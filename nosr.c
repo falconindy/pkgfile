@@ -380,6 +380,11 @@ int main(int argc, char *argv[])
 	}
 
 	repos = find_active_repos(PACMANCONFIG);
+	for(repo = repos; *repo; repocount++, repo++);
+	if(!repocount) {
+		fprintf(stderr, "error: no repos found in " PACMANCONFIG "\n");
+		return 1;
+	}
 
 	if(config.doupdate) {
 		nosr_update(repos);
@@ -388,12 +393,6 @@ int main(int argc, char *argv[])
 
 	if(optind == argc) {
 		fprintf(stderr, "error: no target specified (use -h for help)\n");
-		goto cleanup;
-	}
-
-	for(repo = repos; *repo; repocount++, repo++);
-	if(repocount <= 0) {
-		fprintf(stderr, "error: no repos found. run `nosr --update'\n");
 		goto cleanup;
 	}
 
