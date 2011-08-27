@@ -1,3 +1,2 @@
-- return package filelists and print from single threaded context
 - allow $repo/$pkgname syntax for --list option
 - write a manpage

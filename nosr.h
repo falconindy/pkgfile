@@ -4,6 +4,8 @@
 #include <archive.h>
 #include <pcre.h>
 
+#include "result.h"
+
 #define DBPATH  "/var/cache/nosr"
 
 struct archive_read_buffer {
@@ -38,7 +40,8 @@ typedef union _filterpattern_t {
 struct config_t {
 	filterstyle_t filterby;
 	filterpattern_t filter;
-	int (*filefunc)(const char *repo, const char *entryname, struct archive* a);
+	int (*filefunc)(const char *repo, const char *entryname, struct archive* a,
+			struct result_t *result);
 	int (*filterfunc)(filterpattern_t *filter, const char *line, int flags);
 	void (*filterfree)(filterpattern_t *filter);
 	int binaries;

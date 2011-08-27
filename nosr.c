@@ -15,6 +15,7 @@
 
 #include "nosr.h"
 #include "match.h"
+#include "result.h"
 #include "update.h"
 #include "util.h"
 
@@ -141,7 +142,7 @@ static int is_binary(const char *line)
 }
 
 static int search_metafile(const char *repo, const char *pkgname,
-		struct archive *a) {
+		struct archive *a, struct result_t *result) {
 	int found = 0;
 	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
@@ -151,6 +152,7 @@ static int search_metafile(const char *repo, const char *pkgname,
 
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
 		size_t len = strip_newline(buf.line);
+		char *line;
 
 		if(!len || buf.line[len-1] == '/' || strcmp(buf.line, files) == 0 ||
 				(config.binaries && !is_binary(buf.line))) {
@@ -158,7 +160,11 @@ static int search_metafile(const char *repo, const char *pkgname,
 		}
 
 		if(!found && config.filterfunc(&config.filter, buf.line, config.icase) == 0) {
-			printf("%s/%s\n", repo, pkgname);
+			if(asprintf(&line, "%s/%s", repo, pkgname) == -1) {
+				fprintf(stderr, "error: failed to allocate memory\n");
+				return 1;
+			};
+			result_add(result, line);
 			found = 1;
 		}
 	}
@@ -167,7 +173,7 @@ static int search_metafile(const char *repo, const char *pkgname,
 }
 
 static int list_metafile(const char *repo, const char *pkgname,
-		struct archive *a) {
+		struct archive *a, struct result_t *result) {
 	int ret;
 	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
@@ -181,6 +187,7 @@ static int list_metafile(const char *repo, const char *pkgname,
 
 	while((ret = archive_fgets(a, &buf)) == ARCHIVE_OK) {
 		size_t len = strip_newline(buf.line);
+		char *line;
 
 		if(!len || strcmp(buf.line, files) == 0) {
 			continue;
@@ -190,7 +197,11 @@ static int list_metafile(const char *repo, const char *pkgname,
 			continue;
 		}
 
-		printf("%s/%s /%s\n", repo, pkgname, buf.line);
+		if(asprintf(&line, "%s/%s /%s", repo, pkgname, buf.line) == -1) {
+			fprintf(stderr, "error: failed to allocate memory\n");
+			return 1;
+		}
+		result_add(result, line);
 	}
 
 	return 1;
@@ -232,8 +243,10 @@ static void *load_repo(void *repo)
 	char repofile[1024];
 	struct archive *a;
 	struct archive_entry *e;
+	struct result_t *result;
 
 	snprintf(repofile, 1024, "%s.files.tar.gz", (char *)repo);
+	result = result_new((char *)repo, 50);
 
 	a = archive_read_new();
 	archive_read_support_compression_all(a);
@@ -262,7 +275,7 @@ static void *load_repo(void *repo)
 			continue;
 		}
 
-		ret = config.filefunc(repo, pkgname, a);
+		ret = config.filefunc(repo, pkgname, a, result);
 		free(pkgname);
 
 		switch(ret) {
@@ -283,7 +296,7 @@ done:
 cleanup:
 	archive_read_finish(a);
 
-	return NULL;
+	return (void *)result;
 }
 
 static int compile_pcre_expr(struct pcre_data *re, const char *preg, int flags)
@@ -365,9 +378,10 @@ static int parse_opts(int argc, char **argv)
 
 int main(int argc, char *argv[])
 {
-	int i, repocount = 0;
+	int i, repocount;
 	pthread_t *t = NULL;
-	struct repo_t **repo, **repos = NULL;
+	struct repo_t **repos = NULL;
+	struct result_t **results = NULL;
 
 	config.filefunc = search_metafile;
 	if(parse_opts(argc, argv) != 0) {
@@ -380,7 +394,7 @@ int main(int argc, char *argv[])
 	}
 
 	repos = find_active_repos(PACMANCONFIG);
-	for(repo = repos; *repo; repocount++, repo++);
+	for(repocount = 0; repos[repocount]; repocount++);
 	if(!repocount) {
 		fprintf(stderr, "error: no repos found in " PACMANCONFIG "\n");
 		return 1;
@@ -417,6 +431,7 @@ int main(int argc, char *argv[])
 	}
 
 	CALLOC(t, repocount, sizeof(pthread_t *), goto cleanup);
+	CALLOC(results, repocount, sizeof(struct result_t *), goto cleanup);
 
 	/* load and process DBs */
 	for(i = 0; i < repocount; i++) {
@@ -427,17 +442,23 @@ int main(int argc, char *argv[])
 	/* wait for threads to finish, ignoring what they have to say */
 	/* TODO: gather results, sort them */
 	for(i = 0; i < repocount; i++) {
-		pthread_join(t[i], NULL);
+		pthread_join(t[i], (void **)&results[i]);
 	}
 
 	if(config.filterfree) {
 		config.filterfree(&config.filter);
 	}
 
+	qsort(results, repocount, sizeof(struct result_t *), result_cmp);
+	for(i = 0; i < repocount; i++) {
+		result_print(results[i]);
+	}
+
 cleanup:
 	free(t);
-	for(repo = repos; *repo; repo++) {
-		repo_free(*repo);
+	for(i = 0; i < repocount; i++) {
+		repo_free(repos[i]);
+		result_free(results[i]);
 	}
 	free(repos);
 
