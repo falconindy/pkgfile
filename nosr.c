@@ -206,30 +206,17 @@ static int list_metafile(const char *repo, const char *pkgname,
 
 static char *parse_pkgname(const char *entryname)
 {
-	char *ptr, *pkgname;
+	const char *ptr = strrchr(entryname, '-');
 
-	pkgname = strdup(entryname);
-	if(!pkgname) {
-		return NULL;
+	if(ptr) {
+		while(--ptr && ptr > entryname) {
+			if(*ptr == '-') {
+				return strndup(entryname, ptr - entryname);
+			}
+		}
 	}
 
-	/* trim off pkgrel */
-	ptr = strrchr(pkgname, '-');
-	if(!ptr) {
-		free(pkgname);
-		return NULL;
-	}
-	*ptr = '\0';
-
-	/* trim off pkgver */
-	ptr = strrchr(pkgname, '-');
-	if(!ptr) {
-		free(pkgname);
-		return NULL;
-	}
-	*ptr = '\0';
-
-	return pkgname;
+	return NULL;
 }
 
 static void *load_repo(void *repo)
