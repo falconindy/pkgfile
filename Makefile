@@ -29,4 +29,4 @@ strip: $(OUT)
 	strip --strip-all $(OUT)
 
 clean:
-	$(RM) $(OBJ) $(OUT)
+	$(RM) $(OBJ) $(OUT) nosr.1
