@@ -438,7 +438,6 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-
 	if(config.doupdate) {
 		nosr_update(repos);
 		goto cleanup;

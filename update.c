@@ -234,12 +234,12 @@ struct repo_t **find_active_repos(const char *filename)
 
 int download_repo_files(struct repo_t *repo)
 {
-	char **server;
 	char *url;
+	size_t i;
 	int ret;
 
-	for(server = repo->servers; *server; server++) {
-		url = prepare_url(*server, repo->name);
+	for(i = 0; i < repo->servercount; i++) {
+		url = prepare_url(repo->servers[i], repo->name);
 		ret = download(url, repo->name);
 		free(url);
 		if(ret == 0) {
