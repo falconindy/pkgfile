@@ -427,7 +427,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(chdir(DBPATH)) {
-		fprintf(stderr, "chdir: " DBPATH ": %s", strerror(errno));
+		fprintf(stderr, "chdir: " DBPATH ": %s\n", strerror(errno));
 		return 2;
 	}
 
