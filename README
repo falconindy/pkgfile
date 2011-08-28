@@ -1,8 +1,0 @@
-nosr is fast and bulbous... but mostly fast.
-
-Requirements:
-  - libarchive
-  - libcurl
-  - pthreads
-  - pcre
-
