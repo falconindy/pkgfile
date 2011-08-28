@@ -400,6 +400,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+
 	if(config.doupdate) {
 		nosr_update(repos);
 		goto cleanup;
@@ -452,15 +453,16 @@ int main(int argc, char *argv[])
 	qsort(results, repocount, sizeof(struct result_t *), result_cmp);
 	for(i = 0; i < repocount; i++) {
 		result_print(results[i]);
+		result_free(results[i]);
 	}
 
 cleanup:
 	free(t);
 	for(i = 0; i < repocount; i++) {
 		repo_free(repos[i]);
-		result_free(results[i]);
 	}
 	free(repos);
+	free(results);
 
 	return 0;
 }

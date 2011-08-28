@@ -273,8 +273,6 @@ int nosr_update(struct repo_t **repos)
 		ret += download_repo_files(*repo);
 	}
 
-	free(repos);
-
 	curl_easy_cleanup(curl);
 	curl_global_cleanup();
 
