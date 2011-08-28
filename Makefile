@@ -24,6 +24,7 @@ $(OUT): $(OBJ)
 install: all
 	install -Dm755 nosr $(DESTDIR)$(PREFIX)/bin/nosr
 	install -Dm644 nosr.1 $(DESTDIR)$(PREFIX)/share/man/man1/nosr.1
+	install -d $(DESTDIR)/var/cache/nosr
 
 strip: $(OUT)
 	strip --strip-all $(OUT)
