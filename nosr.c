@@ -17,7 +17,11 @@ static struct config_t config;
 static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 {
 	char *i = NULL;
+#if ARCHIVE_VERSION_NUMBER < 3000000
+	off_t offset;
+#else
 	int64_t offset;
+#endif
 	int done = 0;
 
 	/* ensure we start populating our line buffer at the beginning */
