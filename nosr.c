@@ -492,9 +492,10 @@ int main(int argc, char *argv[])
 
 	qsort(results, repocount, sizeof(struct result_t *), result_cmp);
 	for(i = 0; i < repocount; i++) {
-		result_print(results[i]);
+		ret += result_print(results[i]);
 		result_free(results[i]);
 	}
+	ret = ret > 0 ? 0 : 1;
 
 cleanup:
 	for(i = 0; i < repocount; i++) {

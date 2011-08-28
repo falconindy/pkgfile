@@ -75,18 +75,15 @@ void result_free(struct result_t *result)
 	free(result);
 }
 
-void result_print(struct result_t *result)
+int result_print(struct result_t *result)
 {
 	size_t i;
-
-	if(!result->count) {
-		return;
-	}
 
 	for(i = 0; i < result->count; i++) {
 		printf("%s\n", result->list[i]);
 	}
-	return;
+
+	return result->count;
 }
 
 int result_cmp(const void *r1, const void *r2)
