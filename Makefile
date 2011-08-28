@@ -1,6 +1,6 @@
 OUT        = nosr
 VERSION    = 0.1
-CPPFLAGS  := -DVERSION=\"$(VERSION)\"
+CPPFLAGS  := -DVERSION=\"$(VERSION)\" $(CPPFLAGS)
 CFLAGS    := --std=c99 -g -pedantic -Wall -Wextra -Werror -pthread $(CFLAGS) $(CPPFLAGS)
 LDFLAGS   := -larchive -lpcre -lcurl $(LDFLAGS)
 
