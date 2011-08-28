@@ -317,6 +317,7 @@ static void usage(void)
 	fprintf(stderr, "nosr 0.1\nUsage: nosr [options] target\n\n");
 	fprintf(stderr,
 			" Options:\n"
+			"  -b, --binaries          return only files contained in a bin dir\n"
 			"  -g, --glob              enable matching with glob characters\n"
 			"  -h, --help              display this help and exit\n"
 			"  -i, --ignorecase        use case insensitive matching\n"
