@@ -464,7 +464,7 @@ int main(int argc, char *argv[])
 			break;
 	}
 
-	/* override behavior on --list with $repo/$pkg syntax */
+	/* override behavior on $repo/$pkg syntax or --repo */
 	if((config.filefunc == list_metafile && strchr(argv[optind], '/')) ||
 			config.targetrepo) {
 		ret = search_single_repo(repos, argv[optind]);
@@ -480,8 +480,7 @@ int main(int argc, char *argv[])
 		pthread_create(&t[i], NULL, load_repo, (void *)filename);
 	}
 
-	/* wait for threads to finish, ignoring what they have to say */
-	/* TODO: gather results, sort them */
+	/* gather results */
 	for(i = 0; i < repocount; i++) {
 		pthread_join(t[i], (void **)&results[i]);
 	}
