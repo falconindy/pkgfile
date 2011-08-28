@@ -1,4 +1,6 @@
 OUT        = nosr
+VERSION    = 0.1
+CPPFLAGS  := -DVERSION=\"$(VERSION)\"
 CFLAGS    := --std=c99 -g -pedantic -Wall -Wextra -Werror -pthread $(CFLAGS) $(CPPFLAGS)
 LDFLAGS   := -larchive -lpcre -lcurl $(LDFLAGS)
 
@@ -14,7 +16,7 @@ all: $(OUT) doc
 
 doc: nosr.1
 nosr.1: README.pod
-	pod2man --section=1 --center="Nosr Manual" --name="NOSR" --release="nosr 0.1" $< > $@
+	pod2man --section=1 --center="Nosr Manual" --name="NOSR" --release="nosr $(VERSION)" $< > $@
 
 $(OUT): $(OBJ)
 	$(CC) -o $@ $(OBJ) $(LDFLAGS)

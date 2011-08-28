@@ -314,7 +314,7 @@ static int compile_pcre_expr(struct pcre_data *re, const char *preg, int flags)
 
 static void usage(void)
 {
-	fprintf(stderr, "nosr 0.1\nUsage: nosr [options] target\n\n");
+	fprintf(stderr, "nosr " VERSION "\nUsage: nosr [options] target\n\n");
 	fprintf(stderr,
 			" Options:\n"
 			"  -b, --binaries          return only files contained in a bin dir\n"
