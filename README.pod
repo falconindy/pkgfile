@@ -1,0 +1,75 @@
+=head1 NAME
+
+nosr - search for files in packages not installed locally
+
+=head1 SYNOPSIS
+
+Usage: I<nosr> [ options ] target
+
+=head1 DESCRIPTION
+
+nosr searches the .files metadata created by B<repo-add>(8) to retrieve
+information about packages that might not be currently installed. By default,
+the provided target is considered to be a filename and nosr will return the
+package(s) which contain this file. The repos which nosr searches is determined
+by those enabled in I</etc/pacman.conf>.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-b, --binaries>
+
+Return only files which are contained with a bin or sbin directory.
+
+=item B<-g, --glob>
+
+Enable shell style glob pattern matching with *, ? and [] ranges.
+
+=item B<-h, --help>
+
+Display the help message and quit.
+
+=item B<-i, --ignorecase>
+
+Disable case sensitivity in matching.
+
+=item B<-r, --regex>
+
+Enable regular expression matching via B<pcre>(3).
+
+=item B<-l, --list>
+
+The target is considered to be a package name rather than a filename, and
+the contents of the named package are returned. This allows for repo/package
+style syntax to limit the depth of the search.
+
+=item B<-R, --repo>
+
+Search only the specific repo.
+
+=item B<-u, --update>
+
+Update the stored metadata files. It is recommended to create a daily cron
+job with this command to ensure accurate results.
+
+=back
+
+=head1 FILES
+
+=over 4
+
+=item I</var/cache/nosr>
+
+Storage location for metadata.
+
+=back
+
+=head1 SEE ALSO
+
+B<repo-add>(8), B<pcre>(3), B<pacman.conf>(5)
+
+=head1 AUTHOR
+
+Dave Reisner E<lt>dreisner@archlinux.orgE<gt>
+
