@@ -2,6 +2,8 @@
 #define _NOSR_H
 
 #include <archive.h>
+#include <archive_entry.h>
+
 #include <pcre.h>
 
 #include "result.h"

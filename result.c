@@ -1,9 +1,8 @@
 #define _GNU_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "result.h"
+#include "util.h"
 
 static int result_grow(struct result_t *result)
 {

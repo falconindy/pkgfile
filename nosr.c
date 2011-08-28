@@ -3,15 +3,8 @@
 #include <fnmatch.h>
 #include <getopt.h>
 #include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#include <archive.h>
-#include <archive_entry.h>
-
-#include <pcre.h>
 
 #include "nosr.h"
 #include "match.h"
