@@ -312,9 +312,10 @@ static void usage(void)
 			"  -g, --glob              enable matching with glob characters\n"
 			"  -h, --help              display this help and exit\n"
 			"  -i, --ignorecase        use case insensitive matching\n"
+			"  -l, --list              list contents of a package\n"
 			"  -R, --repo REPO         search a specific repo\n"
 			"  -r, --regex             enable matching with pcre\n"
-			"  -l, --list              list contents of a package\n\n");
+			"  -u, --update            update repo files lists\n\n");
 }
 
 static int parse_opts(int argc, char **argv)
