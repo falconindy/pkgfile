@@ -130,10 +130,6 @@ static int is_binary(const char *line, size_t len)
 {
 	const char *ptr;
 
-	if(!config.binaries) {
-		return 1;
-	}
-
 	/* directories aren't binaries */
 	if(line[len - 1] == '/') {
 		return 0;
