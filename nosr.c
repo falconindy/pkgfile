@@ -135,7 +135,7 @@ static int is_binary(const char *line, size_t len)
 		return 0;
 	}
 
-	ptr = strstr(line, "bin/");
+	ptr = memmem(line, len, "bin/", 4);
 
 	/* toss out the obvious non-matches */
 	if(!ptr) {
