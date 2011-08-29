@@ -26,6 +26,31 @@
 
 #include "util.h"
 
+double humanize_size(off_t bytes, const char target_unit, const char **label)
+{
+	static const char *labels[] = {"B", "KiB", "MiB", "GiB",
+		"TiB", "PiB", "EiB", "ZiB", "YiB"};
+	static const int unitcount = sizeof(labels) / sizeof(labels[0]);
+
+	double val = (double)bytes;
+	int index;
+
+	for(index = 0; index < unitcount - 1; index++) {
+		if(target_unit != '\0' && labels[index][0] == target_unit) {
+			break;
+		} else if(target_unit == '\0' && val <= 2048.0 && val >= -2048.0) {
+			break;
+		}
+		val /= 1024.0;
+	}
+
+	if(label) {
+		*label = labels[index];
+	}
+
+	return val;
+}
+
 char *strtrim(char *str)
 {
 	char *pch = str;

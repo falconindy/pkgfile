@@ -27,13 +27,13 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 
-#include <curl/curl.h>
+#include <alpm.h>
 
 #include "nosr.h"
 #include "update.h"
 #include "util.h"
 
-static CURL *curl;
+static alpm_handle_t *alpm;
 
 static struct repo_t *repo_new(const char *reponame)
 {
@@ -78,59 +78,19 @@ static int repo_add_server(struct repo_t *repo, const char *server)
 	return 0;
 }
 
-static int download(const char *urlbase, const char *repo)
+static void alpm_progress_cb(const char *filename, off_t xfer, off_t total)
 {
-	const char *basename;
-	char *url = NULL;
-	double bytes_dl;
-	int ret = -1;
-	FILE *fp = NULL;
+	double size, perc = 100 * ((double)xfer / total);
+	const char *label;
 
-	if(asprintf(&url, "%s/%s.files.tar.gz", urlbase, repo) == -1) {
-		fprintf(stderr, "error: failed to allocate memory\n");
-		return 1;
-	}
+	size = humanize_size(total, 'K', &label);
 
-	basename = strrchr(url, '/');
-	if(basename) {
-		basename++;
-	} else {
-		fprintf(stderr, "error: invalid URL: %s\n", url);
-		goto cleanup;
-	}
-
-	fp = fopen(basename, "wb");
-	if(!fp) {
-		fprintf(stderr, "error: failed to open " DBPATH "/%s for writing: %s\n",
-				basename, strerror(errno));
-		goto cleanup;
-	}
-
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
-	curl_easy_setopt(curl, CURLOPT_URL, url);
-
-	printf("==> Downloading %s\n", basename);
-
-	ret = curl_easy_perform(curl);
-
-	curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &bytes_dl);
-	if(bytes_dl <= 0) {
-		unlink(basename);
-	}
-
-	if(ret != CURLE_OK) {
-		printf("warning: failed to download %s\n", url);
-	}
-
-	fclose(fp);
-
-cleanup:
-	free(url);
-
-	return ret;
+	printf("  %-40s %7.2f %3s [%6.2f%%]\r", filename, size, label, perc);
+	fflush(stdout);
 }
 
-static char *prepare_url(const char *url, const char *repo, const char *arch)
+static char *prepare_url(const char *url, const char *repo, const char *arch,
+		const char *suffix)
 {
 	char *string, *temp = NULL;
 	const char * const archvar = "$arch";
@@ -150,7 +110,13 @@ static char *prepare_url(const char *url, const char *repo, const char *arch)
 		temp = string;
 	}
 
-	return string;
+	if(asprintf(&temp, "%s/%s%s", string, repo, suffix) == -1) {
+		fprintf(stderr, "error: failed to allocate memory\n");
+	}
+
+	free(string);
+
+	return temp;
 }
 
 static char *line_get_val(char *line, const char *sep)
@@ -256,24 +222,22 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 
 static int download_repo_files(struct repo_t *repo)
 {
-	char *url;
+	char *ret, *url;
 	size_t i;
-	int ret;
 	struct utsname un;
 
 	uname(&un);
 
 	for(i = 0; i < repo->servercount; i++) {
-		url = prepare_url(repo->servers[i], repo->name, un.machine);
-		ret = download(url, repo->name);
+		url = prepare_url(repo->servers[i], repo->name, un.machine, ".files.tar.gz");
+		ret = alpm_fetch_pkgurl(alpm, url);
+		if(!ret) {
+			fprintf(stderr, "warning: failed to download: %s\n", url);
+		}
 		free(url);
-		switch(ret) {
-			case -1:
-				return 1;
-			case CURLE_OK:
-				return 0;
-			default:
-				continue;
+		if(ret) {
+			putchar(10);
+			return 0;
 		}
 	}
 
@@ -283,6 +247,7 @@ static int download_repo_files(struct repo_t *repo)
 int nosr_update(struct repo_t **repos, int repocount)
 {
 	int i, ret = 0;
+	enum _alpm_errno_t err;
 
 	if(access(DBPATH, W_OK)) {
 		fprintf(stderr, "error: unable to write to %s: ", DBPATH);
@@ -290,17 +255,20 @@ int nosr_update(struct repo_t **repos, int repocount)
 		return 1;
 	}
 
-	curl_global_init(CURL_GLOBAL_ALL);
-	curl = curl_easy_init();
+	alpm = alpm_initialize("/", "/var/lib/pacman", &err);
+	if(!alpm) {
+		fprintf(stderr, "error: unable to initialize alpm: %s\n", alpm_strerror(err));
+		return 1;
+	}
 
-	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+	alpm_option_add_cachedir(alpm, DBPATH);
+	alpm_option_set_dlcb(alpm, alpm_progress_cb);
 
 	for(i = 0; i < repocount; i++) {
 		ret += download_repo_files(repos[i]);
 	}
 
-	curl_easy_cleanup(curl);
-	curl_global_cleanup();
+	alpm_release(alpm);
 
 	return ret;
 }

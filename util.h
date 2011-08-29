@@ -32,6 +32,7 @@
 #define FREE(p) do { free(p); p = NULL; } while(0)
 #define UNUSED __attribute__((unused))
 
+double humanize_size(off_t bytes, const char target_unit, const char **label);
 char *strreplace(const char *str, const char *needle, const char *replace);
 char *strtrim(char *str);
 
