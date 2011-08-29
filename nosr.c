@@ -540,7 +540,6 @@ int main(int argc, char *argv[])
 		config.filterfree(&config.filter);
 	}
 
-	qsort(results, repocount, sizeof(struct result_t *), result_cmp);
 	for(ret = 0, i = 0; i < repocount; i++) {
 		ret += result_print(results[i]);
 		result_free(results[i]);

@@ -75,9 +75,20 @@ void result_free(struct result_t *result)
 	free(result);
 }
 
+static int stringcmp(const void *s1, const void *s2)
+{
+	return strcmp(*(const char **)s1, *(const char **)s2);
+}
+
 int result_print(struct result_t *result)
 {
 	size_t i;
+
+	if(!result->count) {
+		return 0;
+	}
+
+	qsort(result->list, result->count, sizeof(char *), stringcmp);
 
 	for(i = 0; i < result->count; i++) {
 		printf("%s\n", result->list[i]);
