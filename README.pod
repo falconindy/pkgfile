@@ -53,6 +53,10 @@ Search only the specific repo.
 Update the stored metadata files. It is recommended to create a daily cron
 job with this command to ensure accurate results.
 
+=item B<-v, --verbose>
+
+Output more. This applies to the default search operation.
+
 =back
 
 =head1 FILES

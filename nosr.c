@@ -138,7 +138,7 @@ static int is_binary(const char *line)
 	return 1;
 }
 
-static int search_metafile(const char *repo, const char *pkgname,
+static int search_metafile(const char *repo, struct pkg_t *pkg,
 		struct archive *a, struct result_t *result) {
 	int found = 0;
 	const char * const files = "%FILES%";
@@ -157,25 +157,32 @@ static int search_metafile(const char *repo, const char *pkgname,
 		}
 
 		if(!found && config.filterfunc(&config.filter, buf.line, config.icase) == 0) {
-			if(asprintf(&line, "%s/%s", repo, pkgname) == -1) {
-				fprintf(stderr, "error: failed to allocate memory\n");
-				return 1;
-			};
+			if(config.verbose) {
+				if(asprintf(&line, "%s/%s %s\t/%s", repo, pkg->name, pkg->version, buf.line) == -1) {
+					fprintf(stderr, "error: failed to allocate memory\n");
+					return -1;
+				};
+			} else {
+				found = 1;
+				if(asprintf(&line, "%s/%s", repo, pkg->name) == -1) {
+					fprintf(stderr, "error: failed to allocate memory\n");
+					return -1;
+				};
+			}
 			result_add(result, line);
-			found = 1;
 		}
 	}
 
 	return 1;
 }
 
-static int list_metafile(const char *repo, const char *pkgname,
+static int list_metafile(const char *repo, struct pkg_t *pkg,
 		struct archive *a, struct result_t *result) {
 	int ret;
 	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
 
-	if(strcmp(pkgname, config.filter.glob) != 0) {
+	if(strcmp(pkg->name, config.filter.glob) != 0) {
 		return 1;
 	}
 
@@ -194,7 +201,7 @@ static int list_metafile(const char *repo, const char *pkgname,
 			continue;
 		}
 
-		if(asprintf(&line, "%s/%s /%s", repo, pkgname, buf.line) == -1) {
+		if(asprintf(&line, "%s/%s /%s", repo, pkg->name, buf.line) == -1) {
 			fprintf(stderr, "error: failed to allocate memory\n");
 			return 1;
 		}
@@ -204,33 +211,38 @@ static int list_metafile(const char *repo, const char *pkgname,
 	return 1;
 }
 
-static char *parse_pkgname(const char *entryname)
+static int parse_pkgname(struct pkg_t *pkg, const char *entryname)
 {
-	const char *ptr = strrchr(entryname, '-');
+	const char *slash, *ptr = strrchr(entryname, '-');
 
 	if(ptr) {
-		while(--ptr && ptr > entryname) {
-			if(*ptr == '-') {
-				return strndup(entryname, ptr - entryname);
-			}
+		slash = ptr;
+		while(--ptr && ptr > entryname && *ptr != '-');
+		while(*++slash && *slash != '/');
+
+		if(*slash == '/' && *ptr == '-') {
+			pkg->name = strndup(entryname, ptr - entryname);
+			pkg->version = strndup(ptr + 1, slash - ptr - 1);
+			return 0;
 		}
 	}
 
-	return NULL;
+	return 1;
 }
 
 static void *load_repo(void *repo)
 {
 	int ret;
 	const char *entryname, *slash;
-	char *pkgname;
 	char repofile[1024];
 	struct archive *a;
 	struct archive_entry *e;
+	struct pkg_t *pkg;
 	struct result_t *result;
 
 	snprintf(repofile, 1024, "%s.files.tar.gz", (char *)repo);
 	result = result_new((char *)repo, 50);
+	CALLOC(pkg, 1, sizeof(struct pkg_t *), return (void *)result);
 
 	a = archive_read_new();
 	archive_read_support_compression_all(a);
@@ -253,14 +265,17 @@ static void *load_repo(void *repo)
 			continue;
 		}
 
-		pkgname = parse_pkgname(entryname);
-		if(!pkgname) {
+		ret = parse_pkgname(pkg, entryname);
+		if(ret != 0) {
 			fprintf(stderr, "error parsing pkgname from: %s\n", entryname);
 			continue;
 		}
 
-		ret = config.filefunc(repo, pkgname, a, result);
-		free(pkgname);
+		ret = config.filefunc(repo, pkg, a, result);
+
+		/* clean out the struct, but don't get rid of it entirely */
+		free(pkg->name);
+		free(pkg->version);
 
 		switch(ret) {
 			case -1:
@@ -278,6 +293,7 @@ done:
 	archive_read_close(a);
 
 cleanup:
+	free(pkg);
 	archive_read_finish(a);
 
 	return (void *)result;
@@ -315,7 +331,8 @@ static void usage(void)
 			"  -l, --list              list contents of a package\n"
 			"  -R, --repo REPO         search a specific repo\n"
 			"  -r, --regex             enable matching with pcre\n"
-			"  -u, --update            update repo files lists\n\n");
+			"  -u, --update            update repo files lists\n"
+			"  -v, --verbose           output more\n\n");
 }
 
 static int parse_opts(int argc, char **argv)
@@ -330,10 +347,11 @@ static int parse_opts(int argc, char **argv)
 		{"repo",        required_argument,  0, 'R'},
 		{"regex",       no_argument,        0, 'r'},
 		{"update",      no_argument,        0, 'u'},
+		{"verbose",     no_argument,        0, 'v'},
 		{0,0,0,0}
 	};
 
-	while((opt = getopt_long(argc, argv, "bghilR:ru", opts, &opt_idx)) != -1) {
+	while((opt = getopt_long(argc, argv, "bghilR:ruv", opts, &opt_idx)) != -1) {
 		switch(opt) {
 			case 'b':
 				config.binaries = 1;
@@ -358,6 +376,9 @@ static int parse_opts(int argc, char **argv)
 				break;
 			case 'u':
 				config.doupdate = 1;
+				break;
+			case 'v':
+				config.verbose = 1;
 				break;
 			default:
 				return 1;

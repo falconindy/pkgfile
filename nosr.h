@@ -39,10 +39,15 @@ typedef union _filterpattern_t {
 	char *glob;
 } filterpattern_t;
 
+struct pkg_t {
+	char *name;
+	char *version;
+};
+
 struct config_t {
 	filterstyle_t filterby;
 	filterpattern_t filter;
-	int (*filefunc)(const char *repo, const char *entryname, struct archive* a,
+	int (*filefunc)(const char *repo, struct pkg_t *pkg, struct archive* a,
 			struct result_t *result);
 	int (*filterfunc)(filterpattern_t *filter, const char *line, int flags);
 	void (*filterfree)(filterpattern_t *filter);
@@ -50,6 +55,7 @@ struct config_t {
 	int binaries;
 	int icase;
 	int doupdate;
+	int verbose;
 };
 
 #endif /* _NOSR_H */
