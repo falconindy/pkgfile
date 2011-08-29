@@ -126,12 +126,17 @@ static size_t strip_newline(char *str)
 	return len;
 }
 
-static int is_binary(const char *line)
+static int is_binary(const char *line, size_t len)
 {
 	const char *ptr;
 
 	if(!config.binaries) {
 		return 1;
+	}
+
+	/* directories aren't binaries */
+	if(line[len - 1] == '/') {
+		return 0;
 	}
 
 	ptr = strstr(line, "bin/");
@@ -178,7 +183,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 		char *line;
 
 		if(!len || buf.line[len-1] == '/' || strcmp(buf.line, files) == 0 ||
-				(config.binaries && !is_binary(buf.line))) {
+				(config.binaries && !is_binary(buf.line, len))) {
 			continue;
 		}
 
@@ -223,7 +228,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 			continue;
 		}
 
-		if(config.binaries && !is_binary(buf.line)) {
+		if(config.binaries && !is_binary(buf.line, len)) {
 			continue;
 		}
 
