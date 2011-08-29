@@ -458,7 +458,7 @@ static int search_single_repo(struct repo_t **repos, char *searchstring)
 
 int main(int argc, char *argv[])
 {
-	int i, repocount, ret = 0;
+	int i, repocount, ret = 1;
 	pthread_t *t = NULL;
 	struct repo_t **repos = NULL;
 	struct result_t **results = NULL;
@@ -541,7 +541,7 @@ int main(int argc, char *argv[])
 	}
 
 	qsort(results, repocount, sizeof(struct result_t *), result_cmp);
-	for(i = 0; i < repocount; i++) {
+	for(ret = 0, i = 0; i < repocount; i++) {
 		ret += result_print(results[i]);
 		result_free(results[i]);
 	}
