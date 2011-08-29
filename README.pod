@@ -4,7 +4,7 @@ nosr - search for files in packages not installed locally
 
 =head1 SYNOPSIS
 
-Usage: I<nosr> [ options ] target
+Usage: I<nosr> [operation] [options] target
 
 =head1 DESCRIPTION
 
@@ -14,7 +14,29 @@ the provided target is considered to be a filename and nosr will return the
 package(s) which contain this file. The repos which nosr searches is determined
 by those enabled in I</etc/pacman.conf>.
 
-=head1 OPTIONS
+=head1 OPERATIONS
+
+=over 4
+
+=item B<-l, --list>
+
+The target is considered to be a package name rather than a filename, and the
+contents of the named package are returned. This allows for repo/package style
+syntax to limit the depth of the search.
+
+=item B<-s, --search>
+
+Search for packages containing the provided target. This is the default mode of
+operation.
+
+=item B<-u, --update>
+
+Update the stored metadata files. It is recommended to create a daily cron job
+with this command to ensure accurate results.
+
+=back
+
+=head1 FILTERING
 
 =over 4
 
@@ -38,25 +60,9 @@ Disable case sensitivity in matching.
 
 Enable regular expression matching via B<pcre>(3).
 
-=item B<-l, --list>
-
-The target is considered to be a package name rather than a filename, and the
-contents of the named package are returned. This allows for repo/package style
-syntax to limit the depth of the search.
-
 =item B<-R, --repo>
 
 Search only the specific repo.
-
-=item B<-s, --search>
-
-Search for packages containing the provided target. This is the default mode of
-operation.
-
-=item B<-u, --update>
-
-Update the stored metadata files. It is recommended to create a daily cron job
-with this command to ensure accurate results.
 
 =item B<-v, --verbose>
 

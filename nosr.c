@@ -323,16 +323,17 @@ static void usage(void)
 {
 	fprintf(stderr, "nosr " VERSION "\nUsage: nosr [options] target\n\n");
 	fprintf(stderr,
-			" Options:\n"
+			" Operations:\n"
+			"  -l, --list              list contents of a package\n"
+			"  -s, --search            search for packages containing the target (default)\n"
+			"  -u, --update            update repo files lists\n\n"
+			" Filtering:\n"
 			"  -b, --binaries          return only files contained in a bin dir\n"
 			"  -g, --glob              enable matching with glob characters\n"
-			"  -h, --help              display this help and exit\n"
 			"  -i, --ignorecase        use case insensitive matching\n"
-			"  -l, --list              list contents of a package\n"
 			"  -R, --repo REPO         search a specific repo\n"
-			"  -r, --regex             enable matching with pcre\n"
-			"  -s, --search            search for packages containing the target (default)\n"
-			"  -u, --update            update repo files lists\n"
+			"  -r, --regex             enable matching with pcre\n\n"
+			"  -h, --help              display this help and exit\n"
 			"  -v, --verbose           output more\n\n");
 }
 
