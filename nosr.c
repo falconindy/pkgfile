@@ -128,14 +128,40 @@ static size_t strip_newline(char *str)
 
 static int is_binary(const char *line)
 {
-	if(config.binaries &&
-			(line[strlen(line)-1] == '/' ||
-			!(strncmp(line, "bin/", 4) == 0 || strstr(line, "/bin/") ||
-			strncmp(line, "sbin/", 5) == 0 || strstr(line, "/sbin/")))) {
+	const char *ptr;
+
+	if(!config.binaries) {
+		return 1;
+	}
+
+	ptr = strstr(line, "bin/");
+
+	/* toss out the obvious non-matches */
+	if(!ptr) {
 		return 0;
 	}
 
-	return 1;
+	/* match bin/... */
+	if(ptr == line) {
+		return 1;
+	}
+
+	/* match sbin/... */
+	if(line == ptr - 1 && *(ptr - 1) == 's') {
+		return 1;
+	}
+
+	/* match .../bin/ */
+	if(*(ptr - 1) == '/') {
+		return 1;
+	}
+
+	/* match .../sbin/ */
+	if(*(ptr - 2) == '/' && *(ptr - 1) == 's') {
+		return 1;
+	}
+
+	return 0;
 }
 
 static int search_metafile(const char *repo, struct pkg_t *pkg,
