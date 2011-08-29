@@ -331,6 +331,7 @@ static void usage(void)
 			"  -l, --list              list contents of a package\n"
 			"  -R, --repo REPO         search a specific repo\n"
 			"  -r, --regex             enable matching with pcre\n"
+			"  -s, --search            search for packages containing the target (default)\n"
 			"  -u, --update            update repo files lists\n"
 			"  -v, --verbose           output more\n\n");
 }
@@ -346,6 +347,7 @@ static int parse_opts(int argc, char **argv)
 		{"list",        no_argument,        0, 'l'},
 		{"repo",        required_argument,  0, 'R'},
 		{"regex",       no_argument,        0, 'r'},
+		{"search",      no_argument,        0, 's'},
 		{"update",      no_argument,        0, 'u'},
 		{"verbose",     no_argument,        0, 'v'},
 		{0,0,0,0}
@@ -373,6 +375,9 @@ static int parse_opts(int argc, char **argv)
 				break;
 			case 'r':
 				config.filterby = FILTER_REGEX;
+				break;
+			case 's':
+				config.filefunc = search_metafile;
 				break;
 			case 'u':
 				config.doupdate = 1;
