@@ -158,7 +158,7 @@ static int is_binary(const char *line, size_t len)
 	}
 
 	/* match .../sbin/ */
-	if(*(ptr - 2) == '/' && *(ptr - 1) == 's') {
+	if(ptr >= line + 2 && *(ptr - 2) == '/' && *(ptr - 1) == 's') {
 		return 1;
 	}
 
