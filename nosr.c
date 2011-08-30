@@ -445,7 +445,6 @@ static int search_single_repo(struct repo_t **repos, char *searchstring)
 
 	if(config.targetrepo) {
 		targetrepo = config.targetrepo;
-		config.filter.glob = searchstring;
 	} else {
 		slash = strchr(searchstring, '/');
 		targetrepo = strdup(searchstring);
