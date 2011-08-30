@@ -41,7 +41,7 @@ struct result_t *result_new(char *name, size_t initial_size)
 
 int result_add(struct result_t *result, char *name)
 {
-	if(!result|!name) {
+	if(!result || !name) {
 		return 1;
 	}
 
