@@ -104,3 +104,5 @@ int result_cmp(const void *r1, const void *r2)
 
 	return strcmp(result1->name, result2->name);
 }
+
+/* vim: set ts=2 sw=2 noet: */

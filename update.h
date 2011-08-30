@@ -16,3 +16,5 @@ int repo_add_server(struct repo_t *repo, const char *server);
 void repo_free(struct repo_t *repo);
 
 #endif /* _NOSR_UPDATE_H */
+
+/* vim: set ts=2 sw=2 noet: */

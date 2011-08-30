@@ -91,3 +91,5 @@ char *strreplace(const char *str, const char *needle, const char *replace)
 
 	return newstr;
 }
+
+/* vim: set ts=2 sw=2 noet: */

@@ -59,4 +59,5 @@ struct config_t {
 };
 
 #endif /* _NOSR_H */
+
 /* vim: set ts=2 sw=2 noet: */
