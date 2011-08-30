@@ -572,13 +572,13 @@ int main(int argc, char *argv[])
 		return 2;
 	}
 
-	if(mkdir(DBPATH, 0755) != 0 && errno != EEXIST) {
-		fprintf(stderr, "error: failed to create cachedir: " DBPATH ": %s\n", strerror(errno));
+	if(mkdir(CACHEPATH, 0755) != 0 && errno != EEXIST) {
+		fprintf(stderr, "error: failed to create cachedir: " CACHEPATH ": %s\n", strerror(errno));
 		return 2;
 	}
 
-	if(chdir(DBPATH)) {
-		fprintf(stderr, "error: failed to chdir to " DBPATH ": %s\n", strerror(errno));
+	if(chdir(CACHEPATH)) {
+		fprintf(stderr, "error: failed to chdir to " CACHEPATH ": %s\n", strerror(errno));
 		return 2;
 	}
 

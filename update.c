@@ -249,8 +249,8 @@ int nosr_update(struct repo_t **repos, int repocount)
 	int i, ret = 0;
 	enum _alpm_errno_t err;
 
-	if(access(DBPATH, W_OK)) {
-		fprintf(stderr, "error: unable to write to %s: ", DBPATH);
+	if(access(CACHEPATH, W_OK)) {
+		fprintf(stderr, "error: unable to write to %s: ", CACHEPATH);
 		perror("");
 		return 1;
 	}
@@ -261,7 +261,7 @@ int nosr_update(struct repo_t **repos, int repocount)
 		return 1;
 	}
 
-	alpm_option_add_cachedir(alpm, DBPATH);
+	alpm_option_add_cachedir(alpm, CACHEPATH);
 	alpm_option_set_dlcb(alpm, alpm_progress_cb);
 
 	for(i = 0; i < repocount; i++) {

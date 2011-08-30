@@ -30,7 +30,7 @@
 
 #include "result.h"
 
-#define DBPATH  "/var/cache/nosr"
+#define CACHEPATH  "/var/cache/nosr"
 
 struct archive_read_buffer {
 	char *line;
