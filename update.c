@@ -255,7 +255,7 @@ int nosr_update(struct repo_t **repos, int repocount)
 		return 1;
 	}
 
-	alpm = alpm_initialize("/", "/var/lib/pacman", &err);
+	alpm = alpm_initialize("/", DBPATH, &err);
 	if(!alpm) {
 		fprintf(stderr, "error: unable to initialize alpm: %s\n", alpm_strerror(err));
 		return 1;
