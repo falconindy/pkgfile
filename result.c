@@ -21,12 +21,7 @@ struct result_t *result_new(char *name, size_t initial_size)
 {
 	struct result_t *result;
 
-	result = calloc(1, sizeof(struct result_t));
-	if(!result) {
-		return NULL;
-	}
-
-	result->name = strdup(name);
+	CALLOC(result, 1, sizeof(struct result_t), return NULL);
 
 	result->list = calloc(initial_size, sizeof(char *));
 	if(!result->list) {
@@ -34,6 +29,7 @@ struct result_t *result_new(char *name, size_t initial_size)
 		return NULL;
 	}
 
+	result->name = strdup(name);
 	result->maxcount = initial_size;
 
 	return result;
