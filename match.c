@@ -24,21 +24,17 @@ void free_regex(filterpattern_t *pattern) {
 }
 
 int match_exact(filterpattern_t *pattern, const char *line, int flags) {
-	const char *ptr, *match = pattern->glob;
+	const char *ptr = line, *match = pattern->glob;
 
 	/* if the search string contains a /, don't just search on basenames. since
 	 * our files DB doesn't contain leading slashes (for good reason), advance
 	 * the pointer on the line to compare against */
 	if(match[0] == '/') {
-		ptr = line;
 		match++;
 	} else {
-		ptr = strrchr(line, '/');
-		if(ptr) {
-			ptr++;
-		} else {
-			/* invalid? we should never hit this */
-			return 1;
+		const char *slash = strrchr(line, '/');
+		if(slash) {
+			ptr = slash + 1;
 		}
 	}
 

@@ -209,7 +209,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
 
-	if(strcmp(pkg->name, config.filter.glob) != 0) {
+	if(config.filterfunc(&config.filter, pkg->name, config.icase) != 0) {
 		return 1;
 	}
 
