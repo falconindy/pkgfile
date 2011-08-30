@@ -8,6 +8,11 @@
 
 int match_glob(filterpattern_t *pattern, const char *line, int flags) {
 	const char *glob = pattern->glob;
+	
+	if(glob[0] == '/') {
+		glob++;
+	}
+
 	return fnmatch(glob, line, flags);
 }
 
