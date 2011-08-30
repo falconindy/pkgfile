@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 #include <curl/curl.h>
@@ -101,7 +102,7 @@ cleanup:
 	return !(ret == CURLE_OK);
 }
 
-static char *prepare_url(const char *url, const char *repo)
+static char *prepare_url(const char *url, const char *repo, const char *arch)
 {
 	char *string, *temp = NULL;
 	const char * const archvar = "$arch";
@@ -110,7 +111,7 @@ static char *prepare_url(const char *url, const char *repo)
 	string = strdup(url);
 	temp = string;
 	if(strstr(temp, archvar)) {
-		string = strreplace(temp, archvar, "x86_64");
+		string = strreplace(temp, archvar, arch);
 		free(temp);
 		temp = string;
 	}
@@ -237,9 +238,12 @@ int download_repo_files(struct repo_t *repo)
 	char *url;
 	size_t i;
 	int ret;
+	struct utsname un;
+
+	uname(&un);
 
 	for(i = 0; i < repo->servercount; i++) {
-		url = prepare_url(repo->servers[i], repo->name);
+		url = prepare_url(repo->servers[i], repo->name, un.machine);
 		ret = download(url, repo->name);
 		free(url);
 		if(ret == 0) {
