@@ -269,7 +269,7 @@ static void *load_repo(void *repo)
 
 	snprintf(repofile, 1024, "%s.files.tar.gz", (char *)repo);
 	result = result_new((char *)repo, 50);
-	CALLOC(pkg, 1, sizeof(struct pkg_t *), return (void *)result);
+	CALLOC(pkg, 1, sizeof(struct pkg_t), return (void *)result);
 
 	a = archive_read_new();
 	archive_read_support_compression_all(a);

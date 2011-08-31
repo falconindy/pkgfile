@@ -17,7 +17,7 @@ struct repo_t *repo_new(const char *reponame)
 {
 	struct repo_t *repo;
 
-	CALLOC(repo, 1, sizeof(struct repo_t *), return NULL);
+	CALLOC(repo, 1, sizeof(struct repo_t), return NULL);
 
 	if(asprintf(&repo->name, "%s", reponame) == -1) {
 		free(repo);
