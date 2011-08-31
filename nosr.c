@@ -257,7 +257,7 @@ static int parse_pkgname(struct pkg_t *pkg, const char *entryname)
 	return 1;
 }
 
-static void *load_repo(void *repo)
+static void *load_repo(void *repo_obj)
 {
 	int ret;
 	const char *entryname, *slash;
@@ -265,10 +265,12 @@ static void *load_repo(void *repo)
 	struct archive *a;
 	struct archive_entry *e;
 	struct pkg_t *pkg;
+	struct repo_t *repo;
 	struct result_t *result;
 
-	snprintf(repofile, 1024, "%s.files.tar.gz", (char *)repo);
-	result = result_new((char *)repo, 50);
+	repo = (struct repo_t *)repo_obj;
+	snprintf(repofile, 1024, "%s.files.tar.gz", repo->name);
+	result = result_new((char *)repo->name, 50);
 	CALLOC(pkg, 1, sizeof(struct pkg_t), return (void *)result);
 
 	a = archive_read_new();
@@ -298,7 +300,7 @@ static void *load_repo(void *repo)
 			continue;
 		}
 
-		ret = config.filefunc(repo, pkg, a, result);
+		ret = config.filefunc(repo->name, pkg, a, result);
 
 		/* clean out the struct, but don't get rid of it entirely */
 		free(pkg->name);
@@ -456,7 +458,7 @@ static int search_single_repo(struct repo_t **repos, char *searchstring)
 
 	do {
 		if(strcmp((*repos)->name, targetrepo) == 0) {
-			struct result_t *result = load_repo(targetrepo);
+			struct result_t *result = load_repo((void *)*repos);
 			result_print(result);
 			result_free(result);
 			return 0;
@@ -544,8 +546,7 @@ int main(int argc, char *argv[])
 
 	/* load and process DBs */
 	for(i = 0; i < repocount; i++) {
-		const char *filename = repos[i]->name;
-		pthread_create(&t[i], NULL, load_repo, (void *)filename);
+		pthread_create(&t[i], NULL, load_repo, (void *)repos[i]);
 	}
 
 	/* gather results */
