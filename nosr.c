@@ -506,7 +506,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(config.doupdate) {
-		nosr_update(repos);
+		ret = !!nosr_update(repos);
 		goto cleanup;
 	}
 
