@@ -287,6 +287,7 @@ static void *load_repo(void *repo_obj)
 		goto cleanup;
 	}
 
+	repo->filefound = 1;
 	while(archive_read_next_header(a, &e) == ARCHIVE_OK) {
 		entryname = archive_entry_pathname(e);
 		slash = strrchr(entryname, '/');
@@ -477,7 +478,7 @@ static int search_single_repo(struct repo_t **repos, char *searchstring)
 
 int main(int argc, char *argv[])
 {
-	int i, repocount, ret = 1;
+	int i, repocount, reposfound = 0, ret = 1;
 	pthread_t *t = NULL;
 	struct repo_t **repos = NULL;
 	struct result_t **results = NULL;
@@ -559,10 +560,15 @@ int main(int argc, char *argv[])
 	}
 
 	for(ret = 0, i = 0; i < repocount; i++) {
+		reposfound += repos[i]->filefound;
 		ret += result_print(results[i]);
 		result_free(results[i]);
 	}
 	ret = ret > 0 ? 0 : 1;
+
+	if(!reposfound) {
+		fprintf(stderr, "error: No repo files found. Please run `nosr --update'.\n");
+	}
 
 cleanup:
 	for(i = 0; i < repocount; i++) {

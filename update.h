@@ -7,6 +7,7 @@ struct repo_t {
 	char *name;
 	char **servers;
 	size_t servercount;
+	int filefound;
 };
 
 struct repo_t **find_active_repos(const char *filename);
