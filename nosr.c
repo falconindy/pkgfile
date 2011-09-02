@@ -445,6 +445,7 @@ static int parse_opts(int argc, char **argv)
 static int search_single_repo(struct repo_t **repos, char *searchstring)
 {
 	char *targetrepo = NULL, *slash;
+	int ret = 1;
 
 	if(config.targetrepo) {
 		targetrepo = config.targetrepo;
@@ -460,20 +461,22 @@ static int search_single_repo(struct repo_t **repos, char *searchstring)
 	do {
 		if(strcmp((*repos)->name, targetrepo) == 0) {
 			struct result_t *result = load_repo((void *)*repos);
+			ret = (result->count == 0);
 			result_print(result);
 			result_free(result);
-			return 0;
+			goto finish;
 		}
 	} while(*(++repos));
 
 	/* repo not found */
 	fprintf(stderr, "error: repo not available: %s\n", targetrepo);
 
+finish:
 	if(!config.targetrepo) {
 		free(targetrepo);
 	}
 
-	return 1;
+	return ret;
 }
 
 int main(int argc, char *argv[])
