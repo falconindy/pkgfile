@@ -10,7 +10,7 @@ struct repo_t {
 	int filefound;
 };
 
-struct repo_t **find_active_repos(const char *filename);
+struct repo_t **find_active_repos(const char *filename, int *repocount);
 int nosr_update(struct repo_t **repos);
 void repo_free(struct repo_t *repo);
 

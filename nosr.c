@@ -445,10 +445,10 @@ static int parse_opts(int argc, char **argv)
 	return 0;
 }
 
-static int search_single_repo(struct repo_t **repos, char *searchstring)
+static int search_single_repo(struct repo_t **repos, int repocount, char *searchstring)
 {
 	char *targetrepo = NULL, *slash;
-	int ret = 1;
+	int i, ret = 1;
 
 	if(config.targetrepo) {
 		targetrepo = config.targetrepo;
@@ -461,15 +461,15 @@ static int search_single_repo(struct repo_t **repos, char *searchstring)
 
 	config.filterby = FILTER_EXACT;
 
-	do {
-		if(strcmp((*repos)->name, targetrepo) == 0) {
-			struct result_t *result = load_repo((void *)*repos);
+	for(i = 0; i < repocount; i++) {
+		if(strcmp(repos[i]->name, targetrepo) == 0) {
+			struct result_t *result = load_repo((void *)repos[i]);
 			ret = (result->count == 0);
 			result_print(result);
 			result_free(result);
 			goto finish;
 		}
-	} while(*(++repos));
+	}
 
 	/* repo not found */
 	fprintf(stderr, "error: repo not available: %s\n", targetrepo);
@@ -551,8 +551,7 @@ int main(int argc, char *argv[])
 		return 2;
 	}
 
-	repos = find_active_repos(PACMANCONFIG);
-	for(repocount = 0; repos[repocount]; repocount++);
+	repos = find_active_repos(PACMANCONFIG, &repocount);
 	if(!repocount) {
 		fprintf(stderr, "error: no repos found in " PACMANCONFIG "\n");
 		return 1;
@@ -575,7 +574,7 @@ int main(int argc, char *argv[])
 	/* override behavior on $repo/$pkg syntax or --repo */
 	if((config.filefunc == list_metafile && strchr(argv[optind], '/')) ||
 			config.targetrepo) {
-		ret = search_single_repo(repos, argv[optind]);
+		ret = search_single_repo(repos, repocount, argv[optind]);
 		goto cleanup;
 	} else {
 		results = search_all_repos(repos, repocount);

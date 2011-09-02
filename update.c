@@ -166,7 +166,7 @@ static int add_servers_from_include(struct repo_t *repo, char *file)
 	return 0;
 }
 
-struct repo_t **find_active_repos(const char *filename)
+struct repo_t **find_active_repos(const char *filename, int *repocount)
 {
 	FILE *fp;
 	char *ptr, *section = NULL;
@@ -174,16 +174,15 @@ struct repo_t **find_active_repos(const char *filename)
 	const char * const server = "Server";
 	const char * const include = "Include";
 	struct repo_t **active_repos = NULL;
-	size_t repo_sz = 1;
 	int in_options = 0;
+
+	*repocount = 0;
 
 	fp = fopen(filename, "r");
 	if(!fp) {
 		fprintf(stderr, "error: failed to open %s: %s\n", filename, strerror(errno));
 		return NULL;
 	}
-
-	CALLOC(active_repos, 1, sizeof(struct repo_t *), return NULL);
 
 	while(fgets(line, 4096, fp)) {
 		strtrim(line);
@@ -204,10 +203,9 @@ struct repo_t **find_active_repos(const char *filename)
 				continue;
 			} else {
 				in_options = 0;
-				active_repos = realloc(active_repos, sizeof(struct repo_t *) * (repo_sz + 1));
-				active_repos[repo_sz - 1] = repo_new(section);
-				active_repos[repo_sz] = NULL;
-				repo_sz++;
+				active_repos = realloc(active_repos, sizeof(struct repo_t *) * (*repocount + 1));
+				active_repos[*repocount] = repo_new(section);
+				(*repocount)++;
 			}
 		}
 
@@ -220,9 +218,9 @@ struct repo_t **find_active_repos(const char *filename)
 			strtrim(key);
 
 			if(strcmp(key, server) == 0) {
-				repo_add_server(active_repos[repo_sz - 2], val);
+				repo_add_server(active_repos[*repocount - 1], val);
 			} else if(strcmp(key, include) == 0) {
-				add_servers_from_include(active_repos[repo_sz - 2], val);
+				add_servers_from_include(active_repos[*repocount - 1], val);
 			}
 		}
 	}
