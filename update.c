@@ -13,7 +13,7 @@
 
 static CURL *curl;
 
-struct repo_t *repo_new(const char *reponame)
+static struct repo_t *repo_new(const char *reponame)
 {
 	struct repo_t *repo;
 
@@ -40,7 +40,7 @@ void repo_free(struct repo_t *repo)
 	free(repo);
 }
 
-int repo_add_server(struct repo_t *repo, const char *server)
+static int repo_add_server(struct repo_t *repo, const char *server)
 {
 	if(!repo) {
 		return 1;
@@ -233,7 +233,7 @@ struct repo_t **find_active_repos(const char *filename)
 	return active_repos;
 }
 
-int download_repo_files(struct repo_t *repo)
+static int download_repo_files(struct repo_t *repo)
 {
 	char *url;
 	size_t i;

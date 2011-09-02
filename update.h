@@ -12,8 +12,6 @@ struct repo_t {
 
 struct repo_t **find_active_repos(const char *filename);
 int nosr_update(struct repo_t **repos);
-struct repo_t *repo_new(const char *reponame);
-int repo_add_server(struct repo_t *repo, const char *server);
 void repo_free(struct repo_t *repo);
 
 #endif /* _NOSR_UPDATE_H */
