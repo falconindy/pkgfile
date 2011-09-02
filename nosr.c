@@ -479,10 +479,33 @@ finish:
 	return ret;
 }
 
+static struct result_t **search_all_repos(struct repo_t **repos, int repocount)
+{
+	struct result_t **results;
+	pthread_t *t = NULL;
+	int i;
+
+	CALLOC(t, repocount, sizeof(pthread_t *), return NULL);
+	CALLOC(results, repocount, sizeof(struct result_t *), return NULL);
+
+	/* load and process DBs */
+	for(i = 0; i < repocount; i++) {
+		pthread_create(&t[i], NULL, load_repo, (void *)repos[i]);
+	}
+
+	/* gather results */
+	for(i = 0; i < repocount; i++) {
+		pthread_join(t[i], (void **)&results[i]);
+	}
+
+	free(t);
+
+	return results;
+}
+
 int main(int argc, char *argv[])
 {
 	int i, repocount, reposfound = 0, ret = 1;
-	pthread_t *t = NULL;
 	struct repo_t **repos = NULL;
 	struct result_t **results = NULL;
 
@@ -543,19 +566,8 @@ int main(int argc, char *argv[])
 			config.targetrepo) {
 		ret = search_single_repo(repos, argv[optind]);
 		goto cleanup;
-	}
-
-	CALLOC(t, repocount, sizeof(pthread_t *), goto cleanup);
-	CALLOC(results, repocount, sizeof(struct result_t *), goto cleanup);
-
-	/* load and process DBs */
-	for(i = 0; i < repocount; i++) {
-		pthread_create(&t[i], NULL, load_repo, (void *)repos[i]);
-	}
-
-	/* gather results */
-	for(i = 0; i < repocount; i++) {
-		pthread_join(t[i], (void **)&results[i]);
+	} else {
+		results = search_all_repos(repos, repocount);
 	}
 
 	if(config.filterfree) {
@@ -577,7 +589,6 @@ cleanup:
 	for(i = 0; i < repocount; i++) {
 		repo_free(repos[i]);
 	}
-	free(t);
 	free(repos);
 	free(results);
 
