@@ -503,6 +503,31 @@ static struct result_t **search_all_repos(struct repo_t **repos, int repocount)
 	return results;
 }
 
+static int filter_setup(char *arg)
+{
+	switch(config.filterby) {
+		case FILTER_EXACT:
+			config.filter.glob = arg;
+			config.filterfunc = match_exact;
+			break;
+		case FILTER_GLOB:
+			config.icase *= FNM_CASEFOLD;
+			config.filter.glob = arg;
+			config.filterfunc = match_glob;
+			break;
+		case FILTER_REGEX:
+			config.icase *= PCRE_CASELESS;
+			config.filterfunc = match_regex;
+			config.filterfree = free_regex;
+			if(compile_pcre_expr(&config.filter.re, arg, config.icase) != 0) {
+				return 1;
+			}
+			break;
+	}
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int i, repocount, reposfound = 0, ret = 1;
@@ -541,24 +566,8 @@ int main(int argc, char *argv[])
 		goto cleanup;
 	}
 
-	switch(config.filterby) {
-		case FILTER_EXACT:
-			config.filter.glob = argv[optind];
-			config.filterfunc = match_exact;
-			break;
-		case FILTER_GLOB:
-			config.icase *= FNM_CASEFOLD;
-			config.filter.glob = argv[optind];
-			config.filterfunc = match_glob;
-			break;
-		case FILTER_REGEX:
-			config.icase *= PCRE_CASELESS;
-			config.filterfunc = match_regex;
-			config.filterfree = free_regex;
-			if(compile_pcre_expr(&config.filter.re, argv[optind], config.icase) != 0) {
-				goto cleanup;
-			}
-			break;
+	if(filter_setup(argv[optind]) != 0) {
+		goto cleanup;
 	}
 
 	/* override behavior on $repo/$pkg syntax or --repo */
