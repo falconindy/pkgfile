@@ -402,6 +402,9 @@ static int parse_opts(int argc, char **argv)
 		{0,0,0,0}
 	};
 
+	/* defaults */
+	config.filefunc = search_metafile;
+
 	while((opt = getopt_long(argc, argv, "bghilR:ruv", opts, &opt_idx)) != -1) {
 		switch(opt) {
 			case 'b':
@@ -534,7 +537,6 @@ int main(int argc, char *argv[])
 	struct repo_t **repos = NULL;
 	struct result_t **results = NULL;
 
-	config.filefunc = search_metafile;
 	if(parse_opts(argc, argv) != 0) {
 		return 2;
 	}
