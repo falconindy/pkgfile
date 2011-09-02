@@ -87,7 +87,7 @@ static int download(const char *urlbase, const char *repo)
 	ret = curl_easy_perform(curl);
 
 	curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &bytes_dl);
-	if(!bytes_dl) {
+	if(bytes_dl <= 0) {
 		unlink(basename);
 	}
 
