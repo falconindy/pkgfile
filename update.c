@@ -146,13 +146,12 @@ static int add_servers_from_include(struct repo_t *repo, char *file)
 	}
 
 	while(fgets(line, 4096, fp)) {
-		strtrim(line);
-		if (!strlen(line) || line[0] == '#') {
-			continue;
-		}
 		if((ptr = strchr(line, '#'))) {
 			*ptr = '\0';
-			strtrim(line);
+		}
+		strtrim(line);
+		if(!strlen(line)) {
+			continue;
 		}
 
 		if(strncmp(line, server, strlen(server)) == 0) {
@@ -185,14 +184,12 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 	}
 
 	while(fgets(line, 4096, fp)) {
-		strtrim(line);
-
-		if (!strlen(line) || line[0] == '#') {
-			continue;
-		}
-		if ((ptr = strchr(line, '#'))) {
+		if((ptr = strchr(line, '#'))) {
 			*ptr = '\0';
-			strtrim(line);
+		}
+		strtrim(line);
+		if(!strlen(line)) {
+			continue;
 		}
 
 		if (line[0] == '[' && line[strlen(line) - 1] == ']') {
