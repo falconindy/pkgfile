@@ -575,24 +575,23 @@ int main(int argc, char *argv[])
 	if((config.filefunc == list_metafile && strchr(argv[optind], '/')) ||
 			config.targetrepo) {
 		ret = search_single_repo(repos, repocount, argv[optind]);
-		goto cleanup;
 	} else {
 		results = search_all_repos(repos, repocount);
+		for(ret = i = 0; i < repocount; i++) {
+			reposfound += repos[i]->filefound;
+			ret += result_print(results[i]);
+			result_free(results[i]);
+		}
+
+		if(!reposfound) {
+			fprintf(stderr, "error: No repo files found. Please run `nosr --update'.\n");
+		}
+
+		ret = ret > 0 ? 0 : 1;
 	}
 
 	if(config.filterfree) {
 		config.filterfree(&config.filter);
-	}
-
-	for(ret = 0, i = 0; i < repocount; i++) {
-		reposfound += repos[i]->filefound;
-		ret += result_print(results[i]);
-		result_free(results[i]);
-	}
-	ret = ret > 0 ? 0 : 1;
-
-	if(!reposfound) {
-		fprintf(stderr, "error: No repo files found. Please run `nosr --update'.\n");
 	}
 
 cleanup:
