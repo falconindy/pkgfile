@@ -1,6 +1,6 @@
 =head1 NAME
 
-nosr - search for files in packages not installed locally
+nosr - search for files in packages
 
 =head1 SYNOPSIS
 
@@ -9,10 +9,10 @@ Usage: I<nosr> [operation] [options] target
 =head1 DESCRIPTION
 
 nosr searches the .files metadata created by B<repo-add>(8) to retrieve
-information about packages that might not be currently installed. By default,
-the provided target is considered to be a filename and nosr will return the
-package(s) which contain this file. The repos which nosr searches is determined
-by those enabled in I</etc/pacman.conf>.
+information about packages, including those which might not be currently
+installed. By default, the provided target is considered to be a filename and
+nosr will return the package(s) which contain this file. The repos which nosr
+searches is determined by those enabled in I</etc/pacman.conf>.
 
 =head1 OPERATIONS
 
@@ -42,11 +42,11 @@ with this command to ensure accurate results.
 
 =item B<-b, --binaries>
 
-Return only files which are contained with a bin or sbin directory.
+Return only files which are contained within a bin or sbin directory.
 
 =item B<-g, --glob>
 
-Enable shell style glob pattern matching with *, ? and [] ranges.
+Enable shell-style glob pattern matching. See B<glob>(7).
 
 =item B<-h, --help>
 
@@ -58,7 +58,7 @@ Disable case sensitivity in matching.
 
 =item B<-r, --regex>
 
-Enable regular expression matching via B<pcre>(3).
+Enable regular expression matching. See B<pcre>(3).
 
 =item B<-R, --repo>
 
@@ -66,7 +66,7 @@ Search only the specific repo.
 
 =item B<-v, --verbose>
 
-Output more. This applies to the default search operation.
+Output more. This applies to the search operation.
 
 =back
 
