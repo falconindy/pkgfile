@@ -11,7 +11,7 @@ struct repo_t {
 };
 
 struct repo_t **find_active_repos(const char *filename, int *repocount);
-int nosr_update(struct repo_t **repos);
+int nosr_update(struct repo_t **repos, int repocount);
 void repo_free(struct repo_t *repo);
 
 #endif /* _NOSR_UPDATE_H */

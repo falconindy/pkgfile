@@ -558,7 +558,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(config.doupdate) {
-		ret = !!nosr_update(repos);
+		ret = !!nosr_update(repos, repocount);
 		goto cleanup;
 	}
 

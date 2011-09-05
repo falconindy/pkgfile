@@ -251,10 +251,9 @@ static int download_repo_files(struct repo_t *repo)
 	return 1;
 }
 
-int nosr_update(struct repo_t **repos)
+int nosr_update(struct repo_t **repos, int repocount)
 {
-	struct repo_t **repo;
-	int ret = 0;
+	int i, ret = 0;
 
 	if(access(DBPATH, W_OK)) {
 		fprintf(stderr, "error: unable to write to %s: ", DBPATH);
@@ -268,8 +267,8 @@ int nosr_update(struct repo_t **repos)
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
 	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 
-	for(repo = repos; *repo; repo++) {
-		ret += download_repo_files(*repo);
+	for(i = 0; i < repocount; i++) {
+		ret += download_repo_files(repos[i]);
 	}
 
 	curl_easy_cleanup(curl);
