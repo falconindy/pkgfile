@@ -151,8 +151,7 @@ static int add_servers_from_include(struct repo_t *repo, char *file)
 		if((ptr = strchr(line, '#'))) {
 			*ptr = '\0';
 		}
-		strtrim(line);
-		if(!strlen(line)) {
+		if(*strtrim(line) == '\0') {
 			continue;
 		}
 
@@ -189,8 +188,7 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 		if((ptr = strchr(line, '#'))) {
 			*ptr = '\0';
 		}
-		strtrim(line);
-		if(!strlen(line)) {
+		if(*strtrim(line) == '\0') {
 			continue;
 		}
 
