@@ -201,7 +201,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 			continue;
 		}
 
-		if(!found && config.filterfunc(&config.filter, buf.line, config.icase) == 0) {
+		if(!found && config.filterfunc(&config.filter, buf.line, len, config.icase) == 0) {
 			if(config.verbose) {
 				if(asprintf(&line, "%s/%s %s\t/%s", repo, pkg->name, pkg->version, buf.line) == -1) {
 					fprintf(stderr, "error: failed to allocate memory\n");
@@ -227,7 +227,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
 
-	if(config.filterfunc(&config.filter, pkg->name, config.icase) != 0) {
+	if(config.filterfunc(&config.filter, pkg->name, (size_t)-1, config.icase) != 0) {
 		return 1;
 	}
 

@@ -28,7 +28,8 @@
 #include "nosr.h"
 #include "util.h"
 
-int match_glob(filterpattern_t *pattern, const char *line, int flags) {
+int match_glob(filterpattern_t *pattern, const char *line, size_t UNUSED len,
+		int flags) {
 	const char *glob = pattern->glob;
 	
 	if(glob[0] == '/') {
@@ -38,10 +39,15 @@ int match_glob(filterpattern_t *pattern, const char *line, int flags) {
 	return fnmatch(glob, line, flags);
 }
 
-int match_regex(filterpattern_t *pattern, const char *line, int UNUSED flags) {
+int match_regex(filterpattern_t *pattern, const char *line, size_t len,
+		int UNUSED flags) {
 	struct pcre_data *re = &pattern->re;
-	return !(pcre_exec(re->re, re->re_extra, line, strlen(line),
-			0, 0, NULL, 0) >= 0);
+
+	if(len == (size_t)-1) {
+		len = strlen(line);
+	}
+
+	return !(pcre_exec(re->re, re->re_extra, line, len, 0, 0, NULL, 0) >= 0);
 }
 
 void free_regex(filterpattern_t *pattern) {
@@ -50,7 +56,8 @@ void free_regex(filterpattern_t *pattern) {
 	pcre_free(re->re_extra);
 }
 
-int match_exact(filterpattern_t *pattern, const char *line, int flags) {
+int match_exact(filterpattern_t *pattern, const char *line, size_t UNUSED len,
+		int flags) {
 	const char *ptr = line, *match = pattern->glob;
 
 	/* if the search string contains a /, don't just search on basenames. since
@@ -59,7 +66,7 @@ int match_exact(filterpattern_t *pattern, const char *line, int flags) {
 	if(match[0] == '/') {
 		match++;
 	} else {
-		const char *slash = strrchr(line, '/');
+		const char *slash = memrchr(line, '/', len);
 		if(slash) {
 			ptr = slash + 1;
 		}
