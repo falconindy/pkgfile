@@ -20,6 +20,7 @@ static struct repo_t *repo_new(const char *reponame)
 	CALLOC(repo, 1, sizeof(struct repo_t), return NULL);
 
 	if(asprintf(&repo->name, "%s", reponame) == -1) {
+		fprintf(stderr, "error: failed to allocate memory\n");
 		free(repo);
 		return NULL;
 	}
@@ -64,6 +65,7 @@ static int download(const char *urlbase, const char *repo)
 	FILE *fp = NULL;
 
 	if(asprintf(&url, "%s/%s.files.tar.gz", urlbase, repo) == -1) {
+		fprintf(stderr, "error: failed to allocate memory\n");
 		return 1;
 	}
 
