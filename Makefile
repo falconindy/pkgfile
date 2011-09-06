@@ -1,8 +1,8 @@
 OUT        = nosr
 VERSION    = 0.1
 CPPFLAGS  := -DVERSION=\"$(VERSION)\" $(CPPFLAGS)
-CFLAGS    := --std=c99 -g -pedantic -Wall -Wextra -Werror -pthread $(CFLAGS) $(CPPFLAGS)
-LDFLAGS   := -larchive -lpcre -lcurl $(LDFLAGS)
+CFLAGS    := --std=c99 -g -pedantic -Wall -Wextra -Werror $(CFLAGS) $(CPPFLAGS)
+LDFLAGS   := -larchive -lpcre -lcurl -pthread $(LDFLAGS)
 
 PREFIX    ?= /usr/local
 
