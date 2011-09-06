@@ -1,6 +1,6 @@
 =head1 NAME
 
-nosr - search for files in packages
+nosr - an alpm .files metadata explorer
 
 =head1 SYNOPSIS
 
@@ -8,11 +8,11 @@ Usage: I<nosr> [operation] [options] target
 
 =head1 DESCRIPTION
 
-nosr searches the .files metadata created by B<repo-add>(8) to retrieve
-information about packages, including those which might not be currently
-installed. By default, the provided target is considered to be a filename and
-nosr will return the package(s) which contain this file. The repos which nosr
-searches is determined by those enabled in I</etc/pacman.conf>.
+nosr searches the .files metadata created by B<repo-add>(8) to retrieve file
+information about packages. By default, the provided target is considered to be
+a filename and nosr will return the package(s) which contain this file. The
+repos which nosr searches is determined by those enabled in
+I</etc/pacman.conf>.
 
 =head1 OPERATIONS
 
