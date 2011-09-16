@@ -29,7 +29,8 @@
 #include "util.h"
 
 int match_glob(filterpattern_t *pattern, const char *line, size_t UNUSED len,
-		int flags) {
+		int flags)
+{
 	const char *glob = pattern->glob;
 	
 	if(glob[0] == '/') {
@@ -40,7 +41,8 @@ int match_glob(filterpattern_t *pattern, const char *line, size_t UNUSED len,
 }
 
 int match_regex(filterpattern_t *pattern, const char *line, size_t len,
-		int UNUSED flags) {
+		int UNUSED flags)
+{
 	struct pcre_data *re = &pattern->re;
 
 	if(len == (size_t)-1) {
@@ -56,8 +58,8 @@ void free_regex(filterpattern_t *pattern) {
 	pcre_free(re->re_extra);
 }
 
-int match_exact(filterpattern_t *pattern, const char *line, size_t UNUSED len,
-		int flags) {
+int match_exact(filterpattern_t *pattern, const char *line, size_t len, int flags)
+{
 	const char *ptr = line, *match = pattern->glob;
 
 	/* if the search string contains a /, don't just search on basenames. since
