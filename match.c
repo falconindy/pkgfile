@@ -68,7 +68,8 @@ int match_exact(filterpattern_t *pattern, const char *line, size_t len, int flag
 	if(match[0] == '/') {
 		match++;
 	} else {
-		const char *slash = memrchr(line, '/', len);
+		const char *slash =
+			len == (size_t)-1 ? strrchr(line, '/') : memrchr(line, '/', len - 1);
 		if(slash) {
 			ptr = slash + 1;
 		}
