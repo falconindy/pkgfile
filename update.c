@@ -83,7 +83,7 @@ static int download(const char *urlbase, const char *repo)
 	const char *basename;
 	char *url = NULL;
 	double bytes_dl;
-	int ret = 1;
+	int ret = -1;
 	FILE *fp = NULL;
 
 	if(asprintf(&url, "%s/%s.files.tar.gz", urlbase, repo) == -1) {
@@ -95,11 +95,14 @@ static int download(const char *urlbase, const char *repo)
 	if(basename) {
 		basename++;
 	} else {
+		fprintf(stderr, "error: invalid URL: %s\n", url);
 		goto cleanup;
 	}
 
 	fp = fopen(basename, "wb");
 	if(!fp) {
+		fprintf(stderr, "error: failed to open " DBPATH "/%s for writing: %s\n",
+				basename, strerror(errno));
 		goto cleanup;
 	}
 
@@ -119,11 +122,12 @@ static int download(const char *urlbase, const char *repo)
 		printf("warning: failed to download %s\n", url);
 	}
 
-cleanup:
-	free(url);
 	fclose(fp);
 
-	return !(ret == CURLE_OK);
+cleanup:
+	free(url);
+
+	return ret;
 }
 
 static char *prepare_url(const char *url, const char *repo, const char *arch)
@@ -263,8 +267,13 @@ static int download_repo_files(struct repo_t *repo)
 		url = prepare_url(repo->servers[i], repo->name, un.machine);
 		ret = download(url, repo->name);
 		free(url);
-		if(ret == 0) {
-			return 0;
+		switch(ret) {
+			case -1:
+				return 1;
+			case CURLE_OK:
+				return 0;
+			default:
+				continue;
 		}
 	}
 
@@ -285,7 +294,6 @@ int nosr_update(struct repo_t **repos, int repocount)
 	curl = curl_easy_init();
 
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 
 	for(i = 0; i < repocount; i++) {
 		ret += download_repo_files(repos[i]);
