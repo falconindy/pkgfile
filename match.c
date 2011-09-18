@@ -53,9 +53,8 @@ int match_regex(filterpattern_t *pattern, const char *line, size_t len,
 }
 
 void free_regex(filterpattern_t *pattern) {
-	struct pcre_data *re = &pattern->re;
-	pcre_free(re->re);
-	pcre_free(re->re_extra);
+	pcre_free(pattern->re.re);
+	pcre_free(pattern->re.re_extra);
 }
 
 int match_exact(filterpattern_t *pattern, const char *line, size_t len, int flags)
