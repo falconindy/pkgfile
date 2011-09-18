@@ -193,7 +193,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 	buf.max_line_size = 512 * 1024;
 
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
-		size_t len = strip_newline(buf.line);
+		const size_t len = strip_newline(buf.line);
 		char *line;
 
 		if(!len || buf.line[len-1] == '/' || strcmp(buf.line, files) == 0 ||
@@ -407,7 +407,7 @@ static int parse_opts(int argc, char **argv)
 {
 	int opt, opt_idx;
 	const char *argv0_base;
-	static struct option opts[] = {
+	static const struct option opts[] = {
 		{"binaries",    no_argument,        0, 'b'},
 		{"glob",        no_argument,        0, 'g'},
 		{"help",        no_argument,        0, 'h'},

@@ -25,9 +25,9 @@
 
 #include "nosr.h"
 
-int match_glob(filterpattern_t *filter, const char *line, size_t len, int flags);
-int match_regex(filterpattern_t *filter, const char *line, size_t len, int flags);
-int match_exact(filterpattern_t *filter, const char *line, size_t len, int flags);
+int match_glob(const filterpattern_t *filter, const char *line, size_t len, int flags);
+int match_regex(const filterpattern_t *filter, const char *line, size_t len, int flags);
+int match_exact(const filterpattern_t *filter, const char *line, size_t len, int flags);
 void free_regex(filterpattern_t *pattern);
 
 #endif /* _NOSR_MATCH_H */

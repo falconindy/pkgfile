@@ -71,7 +71,7 @@ struct config_t {
 	filterpattern_t filter;
 	int (*filefunc)(const char *repo, struct pkg_t *pkg, struct archive* a,
 			struct result_t *result);
-	int (*filterfunc)(filterpattern_t *filter, const char *line, size_t len,
+	int (*filterfunc)(const filterpattern_t *filter, const char *line, size_t len,
 			int flags);
 	void (*filterfree)(filterpattern_t *filter);
 	char *targetrepo;
