@@ -34,6 +34,10 @@
 #include "update.h"
 #include "util.h"
 
+#ifndef BUFSIZ
+# define BUFSIZ 8192
+#endif
+
 static struct config_t config;
 
 static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
@@ -295,7 +299,7 @@ static void *load_repo(void *repo_obj)
 	archive_read_support_compression_all(a);
 	archive_read_support_format_all(a);
 
-	ret = archive_read_open_filename(a, repofile, ARCHIVE_DEFAULT_BYTES_PER_BLOCK);
+	ret = archive_read_open_filename(a, repofile, BUFSIZ);
 	if(ret != ARCHIVE_OK) {
 		/* fail silently if the file doesn't exist */
 		if(access(repofile, F_OK) == 0) {
