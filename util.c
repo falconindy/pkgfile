@@ -83,14 +83,11 @@ char *strtrim(char *str)
 
 char *strreplace(const char *str, const char *needle, const char *replace)
 {
-	const char *p = NULL, *q = NULL;
-	char *newstr = NULL, *newp = NULL;
-
-	char *list[16];
+	const char *p, *q;
+	char *newstr, *newp;
+	char *list[8];
 	int i, listsz = 0;
-
 	size_t needlesz = strlen(needle), replacesz = strlen(replace);
-	size_t newsz;
 
 	if(!str) {
 		return NULL;
@@ -110,12 +107,8 @@ char *strreplace(const char *str, const char *needle, const char *replace)
 	}
 	/* size of new string = size of old string + "number of occurences of needle"
 	 * x "size difference between replace and needle" */
-	newsz = strlen(str) + 1 +
-		listsz * (replacesz - needlesz);
-	newstr = calloc(newsz, sizeof(char));
-	if(!newstr) {
-		return NULL;
-	}
+	CALLOC(newstr, strlen(str) + 1 + listsz * (replacesz - needlesz),
+			sizeof(char), return NULL);
 
 	p = str;
 	newp = newstr;
