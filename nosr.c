@@ -40,6 +40,11 @@
 
 static struct config_t config;
 
+static const char *filtermethods[] = {
+	[FILTER_GLOB]  = "glob",
+	[FILTER_REGEX] = "regex"
+};
+
 static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 {
 	char *i = NULL;
@@ -446,6 +451,11 @@ static int parse_opts(int argc, char **argv)
 				config.binaries = 1;
 				break;
 			case 'g':
+				if(config.filterby != FILTER_EXACT) {
+					fprintf(stderr, "error: --glob cannot be used with --%s option\n",
+							filtermethods[config.filterby]);
+					return 1;
+				}
 				config.filterby = FILTER_GLOB;
 				break;
 			case 'h':
@@ -461,6 +471,11 @@ static int parse_opts(int argc, char **argv)
 				config.targetrepo = optarg;
 				break;
 			case 'r':
+				if(config.filterby != FILTER_EXACT) {
+					fprintf(stderr, "error: --regex cannot be used with --%s option\n",
+							filtermethods[config.filterby]);
+					return 1;
+				}
 				config.filterby = FILTER_REGEX;
 				break;
 			case 's':
