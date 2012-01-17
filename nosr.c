@@ -153,43 +153,43 @@ static size_t strip_newline(char *str)
 	return len;
 }
 
-static int is_binary(const char *line, size_t len)
+static bool is_binary(const char *line, size_t len)
 {
 	const char *ptr;
 
 	/* directories aren't binaries */
 	if(line[len - 1] == '/') {
-		return 0;
+		return false;
 	}
 
 	ptr = memmem(line, len, "bin/", 4);
 
 	/* toss out the obvious non-matches */
 	if(!ptr) {
-		return 0;
+		return false;
 	}
 
 	/* match bin/... */
 	if(ptr == line) {
-		return 1;
+		return true;
 	}
 
 	/* match sbin/... */
 	if(line == ptr - 1 && *(ptr - 1) == 's') {
-		return 1;
+		return true;
 	}
 
 	/* match .../bin/ */
 	if(*(ptr - 1) == '/') {
-		return 1;
+		return true;
 	}
 
 	/* match .../sbin/ */
 	if(ptr >= line + 2 && *(ptr - 2) == '/' && *(ptr - 1) == 's') {
-		return 1;
+		return true;
 	}
 
-	return 0;
+	return false;
 }
 
 static int search_metafile(const char *repo, struct pkg_t *pkg,
@@ -457,7 +457,7 @@ static int parse_opts(int argc, char **argv)
 	while((opt = getopt_long(argc, argv, "bghilqR:rsuv", opts, &opt_idx)) != -1) {
 		switch(opt) {
 			case 'b':
-				config.binaries = 1;
+				config.binaries = true;
 				break;
 			case 'g':
 				if(config.filterby != FILTER_EXACT) {
@@ -471,13 +471,13 @@ static int parse_opts(int argc, char **argv)
 				usage();
 				return 1;
 			case 'i':
-				config.icase = 1;
+				config.icase = true;
 				break;
 			case 'l':
 				config.filefunc = list_metafile;
 				break;
 			case 'q':
-				config.quiet = 1;
+				config.quiet = true;
 				break;
 			case 'R':
 				config.targetrepo = optarg;
@@ -494,10 +494,10 @@ static int parse_opts(int argc, char **argv)
 				config.filefunc = search_metafile;
 				break;
 			case 'u':
-				config.doupdate = 1;
+				config.doupdate = true;
 				break;
 			case 'v':
-				config.verbose = 1;
+				config.verbose = true;
 				break;
 			default:
 				return 1;

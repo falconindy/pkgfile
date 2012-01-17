@@ -23,6 +23,8 @@
 #ifndef _NOSR_H
 #define _NOSR_H
 
+#include <stdbool.h>
+
 #include <archive.h>
 #include <archive_entry.h>
 
@@ -76,11 +78,11 @@ struct config_t {
 			int flags);
 	void (*filterfree)(filterpattern_t *filter);
 	char *targetrepo;
-	int binaries;
-	int icase;
-	int doupdate;
-	int quiet;
-	int verbose;
+	bool binaries;
+	bool icase;
+	bool doupdate;
+	bool quiet;
+	bool verbose;
 };
 
 #endif /* _NOSR_H */
