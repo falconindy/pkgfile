@@ -79,6 +79,7 @@ struct config_t {
 	int binaries;
 	int icase;
 	int doupdate;
+	int quiet;
 	int verbose;
 };
 

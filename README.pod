@@ -56,6 +56,10 @@ Display the help message and quit.
 
 Disable case sensitivity in matching.
 
+=item B<-q, --quiet>
+
+Output less when using the B<--list> operation.
+
 =item B<-r, --regex>
 
 Enable regular expression matching. See B<pcre>(3).

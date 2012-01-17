@@ -255,9 +255,16 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 			continue;
 		}
 
-		if(asprintf(&line, "%s/%s /%s", repo, pkg->name, buf.line) == -1) {
-			fprintf(stderr, "error: failed to allocate memory\n");
-			return 1;
+		if(config.quiet) {
+			if(asprintf(&line, "/%s", buf.line) == -1) {
+				fprintf(stderr, "error: failed to allocate memory\n");
+				return 1;
+			}
+		} else {
+			if(asprintf(&line, "%s/%s /%s", repo, pkg->name, buf.line) == -1) {
+				fprintf(stderr, "error: failed to allocate memory\n");
+				return 1;
+			}
 		}
 		result_add(result, line);
 	}
@@ -406,6 +413,7 @@ static void usage(void)
 			"  -b, --binaries          return only files contained in a bin dir\n"
 			"  -g, --glob              enable matching with glob characters\n"
 			"  -i, --ignorecase        use case insensitive matching\n"
+			"  -q, --quiet             output less when listing\n"
 			"  -R, --repo REPO         search a specific repo\n"
 			"  -r, --regex             enable matching with pcre\n\n"
 			"  -h, --help              display this help and exit\n"
@@ -422,6 +430,7 @@ static int parse_opts(int argc, char **argv)
 		{"help",        no_argument,        0, 'h'},
 		{"ignorecase",  no_argument,        0, 'i'},
 		{"list",        no_argument,        0, 'l'},
+		{"quiet",       no_argument,        0, 'q'},
 		{"repo",        required_argument,  0, 'R'},
 		{"regex",       no_argument,        0, 'r'},
 		{"search",      no_argument,        0, 's'},
@@ -445,7 +454,7 @@ static int parse_opts(int argc, char **argv)
 		config.doupdate = 1;
 	}
 
-	while((opt = getopt_long(argc, argv, "bghilR:rsuv", opts, &opt_idx)) != -1) {
+	while((opt = getopt_long(argc, argv, "bghilqR:rsuv", opts, &opt_idx)) != -1) {
 		switch(opt) {
 			case 'b':
 				config.binaries = 1;
@@ -466,6 +475,9 @@ static int parse_opts(int argc, char **argv)
 				break;
 			case 'l':
 				config.filefunc = list_metafile;
+				break;
+			case 'q':
+				config.quiet = 1;
 				break;
 			case 'R':
 				config.targetrepo = optarg;
