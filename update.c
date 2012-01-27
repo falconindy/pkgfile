@@ -220,6 +220,22 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 	return active_repos;
 }
 
+static int unlink_files_dbfile(const char *dbname)
+{
+	char *fullpath;
+	int rc = 1;
+
+	if(asprintf(&fullpath, CACHEPATH "/%s.files.tar.gz", dbname) == -1) {
+		fprintf(stderr, "error: failed to allocate memory\n");
+		return rc;
+	}
+
+	rc = unlink(fullpath);
+	free(fullpath);
+
+	return 0;
+}
+
 static int download_repo_files(struct repo_t *repo)
 {
 	char *ret, *url;
@@ -230,6 +246,7 @@ static int download_repo_files(struct repo_t *repo)
 
 	for(i = 0; i < repo->servercount; i++) {
 		url = prepare_url(repo->servers[i], repo->name, un.machine, ".files.tar.gz");
+		unlink_files_dbfile(repo->name);
 		ret = alpm_fetch_pkgurl(alpm, url);
 		if(!ret) {
 			fprintf(stderr, "warning: failed to download: %s\n", url);
