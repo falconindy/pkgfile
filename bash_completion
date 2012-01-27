@@ -1,0 +1,23 @@
+#!/bin/bash
+
+_nosr() {
+  local cur prev repos
+
+  _get_comp_words_by_ref cur prev
+
+  opts="-l --list -s --search -u --update -b --binaries -g --glob -i
+        --ignorecase -q --quiet -R --repo -r --regex -h --help -v --verbose"
+
+  if [[ $prev = -*R || $prev = '--repo' ]]; then
+    repos=$(sed '/^\[\(.*\)\]$/!d;s//\1/g;/options/d' /etc/pacman.conf)
+    COMPREPLY=($(compgen -W "$repos" -- "$cur"))
+  elif [[ -z $cur || $cur = -* ]]; then
+    COMPREPLY=($(compgen -W "$opts" -- "$cur"))
+  else
+    COMPREPLY=($(compgen -W "$(pacman -Ssq)" -- "$cur"))
+  fi
+}
+
+complete -F _nosr nosr
+
+# ex:et ts=2 sw=2 ft=sh
