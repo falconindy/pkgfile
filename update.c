@@ -34,6 +34,7 @@
 #include "util.h"
 
 static alpm_handle_t *alpm;
+static int interactive;
 
 static struct repo_t *repo_new(const char *reponame)
 {
@@ -246,6 +247,12 @@ static int download_repo_files(struct repo_t *repo)
 
 	for(i = 0; i < repo->servercount; i++) {
 		url = prepare_url(repo->servers[i], repo->name, un.machine, ".files.tar.gz");
+
+		if(!interactive) {
+			printf("downloading %s.files.tar.gz...", repo->name);
+			fflush(stdout);
+		}
+
 		unlink_files_dbfile(repo->name);
 		ret = alpm_fetch_pkgurl(alpm, url);
 		if(!ret) {
@@ -265,6 +272,7 @@ int nosr_update(struct repo_t **repos, int repocount)
 {
 	int i, ret = 0;
 	enum _alpm_errno_t err;
+	int interactive = isatty(STDOUT_FILENO);
 
 	if(access(CACHEPATH, W_OK)) {
 		fprintf(stderr, "error: unable to write to %s: ", CACHEPATH);
@@ -279,7 +287,12 @@ int nosr_update(struct repo_t **repos, int repocount)
 	}
 
 	alpm_option_add_cachedir(alpm, CACHEPATH);
-	alpm_option_set_dlcb(alpm, alpm_progress_cb);
+
+	if(interactive) {
+		/* avoid spam if we're not writing to a TTY */
+		alpm_option_set_dlcb(alpm, alpm_progress_cb);
+	}
+
 
 	for(i = 0; i < repocount; i++) {
 		ret += download_repo_files(repos[i]);
