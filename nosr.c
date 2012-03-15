@@ -133,7 +133,7 @@ cleanup:
 	{
 		int ret = b->ret;
 		FREE(b->line);
-		memset(b, 0, sizeof(b));
+		memset(b, 0, sizeof(struct archive_read_buffer));
 		return ret;
 	}
 }
