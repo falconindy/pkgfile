@@ -272,7 +272,8 @@ int nosr_update(struct repo_t **repos, int repocount)
 {
 	int i, ret = 0;
 	enum _alpm_errno_t err;
-	int interactive = isatty(STDOUT_FILENO);
+
+	interactive = isatty(STDOUT_FILENO);
 
 	if(access(CACHEPATH, W_OK)) {
 		fprintf(stderr, "error: unable to write to %s: ", CACHEPATH);
