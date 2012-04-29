@@ -629,6 +629,12 @@ int main(int argc, char *argv[])
 		goto cleanup;
 	}
 
+	/* sanity check */
+	if(config.filefunc == list_metafile && config.filterby != FILTER_EXACT) {
+		fprintf(stderr, "error: --regex and --glob are not allowed with --list\n");
+		goto cleanup;
+	}
+
 	if(filter_setup(argv[optind]) != 0) {
 		goto cleanup;
 	}
