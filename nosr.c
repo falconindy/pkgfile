@@ -302,9 +302,9 @@ static void *load_repo(void *repo_obj)
 	struct repo_t *repo;
 	struct result_t *result;
 
-	repo = (struct repo_t *)repo_obj;
+	repo = repo_obj;
 	snprintf(repofile, 1024, "%s.files.tar.gz", repo->name);
-	result = result_new((char *)repo->name, 50);
+	result = result_new(repo->name, 50);
 	CALLOC(pkg, 1, sizeof(struct pkg_t), return (void *)result);
 
 	a = archive_read_new();
@@ -525,7 +525,7 @@ static int search_single_repo(struct repo_t **repos, int repocount, char *search
 
 	for(i = 0; i < repocount; i++) {
 		if(strcmp(repos[i]->name, targetrepo) == 0) {
-			struct result_t *result = load_repo((void *)repos[i]);
+			struct result_t *result = load_repo(repos[i]);
 			ret = (result->count == 0);
 			result_print(result);
 			result_free(result);
@@ -550,7 +550,7 @@ static struct result_t **search_all_repos(struct repo_t **repos, int repocount)
 	pthread_t *t = NULL;
 	int i;
 
-	CALLOC(t, repocount, sizeof(pthread_t *), return NULL);
+	CALLOC(t, repocount, sizeof(pthread_t), return NULL);
 	CALLOC(results, repocount, sizeof(struct result_t *), return NULL);
 
 	/* load and process DBs */
