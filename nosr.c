@@ -47,16 +47,16 @@ static const char *filtermethods[] = {
 
 static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 {
-	char *i = NULL;
-	off_t offset;
-	int done = 0;
-
 	/* ensure we start populating our line buffer at the beginning */
 	b->line_offset = b->line;
 
 	while(1) {
+		size_t block_remaining;
+		char *eol;
+
 		/* have we processed this entire block? */
 		if(b->block + b->block_size == b->block_offset) {
+			int64_t offset;
 			if(b->ret == ARCHIVE_EOF) {
 				/* reached end of archive on the last read, now we are out of data */
 				goto cleanup;
@@ -66,20 +66,20 @@ static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 			b->ret = archive_read_data_block(a, (void *)&b->block,
 					&b->block_size, &offset);
 			b->block_offset = b->block;
+			block_remaining = b->block_size;
 
 			/* error, cleanup */
 			if(b->ret < ARCHIVE_OK) {
 				goto cleanup;
 			}
+		} else {
+			block_remaining = b->block + b->block_size - b->block_offset;
 		}
 
-		/* loop through the block looking for EOL characters */
-		for(i = b->block_offset; i < (b->block + b->block_size); i++) {
-			/* check if read value was null or newline */
-			if(*i == '\0' || *i == '\n') {
-				done = 1;
-				break;
-			}
+		/* look through the block looking for EOL characters */
+		eol = memchr(b->block_offset, '\n', block_remaining);
+		if(!eol) {
+			eol = memchr(b->block_offset, '\0', block_remaining);
 		}
 
 		/* allocate our buffer, or ensure our existing one is big enough */
@@ -89,29 +89,31 @@ static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 			b->line_size = b->block_size + 1;
 			b->line_offset = b->line;
 		} else {
-			size_t needed = (size_t)((b->line_offset - b->line)
-					+ (i - b->block_offset) + 1);
+			/* note: we know eol > b->block_offset and b->line_offset > b->line,
+			 * so we know the result is unsigned and can fit in size_t */
+			size_t new = eol ? (size_t)(eol - b->block_offset) : block_remaining;
+			size_t needed = (size_t)((b->line_offset - b->line) + new + 1);
 			if(needed > b->max_line_size) {
 				b->ret = -ERANGE;
 				goto cleanup;
 			}
 			if(needed > b->line_size) {
 				/* need to realloc + copy data to fit total length */
-				char *new;
-				CALLOC(new, needed, sizeof(char), b->ret = -ENOMEM; goto cleanup);
-				memcpy(new, b->line, b->line_size);
+				char *new_line;
+				CALLOC(new_line, needed, sizeof(char), b->ret = -ENOMEM; goto cleanup);
+				memcpy(new_line, b->line, b->line_size);
 				b->line_size = needed;
-				b->line_offset = new + (b->line_offset - b->line);
+				b->line_offset = new_line + (b->line_offset - b->line);
 				free(b->line);
-				b->line = new;
+				b->line = new_line;
 			}
 		}
 
-		if(done) {
-			size_t len = (size_t)(i - b->block_offset);
+		if(eol) {
+			size_t len = (size_t)(eol - b->block_offset);
 			memcpy(b->line_offset, b->block_offset, len);
 			b->line_offset[len] = '\0';
-			b->block_offset = ++i;
+			b->block_offset = eol + 1;
 			/* this is the main return point; from here you can read b->line */
 			return ARCHIVE_OK;
 		} else {
@@ -119,7 +121,7 @@ static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 			size_t len = (size_t)(b->block + b->block_size - b->block_offset);
 			memcpy(b->line_offset, b->block_offset, len);
 			b->line_offset += len;
-			b->block_offset = i;
+			b->block_offset = b->block + b->block_size;
 			/* there was no new data, return what is left; saved ARCHIVE_EOF will be
 			 * returned on next call */
 			if(len == 0) {
