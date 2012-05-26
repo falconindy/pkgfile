@@ -110,7 +110,7 @@ static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 		}
 
 		if(eol) {
-			size_t len = (size_t)(eol - b->block_offset);
+			size_t len = b->real_line_size = (size_t)(eol - b->block_offset);
 			memcpy(b->line_offset, b->block_offset, len);
 			b->line_offset[len] = '\0';
 			b->block_offset = eol + 1;
@@ -118,7 +118,7 @@ static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 			return ARCHIVE_OK;
 		} else {
 			/* we've looked through the whole block but no newline, copy it */
-			size_t len = (size_t)(b->block + b->block_size - b->block_offset);
+			size_t len = b->real_line_size = (size_t)(b->block + b->block_size - b->block_offset);
 			memcpy(b->line_offset, b->block_offset, len);
 			b->line_offset += len;
 			b->block_offset = b->block + b->block_size;
@@ -140,19 +140,13 @@ cleanup:
 	}
 }
 
-static size_t strip_newline(char *str)
+static int strip_newline(struct archive_read_buffer *buf)
 {
-	size_t len;
-	if(str == '\0') {
-		return 0;
+	if (buf->line[buf->real_line_size - 1] == '\n') {
+		buf->line[buf->real_line_size - 1] = '\0';
+		buf->real_line_size--;
 	}
-	len = strlen(str);
-	while(len > 0 && str[len - 1] == '\n') {
-		len--;
-	}
-	str[len] = '\0';
-
-	return len;
+	return buf->real_line_size;
 }
 
 static bool is_binary(const char *line, size_t len)
@@ -204,7 +198,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 	buf.max_line_size = 512 * 1024;
 
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
-		const size_t len = strip_newline(buf.line);
+		const size_t len = strip_newline(&buf);
 		char *line;
 
 		if(!len || buf.line[len-1] == '/' || strcmp(buf.line, files) == 0 ||
@@ -246,7 +240,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 	buf.max_line_size = 512 * 1024;
 
 	while((ret = archive_fgets(a, &buf)) == ARCHIVE_OK) {
-		size_t len = strip_newline(buf.line);
+		const size_t len = strip_newline(&buf);
 		char *line;
 
 		if(!len || strcmp(buf.line, files) == 0) {
