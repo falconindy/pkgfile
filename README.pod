@@ -44,6 +44,10 @@ with this command to ensure accurate results.
 
 Return only files which are contained within a bin or sbin directory.
 
+=item B<-d, --directories>
+
+Match directories in search results.
+
 =item B<-g, --glob>
 
 Enable shell-style glob pattern matching. See B<glob>(7).

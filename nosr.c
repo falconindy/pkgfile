@@ -201,7 +201,15 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 		const size_t len = strip_newline(&buf);
 		char *line;
 
-		if(!len || buf.line[len-1] == '/' || strcmp(buf.line, files) == 0 ||
+		if(!len) {
+			continue;
+		}
+
+		if(!config.directories && buf.line[len-1] == '/') {
+			continue;
+		}
+
+		if(strcmp(buf.line, files) == 0 ||
 				(config.binaries && !is_binary(buf.line, len))) {
 			continue;
 		}
@@ -407,6 +415,7 @@ static void usage(void)
 			"  -u, --update            update repo files lists\n\n"
 			" Filtering:\n"
 			"  -b, --binaries          return only files contained in a bin dir\n"
+			"  -d, --directories       match directories in searches\n"
 			"  -g, --glob              enable matching with glob characters\n"
 			"  -i, --ignorecase        use case insensitive matching\n"
 			"  -q, --quiet             output less when listing\n"
@@ -422,6 +431,7 @@ static int parse_opts(int argc, char **argv)
 	const char *argv0_base;
 	static const struct option opts[] = {
 		{"binaries",    no_argument,        0, 'b'},
+		{"directories", no_argument,        0, 'd'},
 		{"glob",        no_argument,        0, 'g'},
 		{"help",        no_argument,        0, 'h'},
 		{"ignorecase",  no_argument,        0, 'i'},
@@ -450,10 +460,13 @@ static int parse_opts(int argc, char **argv)
 		config.doupdate = 1;
 	}
 
-	while((opt = getopt_long(argc, argv, "bghilqR:rsuv", opts, &opt_idx)) != -1) {
+	while((opt = getopt_long(argc, argv, "bdghilqR:rsuv", opts, &opt_idx)) != -1) {
 		switch(opt) {
 			case 'b':
 				config.binaries = true;
+				break;
+			case 'd':
+				config.directories = true;
 				break;
 			case 'g':
 				if(config.filterby != FILTER_EXACT) {

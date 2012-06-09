@@ -80,6 +80,7 @@ struct config_t {
 	void (*filterfree)(filterpattern_t *filter);
 	char *targetrepo;
 	bool binaries;
+	bool directories;
 	bool icase;
 	bool doupdate;
 	bool quiet;
