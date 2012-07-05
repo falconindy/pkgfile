@@ -326,15 +326,12 @@ static void *load_repo(void *repo_obj)
 	}
 
 	fstat(fd, &st);
-	repodata = mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	repodata = mmap(0, st.st_size, PROT_READ, MAP_SHARED|MAP_POPULATE, fd, 0);
 	if(repodata == MAP_FAILED) {
 		fprintf(stderr, "error: failed to map pages for %s: %s\n", repofile,
 				strerror(errno));
 		goto cleanup;
 	}
-
-	/* doesn't really matter if this fails */
-	madvise(repodata, st.st_size, MADV_WILLNEED|MADV_SEQUENTIAL);
 
 	ret = archive_read_open_memory(a, repodata, st.st_size);
 	if(ret != ARCHIVE_OK) {
