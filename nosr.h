@@ -49,11 +49,6 @@ struct archive_read_buffer {
 	int ret;
 };
 
-struct pcre_data {
-	pcre *re;
-	pcre_extra *re_extra;
-};
-
 typedef enum _filterstyle_t {
 	FILTER_EXACT = 0,
 	FILTER_GLOB,
@@ -61,7 +56,10 @@ typedef enum _filterstyle_t {
 } filterstyle_t;
 
 typedef union _filterpattern_t {
-	struct pcre_data re;
+	struct pcre_data {
+		pcre *re;
+		pcre_extra *re_extra;
+	} re;
 	char *glob;
 } filterpattern_t;
 
