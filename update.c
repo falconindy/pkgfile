@@ -28,6 +28,7 @@
 #include <unistd.h>
 
 #include <alpm.h>
+#include <zlib.h>
 
 #include "nosr.h"
 #include "update.h"
@@ -268,9 +269,78 @@ static int download_repo_files(struct repo_t *repo)
 	return 1;
 }
 
+static int decompress_repo_file(struct repo_t *repo)
+{
+	gzFile gzf = NULL;
+	char *infilename = NULL, *outfilename = NULL;
+	FILE *out = NULL;
+	int ret = -1;
+
+	if(asprintf(&infilename, CACHEPATH "/%s.files.tar.gz", repo->name) < 0) {
+		fprintf(stderr, "error: failed to allocate memory\n");
+		return -1;
+	}
+
+	if(asprintf(&outfilename, CACHEPATH "/%s.files.tar", repo->name) < 0) {
+		fprintf(stderr, "error: failed to allocate memory\n");
+		goto done;
+	}
+
+	gzf = gzopen(infilename, "r");
+	if (gzf == NULL) {
+		fprintf(stderr, "failed to open file for decompression: %s: %s\n",
+				infilename, strerror(errno));
+		goto done;
+	}
+
+	out = fopen(outfilename, "w");
+	if(out == NULL) {
+		fprintf(stderr, "failed to open file for writing: %s: %s\n",
+				outfilename, strerror(errno));
+	}
+
+	for(;;) {
+		unsigned char buf[BUFSIZ];
+		int r;
+
+		/* read in from compressed file */
+		r = gzread(gzf, buf, sizeof(buf));
+		if(r == 0) {
+			ret = 0;
+			break;
+		} else if(r < 0) {
+			fprintf(stderr, "zlib error reading %s: %s\n", infilename,
+					gzerror(gzf, NULL));
+			break;
+		}
+
+		/* write out decompressed tar */
+		if(fwrite(buf, sizeof(char), r, out) == 0 && ferror(out)) {
+			fprintf(stderr, "error writing to file: %s: %s\n",
+					outfilename, strerror(errno));
+		}
+	}
+
+	/* success, unlink the compressed tar.gz */
+	if(ret == 0) {
+		unlink(infilename);
+	}
+
+done:
+	free(outfilename);
+	free(infilename);
+	gzclose(gzf);
+
+	if(out != NULL) {
+		fclose(out);
+	}
+
+	return ret;
+}
+
 int nosr_update(struct repo_t **repos, int repocount)
 {
-	int i, ret = 0;
+	int i, r, ret = 0;
 	enum _alpm_errno_t err;
 
 	interactive = isatty(STDOUT_FILENO);
@@ -296,7 +366,14 @@ int nosr_update(struct repo_t **repos, int repocount)
 
 
 	for(i = 0; i < repocount; i++) {
-		ret += download_repo_files(repos[i]);
+		r = download_repo_files(repos[i]);
+		if(r == 0) {
+			r = decompress_repo_file(repos[i]);
+		}
+
+		if(r != 0) {
+			ret = r;
+		}
 	}
 
 	alpm_release(alpm);

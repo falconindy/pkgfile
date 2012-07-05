@@ -308,12 +308,11 @@ static void *load_repo(void *repo_obj)
 	void *repodata;
 
 	repo = repo_obj;
-	snprintf(repofile, 1024, "%s.files.tar.gz", repo->name);
+	snprintf(repofile, 1024, "%s.files.tar", repo->name);
 	result = result_new(repo->name, 50);
 	CALLOC(pkg, 1, sizeof(struct pkg_t), return (void *)result);
 
 	a = archive_read_new();
-	archive_read_support_compression_all(a);
 	archive_read_support_format_all(a);
 
 	fd = open(repofile, O_RDONLY);
