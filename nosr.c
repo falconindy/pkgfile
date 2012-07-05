@@ -327,7 +327,7 @@ static void *load_repo(void *repo_obj)
 
 	fstat(fd, &st);
 	repodata = mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
-	madvise(repodata, st.st_size, MADV_WILLNEED);
+	madvise(repodata, st.st_size, MADV_WILLNEED|MADV_SEQUENTIAL);
 
 	ret = archive_read_open_memory(a, repodata, st.st_size);
 	if(ret != ARCHIVE_OK) {
