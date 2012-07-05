@@ -22,6 +22,7 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
+#include <limits.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
@@ -272,19 +273,12 @@ static int download_repo_files(struct repo_t *repo)
 static int decompress_repo_file(struct repo_t *repo)
 {
 	gzFile gzf = NULL;
-	char *infilename = NULL, *outfilename = NULL;
+	char infilename[PATH_MAX], outfilename[PATH_MAX];
 	FILE *out = NULL;
 	int ret = -1;
 
-	if(asprintf(&infilename, CACHEPATH "/%s.files.tar.gz", repo->name) < 0) {
-		fprintf(stderr, "error: failed to allocate memory\n");
-		return -1;
-	}
-
-	if(asprintf(&outfilename, CACHEPATH "/%s.files.tar", repo->name) < 0) {
-		fprintf(stderr, "error: failed to allocate memory\n");
-		goto done;
-	}
+	snprintf(infilename, PATH_MAX, CACHEPATH "/%s.files.tar.gz", repo->name);
+	snprintf(outfilename, PATH_MAX, CACHEPATH "/%s.files.tar", repo->name);
 
 	gzf = gzopen(infilename, "r");
 	if (gzf == NULL) {
@@ -327,8 +321,6 @@ static int decompress_repo_file(struct repo_t *repo)
 	}
 
 done:
-	free(outfilename);
-	free(infilename);
 	gzclose(gzf);
 
 	if(out != NULL) {
