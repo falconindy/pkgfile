@@ -22,10 +22,12 @@
 
 #define _GNU_SOURCE
 #include <errno.h>
+#include <fcntl.h>
 #include <fnmatch.h>
 #include <getopt.h>
 #include <pthread.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #include "nosr.h"
@@ -294,7 +296,7 @@ static int parse_pkgname(struct pkg_t *pkg, const char *entryname)
 
 static void *load_repo(void *repo_obj)
 {
-	int ret;
+	int fd = -1, ret;
 	const char *entryname, *slash;
 	char repofile[1024];
 	struct archive *a;
@@ -302,6 +304,8 @@ static void *load_repo(void *repo_obj)
 	struct pkg_t *pkg;
 	struct repo_t *repo;
 	struct result_t *result;
+	struct stat st;
+	void *repodata;
 
 	repo = repo_obj;
 	snprintf(repofile, 1024, "%s.files.tar.gz", repo->name);
@@ -312,13 +316,24 @@ static void *load_repo(void *repo_obj)
 	archive_read_support_compression_all(a);
 	archive_read_support_format_all(a);
 
-	ret = archive_read_open_filename(a, repofile, BUFSIZ);
-	if(ret != ARCHIVE_OK) {
+	fd = open(repofile, O_RDONLY);
+	if (fd < 0) {
 		/* fail silently if the file doesn't exist */
-		if(access(repofile, F_OK) == 0) {
-			fprintf(stderr, "error: failed to load repo: %s: %s\n", repofile,
-					archive_error_string(a));
+		if(errno != ENOENT) {
+			fprintf(stderr, "error: failed to open repo: %s: %s\n", repofile,
+					strerror(errno));
 		}
+		goto cleanup;
+	}
+
+	fstat(fd, &st);
+	repodata = mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	madvise(repodata, st.st_size, MADV_WILLNEED);
+
+	ret = archive_read_open_memory(a, repodata, st.st_size);
+	if(ret != ARCHIVE_OK) {
+		fprintf(stderr, "error: failed to load repo: %s: %s\n", repofile,
+				archive_error_string(a));
 		goto cleanup;
 	}
 
@@ -360,6 +375,10 @@ done:
 cleanup:
 	free(pkg);
 	archive_read_finish(a);
+	if(fd >= 0) {
+		close(fd);
+		munmap(repodata, st.st_size);
+	}
 
 	return (void *)result;
 }
