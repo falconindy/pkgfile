@@ -305,7 +305,7 @@ static void *load_repo(void *repo_obj)
 	struct repo_t *repo;
 	struct result_t *result;
 	struct stat st;
-	void *repodata;
+	void *repodata = MAP_FAILED;
 
 	repo = repo_obj;
 	snprintf(repofile, 1024, "%s.files.tar", repo->name);
@@ -327,6 +327,13 @@ static void *load_repo(void *repo_obj)
 
 	fstat(fd, &st);
 	repodata = mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	if(repodata == MAP_FAILED) {
+		fprintf(stderr, "error: failed to map pages for %s: %s\n", repofile,
+				strerror(errno));
+		goto cleanup;
+	}
+
+	/* doesn't really matter if this fails */
 	madvise(repodata, st.st_size, MADV_WILLNEED|MADV_SEQUENTIAL);
 
 	ret = archive_read_open_memory(a, repodata, st.st_size);
@@ -376,6 +383,8 @@ cleanup:
 	archive_read_finish(a);
 	if(fd >= 0) {
 		close(fd);
+	}
+	if (repodata != MAP_FAILED) {
 		munmap(repodata, st.st_size);
 	}
 
