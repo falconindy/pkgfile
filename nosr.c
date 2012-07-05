@@ -325,6 +325,8 @@ static void *load_repo(void *repo_obj)
 		goto cleanup;
 	}
 
+	repo->filefound = 1;
+
 	fstat(fd, &st);
 	repodata = mmap(0, st.st_size, PROT_READ, MAP_SHARED|MAP_POPULATE, fd, 0);
 	if(repodata == MAP_FAILED) {
@@ -340,7 +342,6 @@ static void *load_repo(void *repo_obj)
 		goto cleanup;
 	}
 
-	repo->filefound = 1;
 	while(archive_read_next_header(a, &e) == ARCHIVE_OK) {
 		entryname = archive_entry_pathname(e);
 		slash = strrchr(entryname, '/');
