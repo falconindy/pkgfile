@@ -165,24 +165,21 @@ static bool is_binary(const char *line, size_t len)
 		return false;
 	}
 
-	/* match bin/... */
-	if(ptr == line) {
-		return true;
-	}
+	if(
+		 /* match bin/... */
+		 (ptr == line) ||
 
-	/* match sbin/... */
-	if(line == ptr - 1 && *(ptr - 1) == 's') {
-		return true;
-	}
+		 /* match sbin/... */
+		 (line == ptr - 1 && *(ptr - 1) == 's') ||
 
-	/* match .../bin/ */
-	if(*(ptr - 1) == '/') {
-		return true;
-	}
+		 /* match .../bin/ */
+		 (*(ptr - 1) == '/') ||
 
-	/* match .../sbin/ */
-	if(ptr >= line + 2 && *(ptr - 2) == '/' && *(ptr - 1) == 's') {
-		return true;
+		 /* match .../sbin/ */
+		 (ptr >= line + 2 && *(ptr - 2) == '/' && *(ptr - 1) == 's')) {
+
+		/* ensure that we only match /bin/bar and not /bin/foo/bar */
+		return memchr(ptr + 4, '/', (line + len) - (ptr + 4)) == NULL;
 	}
 
 	return false;
