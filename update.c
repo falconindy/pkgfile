@@ -271,7 +271,9 @@ static int decompress_repo_file(struct repo_t *repo)
 
 	/* generally, repo files are gzip compressed, but there's no guarantee of
 	 * this. in order to be compression-agnostic, re-use libarchive's
-	 * reader/writer methods. */
+	 * reader/writer methods. this also gives us an opportunity to rewrite
+	 * the archive as CPIO, which is marginally faster given our staunch
+	 * sequential access. */
 
 	snprintf(infilename, PATH_MAX, CACHEPATH "/%s.files", repo->name);
 	snprintf(outfilename, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
@@ -293,7 +295,7 @@ static int decompress_repo_file(struct repo_t *repo)
 		goto done;
 	}
 
-	archive_write_set_format_gnutar(a_out);
+	archive_write_set_format_cpio(a_out);
 	archive_write_add_filter_none(a_out);
 	ret = archive_write_open_filename(a_out, outfilename);
 	if (ret != ARCHIVE_OK) {
@@ -306,7 +308,7 @@ static int decompress_repo_file(struct repo_t *repo)
 		unsigned char buf[BUFSIZ];
 		int done = 0;
 		if(archive_write_header(a_out, ae) != ARCHIVE_OK) {
-			fprintf(stderr, "failed to write tar header: %s\n", archive_error_string(a_out));
+			fprintf(stderr, "failed to write cpio header: %s\n", archive_error_string(a_out));
 			break;
 		}
 		for(;;) {
