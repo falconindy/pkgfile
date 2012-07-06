@@ -308,7 +308,7 @@ static void *load_repo(void *repo_obj)
 	void *repodata = MAP_FAILED;
 
 	repo = repo_obj;
-	snprintf(repofile, 1024, "%s.files.tar", repo->name);
+	snprintf(repofile, 1024, "%s.files", repo->name);
 	result = result_new(repo->name, 50);
 	CALLOC(pkg, 1, sizeof(struct pkg_t), return (void *)result);
 

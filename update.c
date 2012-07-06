@@ -29,7 +29,6 @@
 #include <unistd.h>
 
 #include <alpm.h>
-#include <zlib.h>
 
 #include "nosr.h"
 #include "update.h"
@@ -225,18 +224,11 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 
 static int unlink_files_dbfile(const char *dbname)
 {
-	char *fullpath;
-	int rc = 1;
+	char b[PATH_MAX];
 
-	if(asprintf(&fullpath, CACHEPATH "/%s.files.tar.gz", dbname) == -1) {
-		fprintf(stderr, "error: failed to allocate memory\n");
-		return rc;
-	}
+	snprintf(b, sizeof(b), CACHEPATH "/%s.files", dbname);
 
-	rc = unlink(fullpath);
-	free(fullpath);
-
-	return 0;
+	return unlink(b);
 }
 
 static int download_repo_files(struct repo_t *repo)
@@ -248,10 +240,10 @@ static int download_repo_files(struct repo_t *repo)
 	uname(&un);
 
 	for(i = 0; i < repo->servercount; i++) {
-		url = prepare_url(repo->servers[i], repo->name, un.machine, ".files.tar.gz");
+		url = prepare_url(repo->servers[i], repo->name, un.machine, ".files");
 
 		if(!interactive) {
-			printf("downloading %s.files.tar.gz...", repo->name);
+			printf("downloading %s.files...", repo->name);
 			fflush(stdout);
 		}
 
@@ -272,59 +264,81 @@ static int download_repo_files(struct repo_t *repo)
 
 static int decompress_repo_file(struct repo_t *repo)
 {
-	gzFile gzf = NULL;
 	char infilename[PATH_MAX], outfilename[PATH_MAX];
-	FILE *out = NULL;
 	int ret = -1;
+	struct archive *a_in, *a_out;
+	struct archive_entry *ae;
 
-	snprintf(infilename, PATH_MAX, CACHEPATH "/%s.files.tar.gz", repo->name);
-	snprintf(outfilename, PATH_MAX, CACHEPATH "/%s.files.tar", repo->name);
+	/* generally, repo files are gzip compressed, but there's no guarantee of
+	 * this. in order to be compression-agnostic, re-use libarchive's
+	 * reader/writer methods. */
 
-	gzf = gzopen(infilename, "r");
-	if (gzf == NULL) {
-		fprintf(stderr, "failed to open file for decompression: %s: %s\n",
-				infilename, strerror(errno));
+	snprintf(infilename, PATH_MAX, CACHEPATH "/%s.files", repo->name);
+	snprintf(outfilename, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
+
+	a_in = archive_read_new();
+	a_out = archive_write_new();
+
+	if(a_in == NULL || a_out == NULL) {
+		fprintf(stderr, "failed to allocate memory for archive objects\n");
+		return -1;
+	}
+
+	archive_read_support_format_tar(a_in);
+	archive_read_support_compression_all(a_in);
+	ret = archive_read_open_filename(a_in, infilename, BUFSIZ);
+	if (ret != ARCHIVE_OK) {
+		fprintf(stderr, "failed to open file for writing: %s: %s\n",
+				outfilename, archive_error_string(a_in));
 		goto done;
 	}
 
-	out = fopen(outfilename, "w");
-	if(out == NULL) {
-		fprintf(stderr, "failed to open file for writing: %s: %s\n",
-				outfilename, strerror(errno));
+	archive_write_set_format_gnutar(a_out);
+	archive_write_add_filter_none(a_out);
+	ret = archive_write_open_filename(a_out, outfilename);
+	if (ret != ARCHIVE_OK) {
+		fprintf(stderr, "failed to open file for reading: %s: %s\n",
+				infilename, archive_error_string(a_in));
+		goto done;
 	}
 
-	for(;;) {
+	while(archive_read_next_header(a_in, &ae) == ARCHIVE_OK) {
 		unsigned char buf[BUFSIZ];
-		int r;
-
-		/* read in from compressed file */
-		r = gzread(gzf, buf, sizeof(buf));
-		if(r == 0) {
-			ret = 0;
-			break;
-		} else if(r < 0) {
-			fprintf(stderr, "zlib error reading %s: %s\n", infilename,
-					gzerror(gzf, NULL));
+		int done = 0;
+		if(archive_write_header(a_out, ae) != ARCHIVE_OK) {
+			fprintf(stderr, "failed to write tar header: %s\n", archive_error_string(a_out));
 			break;
 		}
+		for(;;) {
+			int bytes_r = archive_read_data(a_in, buf, sizeof(buf));
+			if(bytes_r == 0) {
+				break;
+			}
 
-		/* write out decompressed tar */
-		if(fwrite(buf, sizeof(char), r, out) == 0 && ferror(out)) {
-			fprintf(stderr, "error writing to file: %s: %s\n",
-					outfilename, strerror(errno));
+			if(archive_write_data(a_out, buf, bytes_r) != bytes_r) {
+				fprintf(stderr, "failed to write %d bytes to new files db: %s\n",
+						bytes_r, archive_error_string(a_out));
+				done = 1;
+				break;
+			}
+		}
+		if(done) {
+			break;
 		}
 	}
 
-	/* success, unlink the compressed tar.gz */
-	if(ret == 0) {
-		unlink(infilename);
-	}
+	archive_read_close(a_in);
+	archive_write_close(a_out);
+	ret = 0;
 
 done:
-	gzclose(gzf);
+	archive_read_free(a_in);
+	archive_write_free(a_out);
 
-	if(out != NULL) {
-		fclose(out);
+	/* success, rotate in the decompressed tarball */
+	if(ret == 0 && rename(outfilename, infilename) < 0) {
+		fprintf(stderr, "failed to rotate file for repo '%s' into place: %s\n",
+				repo->name, strerror(errno));
 	}
 
 	return ret;
