@@ -76,11 +76,11 @@ struct config_t {
 	int (*filterfunc)(const filterpattern_t *filter, const char *line, size_t len,
 			int flags);
 	void (*filterfree)(filterpattern_t *filter);
+	int doupdate;
 	char *targetrepo;
 	bool binaries;
 	bool directories;
 	bool icase;
-	bool doupdate;
 	bool quiet;
 	bool verbose;
 };

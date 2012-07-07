@@ -32,7 +32,8 @@ operation.
 =item B<-u, --update>
 
 Update the stored metadata files. It is recommended to create a daily cron job
-with this command to ensure accurate results.
+with this command to ensure accurate results. By default, only modified repos
+will be downloaded. Pass this option twice to force update repo databases.
 
 =back
 

@@ -310,7 +310,7 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo)
 
 	curl_easy_setopt(repo->curl, CURLOPT_URL, repo->url);
 
-	if(stat(repo->diskfile, &st) == 0) {
+	if(repo->force == 0 && stat(repo->diskfile, &st) == 0) {
 		curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
 		curl_easy_setopt(repo->curl, CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
 	}
@@ -423,7 +423,7 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 	return 0;
 }
 
-int nosr_update(struct repo_t **repos, int repocount)
+int nosr_update(struct repo_t **repos, int repocount, int force)
 {
 	int i, r, ret = 0;
 	struct utsname un;
@@ -443,6 +443,7 @@ int nosr_update(struct repo_t **repos, int repocount)
 	/* prime the handle by adding a URL from each repo */
 	for(i = 0; i < repocount; i++) {
 		repos[i]->arch = un.machine;
+		repos[i]->force = force;
 		r = add_repo_download(cmulti, repos[i]);
 		if(r != 0) {
 			ret = r;

@@ -525,7 +525,7 @@ static int parse_opts(int argc, char **argv)
 				config.filefunc = search_metafile;
 				break;
 			case 'u':
-				config.doupdate = true;
+				config.doupdate++;
 				break;
 			case 'v':
 				config.verbose = true;
@@ -651,7 +651,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(config.doupdate) {
-		ret = !!nosr_update(repos, repocount);
+		ret = !!nosr_update(repos, repocount, config.doupdate > 1);
 		goto cleanup;
 	}
 

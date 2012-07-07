@@ -52,6 +52,8 @@ struct repo_t {
 	char errmsg[CURL_ERROR_SIZE];
 	/* numeric err for determining success */
 	int err;
+	/* force update repos */
+	short force;
 };
 
 struct repo_t *repo_new(const char *reponame);
