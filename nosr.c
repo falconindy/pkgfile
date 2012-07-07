@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "nosr.h"

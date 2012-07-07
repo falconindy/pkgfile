@@ -26,7 +26,17 @@
 
 #include "util.h"
 
-double humanize_size(off_t bytes, const char target_unit, const char **label)
+static double simple_pow(int base, int exp)
+{
+	double result = 1.0;
+	for(; exp > 0; exp--) {
+		result *= base;
+	}
+	return result;
+}
+
+double humanize_size(off_t bytes, const char target_unit, int precision,
+		const char **label)
 {
 	static const char *labels[] = {"B", "KiB", "MiB", "GiB",
 		"TiB", "PiB", "EiB", "ZiB", "YiB"};
@@ -46,6 +56,12 @@ double humanize_size(off_t bytes, const char target_unit, const char **label)
 
 	if(label) {
 		*label = labels[index];
+	}
+
+	/* fix FS#27924 so that it doesn't display negative zeroes */
+	if(precision >= 0 && val < 0.0 &&
+			val > (-0.5 / simple_pow(10, precision))) {
+		val = 0.0;
 	}
 
 	return val;

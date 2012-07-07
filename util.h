@@ -32,7 +32,25 @@
 #define FREE(p) do { free(p); p = NULL; } while(0)
 #define UNUSED __attribute__((unused))
 
-double humanize_size(off_t bytes, const char target_unit, const char **label);
+#ifndef MIN
+#define MIN(a,b)                                \
+        __extension__ ({                        \
+                        __typeof__(a) _a = (a);     \
+                        __typeof__(b) _b = (b);     \
+                        _a < _b ? _a : _b;      \
+                })
+#endif
+
+#ifndef MAX
+#define MAX(a,b)                                \
+        __extension__ ({                        \
+                        __typeof__(a) _a = (a);     \
+                        __typeof__(b) _b = (b);     \
+                        _a > _b ? _a : _b;      \
+                })
+#endif
+
+double humanize_size(off_t bytes, const char target_unit, int precision, const char **label);
 char *strreplace(const char *str, const char *needle, const char *replace);
 char *strtrim(char *str);
 

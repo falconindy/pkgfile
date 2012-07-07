@@ -25,6 +25,8 @@
 
 #define _GNU_SOURCE
 #include <limits.h>
+#include <sys/time.h>
+
 #include <curl/curl.h>
 
 struct repo_t {
@@ -54,6 +56,8 @@ struct repo_t {
 	int err;
 	/* force update repos */
 	short force;
+	/* start time for download */
+	struct timeval dl_time_start;
 };
 
 struct repo_t *repo_new(const char *reponame);

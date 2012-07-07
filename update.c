@@ -23,6 +23,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
 #include <string.h>
 #include <sys/select.h>
 #include <sys/stat.h>
@@ -315,9 +316,49 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo)
 		curl_easy_setopt(repo->curl, CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
 	}
 
+	gettimeofday(&repo->dl_time_start, NULL);
 	curl_multi_add_handle(multi, repo->curl);
 
 	return 0;
+}
+
+static double timediff(struct timeval *start, struct timeval *end)
+{
+	const double s_sec = start->tv_sec + (start->tv_usec / 1000000.0);
+	const double e_sec = end->tv_sec + (end->tv_usec / 1000000.0);
+	return e_sec - s_sec;
+}
+
+static void print_download_success(struct repo_t *repo, int remaining)
+{
+	const char *rate_label, *xfered_label;
+	double rate, xfered_human, rate_human;
+	struct timeval now;
+	int width;
+
+	gettimeofday(&now, NULL);
+	rate = repo->buflen / timediff(&repo->dl_time_start, &now);
+	xfered_human = humanize_size(repo->buflen, '\0', -1, &xfered_label);
+
+	printf("  download complete: %-20s", repo->name);
+	if(rate == INFINITY) {
+		width = printf(" [%6.1f %3s  %7s ",
+				xfered_human, xfered_label, "----");
+	} else {
+		/* We will show 1.62M/s, 11.6M/s, but 116K/s and 1116K/s */
+		rate_human = humanize_size(rate, '\0', -1, &rate_label);
+		if(rate_human < 9.995) {
+			width = printf(" [%6.1f %3s  %4.2f%c/s ",
+					xfered_human, xfered_label, rate_human, rate_label[0]);
+		} else if(rate_human < 99.95) {
+			width = printf(" [%6.1f %3s  %4.1f%c/s ",
+					xfered_human, xfered_label, rate_human, rate_label[0]);
+		} else {
+			width = printf(" [%6.1f %3s  %4.f%c/s ",
+					xfered_human, xfered_label, rate_human, rate_label[0]);
+		}
+	}
+	printf(" %*d remaining]\n", 23 - width, remaining);
 }
 
 static int read_multi_msgs(CURLM *multi, int remaining)
@@ -359,8 +400,7 @@ static int read_multi_msgs(CURLM *multi, int remaining)
 			return -EAGAIN;
 		}
 
-		printf("  downloaded succeeded: %-20s [%7.2f K] (%d remaining)\n",
-				repo->name, humanize_size(repo->buflen, 'K', NULL), remaining);
+		print_download_success(repo, remaining);
 		decompress_repo_data(repo);
 		repo->err = 0;
 	}
