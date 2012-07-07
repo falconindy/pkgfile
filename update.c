@@ -329,10 +329,23 @@ static double timediff(struct timeval *start, struct timeval *end)
 	return e_sec - s_sec;
 }
 
+static int print_rate(double xfer, const char *xfer_label,
+		double rate, const char rate_label)
+{
+	/* We will show 1.62M/s, 11.6M/s, but 116K/s and 1116K/s */
+	if(rate < 9.995) {
+		return printf("%6.1f %3s  %4.2f%c/s", xfer, xfer_label, rate, rate_label);
+	} else if(rate < 99.95) {
+		return printf("%6.1f %3s  %4.1f%c/s", xfer, xfer_label, rate, rate_label);
+	} else {
+		return printf("%6.1f %3s  %4.f%c/s", xfer, xfer_label, rate, rate_label);
+	}
+}
+
 static void print_download_success(struct repo_t *repo, int remaining)
 {
 	const char *rate_label, *xfered_label;
-	double rate, xfered_human, rate_human;
+	double rate, xfered_human;
 	struct timeval now;
 	int width;
 
@@ -340,25 +353,29 @@ static void print_download_success(struct repo_t *repo, int remaining)
 	rate = repo->buflen / timediff(&repo->dl_time_start, &now);
 	xfered_human = humanize_size(repo->buflen, '\0', -1, &xfered_label);
 
-	printf("  download complete: %-20s", repo->name);
+	printf("  download complete: %-20s [", repo->name);
 	if(rate == INFINITY) {
 		width = printf(" [%6.1f %3s  %7s ",
 				xfered_human, xfered_label, "----");
 	} else {
-		/* We will show 1.62M/s, 11.6M/s, but 116K/s and 1116K/s */
-		rate_human = humanize_size(rate, '\0', -1, &rate_label);
-		if(rate_human < 9.995) {
-			width = printf(" [%6.1f %3s  %4.2f%c/s ",
-					xfered_human, xfered_label, rate_human, rate_label[0]);
-		} else if(rate_human < 99.95) {
-			width = printf(" [%6.1f %3s  %4.1f%c/s ",
-					xfered_human, xfered_label, rate_human, rate_label[0]);
-		} else {
-			width = printf(" [%6.1f %3s  %4.f%c/s ",
-					xfered_human, xfered_label, rate_human, rate_label[0]);
-		}
+		double rate_human = humanize_size(rate, '\0', -1, &rate_label);
+		width = print_rate(xfered_human, xfered_label, rate_human, rate_label[0]);
 	}
 	printf(" %*d remaining]\n", 23 - width, remaining);
+}
+
+static void print_total_dl_stats(int count, double duration, off_t total_xfer)
+{
+	const char *rate_label, *xfered_label;
+	double rate, xfered_human, rate_human;
+
+	rate = total_xfer / duration;
+	xfered_human = humanize_size(total_xfer, '\0', -1, &xfered_label);
+	rate_human = humanize_size(rate, '\0', -1, &rate_label);
+
+	printf(":: download complete in %.2fs [%2d files", duration, count);
+	print_rate(xfered_human, xfered_label, rate_human, rate_label[0]);
+	fputs(" ]\n", stdout);
 }
 
 static int read_multi_msgs(CURLM *multi, int remaining)
@@ -382,7 +399,7 @@ static int read_multi_msgs(CURLM *multi, int remaining)
 
 		if(timecond == 1) {
 			printf("  %s is up to date\n", repo->name);
-			repo->err = 0;
+			repo->err = 1;
 			return 0;
 		}
 
@@ -465,9 +482,12 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 
 int nosr_update(struct repo_t **repos, int repocount, int force)
 {
-	int i, r, ret = 0;
+	int i, r, xfer_count = 0, ret = 0;
 	struct utsname un;
 	CURLM *cmulti;
+	struct timeval t_start, t_end;
+	off_t total_xfer = 0.0;
+	double duration;
 
 	if(access(CACHEPATH, W_OK)) {
 		fprintf(stderr, "error: unable to write to %s: %s", CACHEPATH,
@@ -490,15 +510,31 @@ int nosr_update(struct repo_t **repos, int repocount, int force)
 		}
 	}
 
+	gettimeofday(&t_start, NULL);
 	hit_multi_handle_until_candy_comes_out(cmulti);
+	gettimeofday(&t_end, NULL);
+	duration = timediff(&t_start, &t_end);
 
-	/* curl_multi_remove_handle(3) dictates we do this */
+	/* remove handles, aggregate results */
 	for(i = 0; i < repocount; i++) {
 		curl_multi_remove_handle(cmulti, repos[i]->curl);
 		curl_easy_cleanup(repos[i]->curl);
-		if(repos[i]->err != 0) {
+
+		total_xfer += repos[i]->buflen;
+
+		switch(repos[i]->err) {
+		case 0:
+			xfer_count++;
+			break;
+		case -1:
 			ret = 1;
+			break;
 		}
+	}
+
+	/* print transfer stats if we downloaded more than 1 file */
+	if(xfer_count > 1) {
+		print_total_dl_stats(xfer_count, duration, total_xfer);
 	}
 
 	curl_multi_cleanup(cmulti);
