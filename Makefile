@@ -2,7 +2,7 @@ OUT        = nosr
 VERSION    = 0.1
 CPPFLAGS  := -DVERSION=\"$(VERSION)\" -D_FILE_OFFSET_BITS=64 $(CPPFLAGS)
 CFLAGS    := -std=c99 -g -pedantic -pthread -Wall -Wextra $(CFLAGS) $(CPPFLAGS)
-LDFLAGS   := -pthread -larchive -lpcre -lalpm $(LDFLAGS)
+LDFLAGS   := -pthread -larchive -lpcre -lcurl $(LDFLAGS)
 
 PREFIX    ?= /usr/local
 

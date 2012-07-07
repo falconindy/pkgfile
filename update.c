@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 by Dave Reisner <dreisner@archlinux.org>
+ * Copyright (C) 2011-2012 by Dave Reisner <dreisner@archlinux.org>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,75 +24,18 @@
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 
-#include <alpm.h>
+#include <curl/curl.h>
 
 #include "nosr.h"
 #include "update.h"
 #include "util.h"
 
-static alpm_handle_t *alpm;
-static int interactive;
-
-static struct repo_t *repo_new(const char *reponame)
-{
-	struct repo_t *repo;
-
-	CALLOC(repo, 1, sizeof(struct repo_t), return NULL);
-
-	if(asprintf(&repo->name, "%s", reponame) == -1) {
-		fprintf(stderr, "error: failed to allocate memory\n");
-		free(repo);
-		return NULL;
-	}
-
-	return repo;
-}
-
-void repo_free(struct repo_t *repo)
-{
-	size_t i;
-
-	free(repo->name);
-	for(i = 0; i < repo->servercount; i++) {
-		free(repo->servers[i]);
-	}
-	free(repo->servers);
-
-	free(repo);
-}
-
-static int repo_add_server(struct repo_t *repo, const char *server)
-{
-	if(!repo) {
-		return 1;
-	}
-
-	repo->servers = realloc(repo->servers,
-			sizeof(char *) * (repo->servercount + 1));
-
-	repo->servers[repo->servercount] = strdup(server);
-	repo->servercount++;
-
-	return 0;
-}
-
-static void alpm_progress_cb(const char *filename, off_t xfer, off_t total)
-{
-	double size, perc = 100 * ((double)xfer / total);
-	const char *label;
-
-	size = humanize_size(total, 'K', &label);
-
-	printf("  %-40s %7.2f %3s [%6.2f%%]\r", filename, size, label, perc);
-	fflush(stdout);
-}
-
-static char *prepare_url(const char *url, const char *repo, const char *arch,
-		const char *suffix)
+static char *prepare_url(const char *url, const char *repo, const char *arch)
 {
 	char *string, *temp = NULL;
 	const char * const archvar = "$arch";
@@ -112,7 +55,7 @@ static char *prepare_url(const char *url, const char *repo, const char *arch,
 		temp = string;
 	}
 
-	if(asprintf(&temp, "%s/%s%s", string, repo, suffix) == -1) {
+	if(asprintf(&temp, "%s/%s.files", string, repo) == -1) {
 		fprintf(stderr, "error: failed to allocate memory\n");
 	}
 
@@ -222,104 +165,64 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 	return active_repos;
 }
 
-static int unlink_files_dbfile(const char *dbname)
+static int decompress_repo_data(struct repo_t *repo)
 {
-	char b[PATH_MAX];
-
-	snprintf(b, sizeof(b), CACHEPATH "/%s.files", dbname);
-
-	return unlink(b);
-}
-
-static int download_repo_files(struct repo_t *repo)
-{
-	char *ret, *url;
-	size_t i;
-	struct utsname un;
-
-	uname(&un);
-
-	for(i = 0; i < repo->servercount; i++) {
-		url = prepare_url(repo->servers[i], repo->name, un.machine, ".files");
-
-		if(!interactive) {
-			printf("downloading %s.files...", repo->name);
-			fflush(stdout);
-		}
-
-		unlink_files_dbfile(repo->name);
-		ret = alpm_fetch_pkgurl(alpm, url);
-		if(!ret) {
-			fprintf(stderr, "warning: failed to download: %s\n", url);
-		}
-		free(url);
-		if(ret) {
-			putchar(10);
-			return 0;
-		}
-	}
-
-	return 1;
-}
-
-static int decompress_repo_file(struct repo_t *repo)
-{
-	char infilename[PATH_MAX], outfilename[PATH_MAX];
+	char diskfile[PATH_MAX], tmpfile[PATH_MAX];
 	int ret = -1;
-	struct archive *a_in, *a_out;
+	struct archive *tarball, *cpio;
 	struct archive_entry *ae;
 
 	/* generally, repo files are gzip compressed, but there's no guarantee of
-	 * this. in order to be compression-agnostic, re-use libarchive's
-	 * reader/writer methods. this also gives us an opportunity to rewrite
-	 * the archive as CPIO, which is marginally faster given our staunch
-	 * sequential access. */
+	 * this. in order to be compression-agnostic, use libarchive's reader/writer
+	 * methods. this also gives us an opportunity to rewrite the archive as CPIO,
+	 * which is marginally faster given our staunch sequential access. */
 
-	snprintf(infilename, PATH_MAX, CACHEPATH "/%s.files", repo->name);
-	snprintf(outfilename, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
+	snprintf(tmpfile, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
+	snprintf(diskfile, PATH_MAX, CACHEPATH "/%s.files", repo->name);
 
-	a_in = archive_read_new();
-	a_out = archive_write_new();
+	tarball = archive_read_new();
+	cpio = archive_write_new();
 
-	if(a_in == NULL || a_out == NULL) {
+	if(tarball == NULL || cpio == NULL) {
 		fprintf(stderr, "failed to allocate memory for archive objects\n");
 		return -1;
 	}
 
-	archive_read_support_format_tar(a_in);
-	archive_read_support_compression_all(a_in);
-	ret = archive_read_open_filename(a_in, infilename, BUFSIZ);
+	archive_read_support_format_tar(tarball);
+	archive_read_support_compression_all(tarball);
+	ret = archive_read_open_memory(tarball, repo->data, repo->buflen);
+	if (ret != ARCHIVE_OK) {
+		fprintf(stderr, "failed to create archive reader for %s: %s\n",
+				repo->name, archive_error_string(tarball));
+		goto done;
+	}
+
+	archive_write_set_format_cpio(cpio);
+	archive_write_add_filter_none(cpio);
+	ret = archive_write_open_filename(cpio, tmpfile);
 	if (ret != ARCHIVE_OK) {
 		fprintf(stderr, "failed to open file for writing: %s: %s\n",
-				outfilename, archive_error_string(a_in));
+				tmpfile, archive_error_string(cpio));
 		goto done;
 	}
 
-	archive_write_set_format_cpio(a_out);
-	archive_write_add_filter_none(a_out);
-	ret = archive_write_open_filename(a_out, outfilename);
-	if (ret != ARCHIVE_OK) {
-		fprintf(stderr, "failed to open file for reading: %s: %s\n",
-				infilename, archive_error_string(a_in));
-		goto done;
-	}
-
-	while(archive_read_next_header(a_in, &ae) == ARCHIVE_OK) {
+	while(archive_read_next_header(tarball, &ae) == ARCHIVE_OK) {
 		unsigned char buf[BUFSIZ];
 		int done = 0;
-		if(archive_write_header(a_out, ae) != ARCHIVE_OK) {
-			fprintf(stderr, "failed to write cpio header: %s\n", archive_error_string(a_out));
+		if(archive_write_header(cpio, ae) != ARCHIVE_OK) {
+			fprintf(stderr, "failed to write cpio header: %s\n",
+					archive_error_string(cpio));
 			break;
 		}
 		for(;;) {
-			int bytes_r = archive_read_data(a_in, buf, sizeof(buf));
+			int bytes_r = archive_read_data(tarball, buf, sizeof(buf));
 			if(bytes_r == 0) {
 				break;
 			}
 
-			if(archive_write_data(a_out, buf, bytes_r) != bytes_r) {
+			if(archive_write_data(cpio, buf, bytes_r) != bytes_r) {
 				fprintf(stderr, "failed to write %d bytes to new files db: %s\n",
-						bytes_r, archive_error_string(a_out));
+						bytes_r, archive_error_string(cpio));
 				done = 1;
 				break;
 			}
@@ -329,62 +232,236 @@ static int decompress_repo_file(struct repo_t *repo)
 		}
 	}
 
-	archive_read_close(a_in);
-	archive_write_close(a_out);
+	archive_read_close(tarball);
+	archive_write_close(cpio);
 	ret = 0;
 
 done:
-	archive_read_free(a_in);
-	archive_write_free(a_out);
+	archive_read_free(tarball);
+	archive_write_free(cpio);
 
-	/* success, rotate in the decompressed tarball */
-	if(ret == 0 && rename(outfilename, infilename) < 0) {
-		fprintf(stderr, "failed to rotate file for repo '%s' into place: %s\n",
-				repo->name, strerror(errno));
+	if(ret == 0) {
+		if(rename(tmpfile, diskfile) != 0) {
+			fprintf(stderr, "failed to rotate new repo for %s into replace: %s\n",
+					repo->name, strerror(errno));
+		}
+	} else {
+		/* oh noes! */
+		unlink(tmpfile);
 	}
 
 	return ret;
 }
 
+static size_t write_response(void *ptr, size_t size, size_t nmemb, void *data)
+{
+	void *newdata;
+	const size_t realsize = size * nmemb;
+	struct repo_t *repo = (struct repo_t*)data;
+
+	newdata = realloc(repo->data, repo->buflen + realsize + 1);
+	if(!newdata) {
+		fprintf(stderr, "error: failed to reallocate %zd bytes\n",
+				repo->buflen + realsize + 1);
+		return 0;
+	}
+
+	repo->data = newdata;
+	memcpy(&(repo->data[repo->buflen]), ptr, realsize);
+	repo->buflen += realsize;
+	repo->data[repo->buflen] = '\0';
+
+	return realsize;
+}
+
+static int add_repo_download(CURLM *multi, struct repo_t *repo)
+{
+	struct stat st;
+
+	if(repo->curl == NULL) {
+		/* it's my first time, be gentle */
+		if(repo->servercount == 0) {
+			fprintf(stderr, "error: no servers configured for repo %s\n", repo->name);
+			return -1;
+		}
+		repo->curl = curl_easy_init();
+		snprintf(repo->diskfile, sizeof(repo->diskfile), CACHEPATH "/%s.files", repo->name);
+		curl_easy_setopt(repo->curl, CURLOPT_FOLLOWLOCATION, 1L);
+		curl_easy_setopt(repo->curl, CURLOPT_WRITEFUNCTION, write_response);
+		curl_easy_setopt(repo->curl, CURLOPT_WRITEDATA, repo);
+		curl_easy_setopt(repo->curl, CURLOPT_PRIVATE, repo);
+		curl_easy_setopt(repo->curl, CURLOPT_ERRORBUFFER, repo->errmsg);
+	} else {
+		curl_multi_remove_handle(multi, repo->curl);
+		FREE(repo->url);
+		repo->server_idx++;
+	}
+
+	if(repo->server_idx >= repo->servercount) {
+		fprintf(stderr, "error: failed to update repo: %s\n", repo->name);
+		return -1;
+	}
+
+	repo->url = prepare_url(repo->servers[repo->server_idx], repo->name, repo->arch);
+	if(repo->url == NULL) {
+		fprintf(stderr, "error: failed to allocate URL for download\n");
+		return -1;
+	}
+
+	curl_easy_setopt(repo->curl, CURLOPT_URL, repo->url);
+
+	if(stat(repo->diskfile, &st) == 0) {
+		curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
+		curl_easy_setopt(repo->curl, CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
+	}
+
+	curl_multi_add_handle(multi, repo->curl);
+
+	return 0;
+}
+
+static int read_multi_msgs(CURLM *multi, int remaining)
+{
+	struct repo_t *repo;
+	int msgs_left;
+	CURLMsg *msg;
+
+	msg = curl_multi_info_read(multi, &msgs_left);
+	if(msg == NULL) {
+		/* signal to the caller that we're out of messages */
+		return -ENOENT;
+	}
+
+	curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, (void *)&repo);
+	if(msg->msg == CURLMSG_DONE) {
+		long timecond, resp;
+
+		curl_easy_getinfo(msg->easy_handle, CURLINFO_CONDITION_UNMET, &timecond);
+		curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &resp);
+
+		if(timecond == 1) {
+			printf("  %s is up to date\n", repo->name);
+			repo->err = 0;
+			return 0;
+		}
+
+		/* was it a success? */
+		if(msg->data.result != CURLE_OK || resp >= 400) {
+			if(*repo->errmsg) {
+				fprintf(stderr, "warning: download failed: %s: %s\n", repo->url,
+						repo->errmsg);
+			} else {
+				fprintf(stderr, "warning: download failed: %s [HTTP %ld]\n",
+						repo->url, resp);
+			}
+
+			add_repo_download(multi, repo);
+			return -EAGAIN;
+		}
+
+		printf("  downloaded succeeded: %-20s [%7.2f K] (%d remaining)\n",
+				repo->name, humanize_size(repo->buflen, 'K', NULL), remaining);
+		decompress_repo_data(repo);
+		repo->err = 0;
+	}
+
+	return 0;
+}
+
+static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
+{
+	int active_handles;
+
+	curl_multi_perform(multi, &active_handles);
+	while(active_handles > 0) {
+		int rc, maxfd =-1;
+		long curl_timeout;;
+		struct timeval timeout = { 1, 0 };
+		fd_set fdread, fdwrite, fdexcep;
+
+		curl_multi_timeout(multi, &curl_timeout);
+		if(curl_timeout >= 0) {
+			timeout.tv_sec = curl_timeout / 1000;
+			if(timeout.tv_sec > 1) {
+				timeout.tv_sec = 1;
+			} else {
+				timeout.tv_usec = (curl_timeout % 1000) * 1000;
+			}
+		}
+
+		FD_ZERO(&fdread);
+		FD_ZERO(&fdwrite);
+		FD_ZERO(&fdexcep);
+
+		curl_multi_fdset(multi, &fdread, &fdwrite, &fdexcep, &maxfd);
+
+		rc = select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
+		switch(rc) {
+		case -1:
+			fprintf(stderr, "error: failed to call select: %s\n", strerror(errno));
+			break;
+		case 0:
+			/* timeout, fallthrough */
+		default:
+			curl_multi_perform(multi, &active_handles);
+			break;
+		}
+
+		/* read any pending messages */
+		for(;;) {
+			int r = read_multi_msgs(multi, active_handles);
+			if (r == -EAGAIN) {
+				/* "ref" the active_handles -- there's still more to do */
+				active_handles++;
+			} else if (r == -ENOENT) {
+				/* we're out of messages */
+				break;
+			}
+		}
+	}
+
+	return 0;
+}
+
 int nosr_update(struct repo_t **repos, int repocount)
 {
 	int i, r, ret = 0;
-	enum _alpm_errno_t err;
-
-	interactive = isatty(STDOUT_FILENO);
+	struct utsname un;
+	CURLM *cmulti;
 
 	if(access(CACHEPATH, W_OK)) {
-		fprintf(stderr, "error: unable to write to %s: ", CACHEPATH);
-		perror("");
+		fprintf(stderr, "error: unable to write to %s: %s", CACHEPATH,
+				strerror(errno));
 		return 1;
 	}
 
-	alpm = alpm_initialize("/", DBPATH, &err);
-	if(!alpm) {
-		fprintf(stderr, "error: unable to initialize alpm: %s\n", alpm_strerror(err));
-		return 1;
-	}
+	curl_global_init(CURL_GLOBAL_ALL);
+	cmulti = curl_multi_init();
 
-	alpm_option_add_cachedir(alpm, CACHEPATH);
+	uname(&un);
 
-	if(interactive) {
-		/* avoid spam if we're not writing to a TTY */
-		alpm_option_set_dlcb(alpm, alpm_progress_cb);
-	}
-
-
+	/* prime the handle by adding a URL from each repo */
 	for(i = 0; i < repocount; i++) {
-		r = download_repo_files(repos[i]);
-		if(r == 0) {
-			r = decompress_repo_file(repos[i]);
-		}
-
+		repos[i]->arch = un.machine;
+		r = add_repo_download(cmulti, repos[i]);
 		if(r != 0) {
 			ret = r;
 		}
 	}
 
-	alpm_release(alpm);
+	hit_multi_handle_until_candy_comes_out(cmulti);
+
+	/* curl_multi_remove_handle(3) dictates we do this */
+	for(i = 0; i < repocount; i++) {
+		curl_multi_remove_handle(cmulti, repos[i]->curl);
+		curl_easy_cleanup(repos[i]->curl);
+		if(repos[i]->err != 0) {
+			ret = 1;
+		}
+	}
+
+	curl_multi_cleanup(cmulti);
+	curl_global_cleanup();
 
 	return ret;
 }

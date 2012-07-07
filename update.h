@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 by Dave Reisner <dreisner@archlinux.org>
+ * Copyright (C) 2011-2012 by Dave Reisner <dreisner@archlinux.org>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,12 +25,7 @@
 
 #define PACMANCONFIG "/etc/pacman.conf"
 
-struct repo_t {
-	char *name;
-	char **servers;
-	size_t servercount;
-	int filefound;
-};
+#include "repo.h"
 
 struct repo_t **find_active_repos(const char *filename, int *repocount);
 int nosr_update(struct repo_t **repos, int repocount);

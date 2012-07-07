@@ -20,22 +20,44 @@
  * THE SOFTWARE.
  */
 
-#ifndef _NOSR_RESULT_H
-#define _NOSR_RESULT_H
+#ifndef _NOSR_REPO_H
+#define _NOSR_REPO_H
 
-struct result_t {
-	size_t count;
-	size_t maxcount;
+#define _GNU_SOURCE
+#include <limits.h>
+#include <curl/curl.h>
+
+struct repo_t {
 	char *name;
-	char **list;
+	char **servers;
+	size_t servercount;
+	int filefound;
+	char *arch;
+
+	/* download stuff */
+
+	/* curl easy handle */
+	CURL *curl;
+	/* url being fetched */
+	char *url;
+	/* destination */
+	char diskfile[PATH_MAX];
+	/* index to currently in-use server */
+	size_t server_idx;
+	/* write buffer for downloaded data */
+	unsigned char *data;
+	/* size of write_buffer */
+	size_t buflen;
+	/* error buffer */
+	char errmsg[CURL_ERROR_SIZE];
+	/* numeric err for determining success */
+	int err;
 };
 
-struct result_t *result_new(char *name, size_t initial_size);
-int result_add(struct result_t *result, char *name);
-void result_free(struct result_t *result);
-int result_print(struct result_t *result);
-int result_cmp(const void *r1, const void *r2);
+struct repo_t *repo_new(const char *reponame);
+void repo_free(struct repo_t *repo);
+int repo_add_server(struct repo_t *repo, const char *server);
 
-#endif /* _NOSR_RESULT_H */
+#endif /* _NOSR_REPO_H */
 
 /* vim: set ts=2 sw=2 noet: */

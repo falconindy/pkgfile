@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 by Dave Reisner <dreisner@archlinux.org>
+ * Copyright (C) 2011-2012 by Dave Reisner <dreisner@archlinux.org>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal

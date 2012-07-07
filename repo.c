@@ -20,22 +20,61 @@
  * THE SOFTWARE.
  */
 
-#ifndef _NOSR_RESULT_H
-#define _NOSR_RESULT_H
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-struct result_t {
-	size_t count;
-	size_t maxcount;
-	char *name;
-	char **list;
-};
+#include "repo.h"
+#include "util.h"
 
-struct result_t *result_new(char *name, size_t initial_size);
-int result_add(struct result_t *result, char *name);
-void result_free(struct result_t *result);
-int result_print(struct result_t *result);
-int result_cmp(const void *r1, const void *r2);
+struct repo_t *repo_new(const char *reponame)
+{
+	struct repo_t *repo;
 
-#endif /* _NOSR_RESULT_H */
+	CALLOC(repo, 1, sizeof(struct repo_t), return NULL);
+
+	if(asprintf(&repo->name, "%s", reponame) == -1) {
+		fprintf(stderr, "error: failed to allocate memory\n");
+		free(repo);
+		return NULL;
+	}
+
+	/* assume glorious failure */
+	repo->err = 1;
+
+	return repo;
+}
+
+void repo_free(struct repo_t *repo)
+{
+	size_t i;
+
+	free(repo->name);
+	for(i = 0; i < repo->servercount; i++) {
+		free(repo->servers[i]);
+	}
+	free(repo->servers);
+
+	free(repo->data);
+	free(repo->url);
+
+	free(repo);
+}
+
+int repo_add_server(struct repo_t *repo, const char *server)
+{
+	if(!repo) {
+		return 1;
+	}
+
+	repo->servers = realloc(repo->servers,
+			sizeof(char *) * (repo->servercount + 1));
+
+	repo->servers[repo->servercount] = strdup(server);
+	repo->servercount++;
+
+	return 0;
+}
 
 /* vim: set ts=2 sw=2 noet: */
