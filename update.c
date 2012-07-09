@@ -247,7 +247,10 @@ done:
 		}
 	} else {
 		/* oh noes! */
-		unlink(tmpfile);
+		if(unlink(tmpfile) < 0 && errno != ENOENT) {
+			fprintf(stderr, "failed to unlink temporary file: %s: %s\n", tmpfile,
+					strerror(errno));
+		}
 	}
 
 	return ret;
