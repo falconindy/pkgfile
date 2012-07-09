@@ -380,7 +380,7 @@ static void print_total_dl_stats(int count, double duration, off_t total_xfer)
 	fputs(" ]\n", stdout);
 }
 
-static int read_multi_msgs(CURLM *multi, int remaining)
+static int read_multi_msg(CURLM *multi, int remaining)
 {
 	struct repo_t *repo;
 	int msgs_left;
@@ -468,7 +468,7 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 
 		/* read any pending messages */
 		for(;;) {
-			int r = read_multi_msgs(multi, active_handles);
+			int r = read_multi_msg(multi, active_handles);
 			if(r == -EAGAIN) {
 				/* "ref" the active_handles -- there's still more to do */
 				active_handles++;
