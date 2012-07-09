@@ -28,7 +28,7 @@
 #include "nosr.h"
 #include "util.h"
 
-int match_glob(const filterpattern_t *pattern, const char *line, size_t UNUSED len,
+int match_glob(const filterpattern_t *pattern, const char *line, int UNUSED len,
 		int flags)
 {
 	const char *glob = pattern->glob;
@@ -40,16 +40,16 @@ int match_glob(const filterpattern_t *pattern, const char *line, size_t UNUSED l
 	return fnmatch(glob, line, flags);
 }
 
-int match_regex(const filterpattern_t *pattern, const char *line, size_t len,
+int match_regex(const filterpattern_t *pattern, const char *line, int len,
 		int UNUSED flags)
 {
 	const struct pcre_data *re = &pattern->re;
 
-	if(len == (size_t)-1) {
-		len = strlen(line);
+	if(len == -1) {
+		len = (int)strlen(line);
 	}
 
-	return pcre_exec(re->re, re->re_extra, line, (int)len, 0, 0, NULL, 0) < 0;
+	return pcre_exec(re->re, re->re_extra, line, len, 0, 0, NULL, 0) < 0;
 }
 
 void free_regex(filterpattern_t *pattern)
@@ -58,7 +58,7 @@ void free_regex(filterpattern_t *pattern)
 	pcre_free(pattern->re.re_extra);
 }
 
-int match_exact(const filterpattern_t *pattern, const char *line, size_t len, int flags)
+int match_exact(const filterpattern_t *pattern, const char *line, int len, int flags)
 {
 	const char *ptr = line, *match = pattern->glob;
 
@@ -69,7 +69,7 @@ int match_exact(const filterpattern_t *pattern, const char *line, size_t len, in
 		match++;
 	} else {
 		const char *slash =
-			len == (size_t)-1 ? strrchr(line, '/') : memrchr(line, '/', len - 1);
+				len == -1 ? strrchr(line, '/') : memrchr(line, '/', len - 1);
 		if(slash) {
 			ptr = slash + 1;
 		}
