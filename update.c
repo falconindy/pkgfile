@@ -199,7 +199,6 @@ static int decompress_repo_data(struct repo_t *repo)
 	}
 
 	archive_write_set_format_cpio(cpio);
-	archive_write_add_filter_none(cpio);
 	ret = archive_write_open_filename(cpio, tmpfile);
 	if (ret != ARCHIVE_OK) {
 		fprintf(stderr, "failed to open file for writing: %s: %s\n",

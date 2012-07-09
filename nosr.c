@@ -37,10 +37,6 @@
 #include "update.h"
 #include "util.h"
 
-#ifndef BUFSIZ
-# define BUFSIZ 8192
-#endif
-
 static struct config_t config;
 
 static const char *filtermethods[] = {

@@ -35,6 +35,21 @@
 #define CACHEPATH  "/var/cache/nosr"
 #define DBPATH     "/var/lib/pacman"
 
+#ifndef BUFSIZ
+# define BUFSIZ 8192
+#endif
+
+/* allow compilation with pcre < 8.30 */
+#ifndef PCRE_STUDY_JIT_COMPILE
+# define PCRE_STUDY_JIT_COMPILE 0
+#endif
+
+/* allow compilation with libarchive < 3.0 */
+#if ARCHIVE_VERSION_NUMBER < 3000000
+# define archive_read_free(x)  archive_read_finish(x)
+# define archive_write_free(x) archive_write_finish(x)
+#endif
+
 struct archive_read_buffer {
 	char *line;
 	char *line_offset;
