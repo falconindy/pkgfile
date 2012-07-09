@@ -130,7 +130,7 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 			continue;
 		}
 
-		if (line[0] == '[' && line[strlen(line) - 1] == ']') {
+		if(line[0] == '[' && line[strlen(line) - 1] == ']') {
 			free(section);
 			section = strndup(&line[1], strlen(line) - 2);
 			if(strcmp(section, "options") == 0) {
@@ -192,7 +192,7 @@ static int decompress_repo_data(struct repo_t *repo)
 	archive_read_support_format_tar(tarball);
 	archive_read_support_compression_all(tarball);
 	ret = archive_read_open_memory(tarball, repo->data, repo->buflen);
-	if (ret != ARCHIVE_OK) {
+	if(ret != ARCHIVE_OK) {
 		fprintf(stderr, "failed to create archive reader for %s: %s\n",
 				repo->name, archive_error_string(tarball));
 		goto done;
@@ -200,7 +200,7 @@ static int decompress_repo_data(struct repo_t *repo)
 
 	archive_write_set_format_cpio(cpio);
 	ret = archive_write_open_filename(cpio, tmpfile);
-	if (ret != ARCHIVE_OK) {
+	if(ret != ARCHIVE_OK) {
 		fprintf(stderr, "failed to open file for writing: %s: %s\n",
 				tmpfile, archive_error_string(cpio));
 		goto done;
@@ -466,10 +466,10 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 		/* read any pending messages */
 		for(;;) {
 			int r = read_multi_msgs(multi, active_handles);
-			if (r == -EAGAIN) {
+			if(r == -EAGAIN) {
 				/* "ref" the active_handles -- there's still more to do */
 				active_handles++;
-			} else if (r == -ENOENT) {
+			} else if(r == -ENOENT) {
 				/* we're out of messages */
 				break;
 			}

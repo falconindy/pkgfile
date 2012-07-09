@@ -141,7 +141,7 @@ cleanup:
 
 static int strip_newline(struct archive_read_buffer *buf)
 {
-	if (buf->line[buf->real_line_size - 1] == '\n') {
+	if(buf->line[buf->real_line_size - 1] == '\n') {
 		buf->line[buf->real_line_size - 1] = '\0';
 		buf->real_line_size--;
 	}
@@ -313,7 +313,7 @@ static void *load_repo(void *repo_obj)
 	archive_read_support_format_all(a);
 
 	fd = open(repofile, O_RDONLY);
-	if (fd < 0) {
+	if(fd < 0) {
 		/* fail silently if the file doesn't exist */
 		if(errno != ENOENT) {
 			fprintf(stderr, "error: failed to open repo: %s: %s\n", repofile,
@@ -379,7 +379,7 @@ cleanup:
 	if(fd >= 0) {
 		close(fd);
 	}
-	if (repodata != MAP_FAILED) {
+	if(repodata != MAP_FAILED) {
 		munmap(repodata, st.st_size);
 	}
 
