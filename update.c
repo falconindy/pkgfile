@@ -28,6 +28,7 @@
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <curl/curl.h>
@@ -138,7 +139,7 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 				continue;
 			} else {
 				in_options = 0;
-				active_repos = realloc(active_repos, sizeof(struct repo_t *) * (*repocount + 1));
+				active_repos = realloc(active_repos, sizeof(struct repo_t *) * (*repocount + 2));
 				active_repos[*repocount] = repo_new(section);
 				(*repocount)++;
 			}
@@ -250,17 +251,17 @@ static int repack_repo_data(struct repo_t *repo)
 		}
 	}
 
-	archive_read_close(tarball);
 	archive_write_close(cpio);
+	archive_read_close(tarball);
 	ret = 0;
 
 done:
-	archive_read_free(tarball);
 	archive_write_free(cpio);
+	archive_read_free(tarball);
 
 	if(ret == 0) {
 		if(rename(tmpfile, diskfile) != 0) {
-			fprintf(stderr, "failed to rotate new repo for %s into replace: %s\n",
+			fprintf(stderr, "failed to rotate new repo for %s into place: %s\n",
 					repo->name, strerror(errno));
 		}
 	} else {
@@ -272,6 +273,24 @@ done:
 	}
 
 	return ret;
+}
+
+static int repack_repo_data_async(struct repo_t *repo)
+{
+	repo->worker = fork();
+
+	if(repo->worker < 0) {
+		perror("failed to fork new process");
+
+		/* don't just give up, try to repack the repo synchronously */
+		return repack_repo_data(repo);
+	}
+
+	if(repo->worker == 0) {
+		exit(repack_repo_data(repo));
+	}
+
+	return 0;
 }
 
 static size_t write_response(void *ptr, size_t size, size_t nmemb, void *data)
@@ -438,7 +457,7 @@ static int read_multi_msg(CURLM *multi, int remaining)
 		}
 
 		print_download_success(repo, remaining);
-		repack_repo_data(repo);
+		repack_repo_data_async(repo);
 		repo->err = 0;
 	}
 
@@ -500,6 +519,25 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 	return 0;
 }
 
+
+static void wait_on_chidren(struct repo_t **repos, int repocount)
+{
+	int i, running = 0;
+
+	/* immediately reap active children, but don't yet wait on stragglers */
+	for(i = 0; i < repocount; i++) {
+		if(repos[i]->worker > 0 && waitpid(repos[i]->worker, NULL, WNOHANG) <= 0) {
+			running++;
+		}
+	}
+
+	if(running > 0) {
+		printf(":: waiting on %d process%s to finish repacking repos...\n",
+				running, running == 1 ? "" : "es");
+		while(wait(NULL) == 0 || errno != ECHILD);
+	}
+}
+
 int nosr_update(struct repo_t **repos, int repocount, struct config_t *config)
 {
 	int i, r, force, xfer_count = 0, ret = 0;
@@ -542,6 +580,9 @@ int nosr_update(struct repo_t **repos, int repocount, struct config_t *config)
 		curl_multi_remove_handle(cmulti, repos[i]->curl);
 		curl_easy_cleanup(repos[i]->curl);
 
+		FREE(repos[i]->url);
+		FREE(repos[i]->data);
+
 		total_xfer += repos[i]->buflen;
 
 		switch(repos[i]->err) {
@@ -558,6 +599,8 @@ int nosr_update(struct repo_t **repos, int repocount, struct config_t *config)
 	if(xfer_count > 1) {
 		print_total_dl_stats(xfer_count, duration, total_xfer);
 	}
+
+	wait_on_chidren(repos, repocount);
 
 	curl_multi_cleanup(cmulti);
 	curl_global_cleanup();

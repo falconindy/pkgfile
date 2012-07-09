@@ -56,9 +56,6 @@ void repo_free(struct repo_t *repo)
 	}
 	free(repo->servers);
 
-	free(repo->data);
-	free(repo->url);
-
 	free(repo);
 }
 

@@ -62,6 +62,8 @@ struct repo_t {
 	short force;
 	/* start time for download */
 	struct timeval dl_time_start;
+	/* PID of repo_repack worker */
+	pid_t worker;
 };
 
 struct repo_t *repo_new(const char *reponame);
