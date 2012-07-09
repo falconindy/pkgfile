@@ -520,7 +520,7 @@ static int parse_opts(int argc, char **argv)
 				break;
 			case 'h':
 				usage();
-				return 1;
+				exit(EXIT_SUCCESS);
 			case 'i':
 				config.icase = true;
 				break;
