@@ -139,7 +139,7 @@ cleanup:
 	}
 }
 
-static int strip_newline(struct archive_read_buffer *buf)
+static size_t strip_newline(struct archive_read_buffer *buf)
 {
 	if(buf->line[buf->real_line_size - 1] == '\n') {
 		buf->line[buf->real_line_size - 1] = '\0';
@@ -675,7 +675,7 @@ int main(int argc, char *argv[])
 		results = search_all_repos(repos, repocount);
 		for(ret = i = 0; i < repocount; i++) {
 			reposfound += repos[i]->filefound;
-			ret += result_print(results[i]);
+			ret += (int)result_print(results[i]);
 			result_free(results[i]);
 		}
 

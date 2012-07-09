@@ -49,7 +49,7 @@ int match_regex(const filterpattern_t *pattern, const char *line, size_t len,
 		len = strlen(line);
 	}
 
-	return pcre_exec(re->re, re->re_extra, line, len, 0, 0, NULL, 0) < 0;
+	return pcre_exec(re->re, re->re_extra, line, (int)len, 0, 0, NULL, 0) < 0;
 }
 
 void free_regex(filterpattern_t *pattern)

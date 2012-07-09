@@ -48,7 +48,7 @@ struct repo_t *repo_new(const char *reponame)
 
 void repo_free(struct repo_t *repo)
 {
-	size_t i;
+	int i;
 
 	free(repo->name);
 	for(i = 0; i < repo->servercount; i++) {

@@ -28,7 +28,7 @@
 
 static int result_grow(struct result_t *result)
 {
-	size_t newsz = result->maxcount * 2.5;
+	size_t newsz = result->maxcount * 3;
 	result->list = realloc(result->list, newsz * sizeof(char *));
 	if(!result->list) {
 		return 1;
@@ -98,7 +98,7 @@ static int stringcmp(const void *s1, const void *s2)
 	return strcmp(*(const char **)s1, *(const char **)s2);
 }
 
-int result_print(struct result_t *result)
+size_t result_print(struct result_t *result)
 {
 	size_t i;
 

@@ -32,7 +32,7 @@
 struct repo_t {
 	char *name;
 	char **servers;
-	size_t servercount;
+	int servercount;
 	int filefound;
 	char *arch;
 
@@ -45,7 +45,7 @@ struct repo_t {
 	/* destination */
 	char diskfile[PATH_MAX];
 	/* index to currently in-use server */
-	size_t server_idx;
+	int server_idx;
 	/* write buffer for downloaded data */
 	unsigned char *data;
 	/* size of write_buffer */
