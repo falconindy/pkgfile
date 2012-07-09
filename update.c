@@ -482,9 +482,9 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 	return 0;
 }
 
-int nosr_update(struct repo_t **repos, int repocount, int force)
+int nosr_update(struct repo_t **repos, int repocount, struct config_t *config)
 {
-	int i, r, xfer_count = 0, ret = 0;
+	int i, r, force, xfer_count = 0, ret = 0;
 	struct utsname un;
 	CURLM *cmulti;
 	struct timeval t_start, t_end;
@@ -501,11 +501,13 @@ int nosr_update(struct repo_t **repos, int repocount, int force)
 	cmulti = curl_multi_init();
 
 	uname(&un);
+	force = (config->doupdate > 1);
 
 	/* prime the handle by adding a URL from each repo */
 	for(i = 0; i < repocount; i++) {
 		repos[i]->arch = un.machine;
 		repos[i]->force = force;
+		repos[i]->config = config;
 		r = add_repo_download(cmulti, repos[i]);
 		if(r != 0) {
 			ret = r;

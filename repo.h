@@ -29,12 +29,16 @@
 
 #include <curl/curl.h>
 
+#include "nosr.h"
+
 struct repo_t {
 	char *name;
 	char **servers;
 	int servercount;
 	int filefound;
 	char *arch;
+
+	const struct config_t *config;
 
 	/* download stuff */
 

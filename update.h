@@ -28,7 +28,7 @@
 #include "repo.h"
 
 struct repo_t **find_active_repos(const char *filename, int *repocount);
-int nosr_update(struct repo_t **repos, int repocount, int force);
+int nosr_update(struct repo_t **repos, int repocount, struct config_t *config);
 void repo_free(struct repo_t *repo);
 
 #endif /* _NOSR_UPDATE_H */
