@@ -311,6 +311,7 @@ static void *load_repo(void *repo_obj)
 
 	a = archive_read_new();
 	archive_read_support_format_all(a);
+	archive_read_support_compression_all(a);
 
 	fd = open(repofile, O_RDONLY);
 	if(fd < 0) {
@@ -424,14 +425,31 @@ static int compile_pcre_expr(struct pcre_data *re, const char *preg, int flags)
 	return 0;
 }
 
+static compresstype_t validate_compression(const char *compress) {
+	if(strcmp(compress, "none") == 0) {
+		return COMPRESS_NONE;
+	} else if(strcmp(compress, "gzip") == 0) {
+		return COMPRESS_GZIP;
+	} else if(strcmp(compress, "bzip2") == 0) {
+		return COMPRESS_BZIP2;
+	} else if(strcmp(compress, "lzma") == 0) {
+		return COMPRESS_LZMA;
+	} else if(strcmp(compress, "xz") == 0) {
+		return COMPRESS_XZ;
+	} else {
+		return COMPRESS_INVALID;
+	}
+}
+
 static void usage(void)
 {
-	fprintf(stderr, "nosr " VERSION "\nUsage: nosr [options] target\n\n");
-	fprintf(stderr,
+	fputs("nosr " VERSION "\nUsage: nosr [options] target\n\n", stdout);
+	fputs(
 			" Operations:\n"
 			"  -l, --list              list contents of a package\n"
 			"  -s, --search            search for packages containing the target (default)\n"
-			"  -u, --update            update repo files lists\n\n"
+			"  -u, --update            update repo files lists\n\n", stdout);
+	fputs(
 			" Filtering:\n"
 			"  -b, --binaries          return only files contained in a bin dir\n"
 			"  -d, --directories       match directories in searches\n"
@@ -441,7 +459,11 @@ static void usage(void)
 			"  -R, --repo REPO         search a specific repo\n"
 			"  -r, --regex             enable matching with pcre\n\n"
 			"  -h, --help              display this help and exit\n"
-			"  -v, --verbose           output more\n\n");
+			"  -v, --verbose           output more\n\n", stdout);
+	fputs(
+			" Downloads:\n"
+			"  -z, --compress[=type]   compress downloaded repos\n\n",
+			stdout);
 }
 
 static int parse_opts(int argc, char **argv)
@@ -450,6 +472,7 @@ static int parse_opts(int argc, char **argv)
 	const char *argv0_base;
 	static const struct option opts[] = {
 		{"binaries",    no_argument,        0, 'b'},
+		{"compress",    optional_argument,  0, 'z'},
 		{"directories", no_argument,        0, 'd'},
 		{"glob",        no_argument,        0, 'g'},
 		{"help",        no_argument,        0, 'h'},
@@ -479,7 +502,7 @@ static int parse_opts(int argc, char **argv)
 		config.doupdate = 1;
 	}
 
-	while((opt = getopt_long(argc, argv, "bdghilqR:rsuv", opts, &opt_idx)) != -1) {
+	while((opt = getopt_long(argc, argv, "bdghilqR:rsuvz", opts, &opt_idx)) != -1) {
 		switch(opt) {
 			case 'b':
 				config.binaries = true;
@@ -526,6 +549,17 @@ static int parse_opts(int argc, char **argv)
 				break;
 			case 'v':
 				config.verbose = true;
+				break;
+			case 'z':
+				if(optarg != NULL) {
+					config.compress = validate_compression(optarg);
+					if(config.compress == COMPRESS_INVALID) {
+						fprintf(stderr, "error: invalid compression option %s\n", optarg);
+						return 1;
+					}
+				} else {
+					config.compress = COMPRESS_GZIP;
+				}
 				break;
 			default:
 				return 1;

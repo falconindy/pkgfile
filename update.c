@@ -166,7 +166,7 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 	return active_repos;
 }
 
-static int decompress_repo_data(struct repo_t *repo)
+static int repack_repo_data(struct repo_t *repo)
 {
 	char diskfile[PATH_MAX], tmpfile[PATH_MAX];
 	int ret = -1;
@@ -196,6 +196,24 @@ static int decompress_repo_data(struct repo_t *repo)
 		fprintf(stderr, "failed to create archive reader for %s: %s\n",
 				repo->name, archive_error_string(tarball));
 		goto done;
+	}
+
+	switch(repo->config->compress) {
+		case COMPRESS_INVALID:
+		case COMPRESS_NONE:
+			break;
+		case COMPRESS_GZIP:
+			archive_write_add_filter_gzip(cpio);
+			break;
+		case COMPRESS_BZIP2:
+			archive_write_add_filter_bzip2(cpio);
+			break;
+		case COMPRESS_LZMA:
+			archive_write_add_filter_lzma(cpio);
+			break;
+		case COMPRESS_XZ:
+			archive_write_add_filter_xz(cpio);
+			break;
 	}
 
 	archive_write_set_format_cpio(cpio);
@@ -420,7 +438,7 @@ static int read_multi_msg(CURLM *multi, int remaining)
 		}
 
 		print_download_success(repo, remaining);
-		decompress_repo_data(repo);
+		repack_repo_data(repo);
 		repo->err = 0;
 	}
 

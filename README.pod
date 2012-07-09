@@ -79,6 +79,20 @@ Output more. This applies to the search operation.
 
 =back
 
+=head1 DOWNLOADING
+
+=over 4
+
+=item B<-z>, B<--compress>[B<=>I<COMPRESSION>]
+
+Repack downloaded repos with the optionally supplied compression method, which
+may be one of B<none>, B<gzip>, B<bzip2>, B<lzma>, or B<xz>. If this flag is
+passed without a compression method, this defaults to B<gzip>. If this flag is
+not passed at all, no compression will be applied. Applying any form of compression
+will decrease performance, but may be desirable for disk space concerns.
+
+=back
+
 =head1 MATCHING
 
 In --search mode and without the --regex or --glob option, nosr will attempt to

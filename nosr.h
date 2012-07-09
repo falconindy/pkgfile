@@ -48,6 +48,12 @@
 #if ARCHIVE_VERSION_NUMBER < 3000000
 # define archive_read_free(x)  archive_read_finish(x)
 # define archive_write_free(x) archive_write_finish(x)
+
+# define archive_write_add_filter_none(x)   archive_write_set_compression_none(x)
+# define archive_write_add_filter_gzip(x)   archive_write_set_compression_gzip(x)
+# define archive_write_add_filter_bzip2(x)  archive_write_set_compression_bzip2(x)
+# define archive_write_add_filter_lzma(x)   archive_write_set_compression_lzma(x)
+# define archive_write_add_filter_xz(x)     archive_write_set_compression_xz(x)
 #endif
 
 struct archive_read_buffer {
@@ -69,6 +75,15 @@ typedef enum _filterstyle_t {
 	FILTER_GLOB,
 	FILTER_REGEX
 } filterstyle_t;
+
+typedef enum _compresstype_t {
+	COMPRESS_NONE = 0,
+	COMPRESS_GZIP,
+	COMPRESS_BZIP2,
+	COMPRESS_LZMA,
+	COMPRESS_XZ,
+	COMPRESS_INVALID
+} compresstype_t;
 
 typedef union _filterpattern_t {
 	struct pcre_data {
@@ -98,6 +113,7 @@ struct config_t {
 	bool icase;
 	bool quiet;
 	bool verbose;
+	compresstype_t compress;
 };
 
 #endif /* _NOSR_H */
