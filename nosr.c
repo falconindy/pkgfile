@@ -473,7 +473,8 @@ static void usage(void)
 			" Operations:\n"
 			"  -l, --list              list contents of a package\n"
 			"  -s, --search            search for packages containing the target (default)\n"
-			"  -u, --update            update repo files lists\n\n", stdout);
+			"  -u, --update            update repo files lists\n\n",
+			stdout);
 	fputs(
 			" Filtering:\n"
 			"  -b, --binaries          return only files contained in a bin dir\n"
@@ -482,12 +483,16 @@ static void usage(void)
 			"  -i, --ignorecase        use case insensitive matching\n"
 			"  -q, --quiet             output less when listing\n"
 			"  -R, --repo REPO         search a specific repo\n"
-			"  -r, --regex             enable matching with pcre\n\n"
-			"  -h, --help              display this help and exit\n"
-			"  -v, --verbose           output more\n\n", stdout);
+			"  -r, --regex             enable matching with pcre\n"
+			"  -v, --verbose           output more\n\n",
+			stdout);
 	fputs(
-			" Downloads:\n"
+			" Downloading:\n"
 			"  -z, --compress[=type]   compress downloaded repos\n\n",
+			stdout);
+	fputs(
+			" General:\n"
+			"  -h, --help              display this help and exit\n\n",
 			stdout);
 }
 
