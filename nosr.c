@@ -184,6 +184,11 @@ static bool is_binary(const char *line, size_t len)
 	return false;
 }
 
+static bool is_directory(const char *line, size_t len)
+{
+	return line[len - 1] == '/';
+}
+
 static int search_metafile(const char *repo, struct pkg_t *pkg,
 		struct archive *a, struct result_t *result) {
 	int found = 0;
@@ -213,7 +218,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 			continue;
 		}
 
-		if(config.directories && buf.line[len - 1] != '/') {
+		if(!config.directories && is_directory(buf.line, len)) {
 			continue;
 		}
 
