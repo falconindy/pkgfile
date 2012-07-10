@@ -7,15 +7,13 @@ _nosr() {
 
   opts="-l --list -s --search -u --update -b --binaries -g --glob -i
         --ignorecase -q --quiet -R --repo -r --regex -h --help -v --verbose
-        -z --compress -c --cachedir"
+        -z --compress"
 
   if [[ $prev = -*R || $prev = '--repo' ]]; then
     repos=$(sed '/^\[\(.*\)\]$/!d;s//\1/g;/options/d' /etc/pacman.conf)
     COMPREPLY=($(compgen -W "$repos" -- "$cur"))
   elif [[ $prev = @(-z|--compress) ]]; then
     COMPREPLY=($(compgen -W "none gzip bzip2 lzma xz" -- "$cur"))
-  elif [[ $prev = @(-c|--cachedir) ]]; then
-    _filedir -d
   elif [[ -z $cur || $cur = -* ]]; then
     COMPREPLY=($(compgen -W "$opts" -- "$cur"))
   else
