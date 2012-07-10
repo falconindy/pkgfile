@@ -520,7 +520,7 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 }
 
 
-static void wait_on_chidren(struct repo_t **repos, int repocount)
+static void wait_on_children(struct repo_t **repos, int repocount)
 {
 	int i, running = 0;
 
@@ -600,7 +600,7 @@ int nosr_update(struct repo_t **repos, int repocount, struct config_t *config)
 		print_total_dl_stats(xfer_count, duration, total_xfer);
 	}
 
-	wait_on_chidren(repos, repocount);
+	wait_on_children(repos, repocount);
 
 	curl_multi_cleanup(cmulti);
 	curl_global_cleanup();
