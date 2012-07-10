@@ -1,5 +1,5 @@
 Requirements:
-  - libalpm
+  - libcurl
   - libarchive
   - pcre
   - pthreads
