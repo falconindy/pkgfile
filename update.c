@@ -548,7 +548,7 @@ int nosr_update(struct repo_t **repos, int repocount, struct config_t *config)
 	double duration;
 
 	if(access(CACHEPATH, W_OK)) {
-		fprintf(stderr, "error: unable to write to %s: %s", CACHEPATH,
+		fprintf(stderr, "error: unable to write to " CACHEPATH ": %s\n",
 				strerror(errno));
 		return 1;
 	}
