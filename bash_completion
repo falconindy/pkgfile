@@ -17,7 +17,7 @@ _nosr() {
   elif [[ -z $cur || $cur = -* ]]; then
     COMPREPLY=($(compgen -W "$opts" -- "$cur"))
   else
-    COMPREPLY=($(compgen -W "$(pacman -Ssq)" -- "$cur"))
+    COMPREPLY=($(compgen -W "$(command pacman -Ssq)" -- "$cur"))
   fi
 }
 
