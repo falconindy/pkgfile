@@ -544,7 +544,7 @@ int nosr_update(struct repo_t **repos, int repocount, struct config_t *config)
 	struct utsname un;
 	CURLM *cmulti;
 	struct timeval t_start, t_end;
-	off_t total_xfer = 0.0;
+	off_t total_xfer = 0;
 	double duration;
 
 	if(access(CACHEPATH, W_OK)) {
