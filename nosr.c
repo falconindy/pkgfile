@@ -32,10 +32,10 @@
 #include <unistd.h>
 
 #include "nosr.h"
+#include "macro.h"
 #include "match.h"
 #include "result.h"
 #include "update.h"
-#include "util.h"
 
 static struct config_t config;
 

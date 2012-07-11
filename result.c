@@ -23,8 +23,8 @@
 #define _GNU_SOURCE
 #include <string.h>
 
+#include "macro.h"
 #include "result.h"
-#include "util.h"
 
 static int result_grow(struct result_t *result)
 {

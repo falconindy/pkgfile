@@ -25,8 +25,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "macro.h"
 #include "repo.h"
-#include "util.h"
 
 struct repo_t *repo_new(const char *reponame)
 {

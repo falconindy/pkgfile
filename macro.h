@@ -50,10 +50,6 @@
                 })
 #endif
 
-double humanize_size(off_t bytes, const char target_unit, int precision, const char **label);
-char *strreplace(const char *str, const char *needle, const char *replace);
-char *strtrim(char *str);
-
 #endif /* _NOSR_UTIL_H */
 
 /* vim: set ts=2 sw=2 noet: */
