@@ -148,7 +148,7 @@ static size_t strip_newline(struct archive_read_buffer *buf)
 	return buf->real_line_size;
 }
 
-static bool is_binary(const char *line, size_t len)
+static bool is_binary(const char *line, const size_t len)
 {
 	const char *ptr;
 
@@ -184,7 +184,7 @@ static bool is_binary(const char *line, size_t len)
 	return false;
 }
 
-static bool is_directory(const char *line, size_t len)
+static bool is_directory(const char *line, const size_t len)
 {
 	return line[len - 1] == '/';
 }

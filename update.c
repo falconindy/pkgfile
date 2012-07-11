@@ -167,7 +167,7 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 	return active_repos;
 }
 
-static int repack_repo_data(struct repo_t *repo)
+static int repack_repo_data(const struct repo_t *repo)
 {
 	char diskfile[PATH_MAX], tmpfile[PATH_MAX];
 	int ret = -1;
@@ -361,7 +361,7 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo)
 	return 0;
 }
 
-static double timediff(struct timeval *start, struct timeval *end)
+static double timediff(const struct timeval *start, const struct timeval *end)
 {
 	const double s_sec = start->tv_sec + (start->tv_usec / 1000000.0);
 	const double e_sec = end->tv_sec + (end->tv_usec / 1000000.0);
