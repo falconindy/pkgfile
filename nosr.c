@@ -198,21 +198,17 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 	memset(&buf, 0, sizeof(buf));
 	buf.max_line_size = 512 * 1024;
 
+	/* read until we hit the %FILES% header */
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
 		const size_t len = strip_newline(&buf);
 
-		if(len == 0 || len != strlen(files)) {
-			continue;
-		}
-
-		if(strcmp(buf.line, files) == 0) {
+		if(len == 7 && memcmp(buf.line, files, 7) == 0) {
 			break;
 		}
 	}
 
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
 		const size_t len = strip_newline(&buf);
-		char *line;
 
 		if(len == 0) {
 			continue;
@@ -227,6 +223,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 		}
 
 		if(!found && config.filterfunc(&config.filter, buf.line, (int)len, config.icase) == 0) {
+			char *line;
 			if(config.verbose) {
 				if(asprintf(&line, "%s/%s %s\t/%s", repo, pkg->name, pkg->version, buf.line) == -1) {
 					fprintf(stderr, "error: failed to allocate memory\n");
@@ -251,7 +248,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
 
-	if(config.filterfunc(&config.filter, pkg->name, -1, config.icase) != 0) {
+	if((config.icase ? strcasecmp : strcmp)(config.filter.glob, pkg->name) != 0) {
 		return 1;
 	}
 
@@ -262,11 +259,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
 		const size_t len = strip_newline(&buf);
 
-		if(len == 0 || len != strlen(files)) {
-			continue;
-		}
-
-		if(strcmp(buf.line, files) == 0) {
+		if(len == 7 && memcmp(buf.line, files, 7) == 0) {
 			break;
 		}
 	}
