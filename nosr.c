@@ -297,9 +297,9 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 	return 1;
 }
 
-static int parse_pkgname(struct pkg_t *pkg, const char *entryname)
+static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len)
 {
-	const char *slash, *ptr = strrchr(entryname, '-');
+	const char *slash, *ptr = memrchr(entryname, '-', len);
 
 	if(ptr) {
 		slash = ptr;
@@ -318,8 +318,7 @@ static int parse_pkgname(struct pkg_t *pkg, const char *entryname)
 
 static void *load_repo(void *repo_obj)
 {
-	int fd = -1, ret;
-	const char *entryname, *slash;
+	int fd = -1;
 	char repofile[1024];
 	struct archive *a;
 	struct archive_entry *e;
@@ -358,33 +357,39 @@ static void *load_repo(void *repo_obj)
 		goto cleanup;
 	}
 
-	ret = archive_read_open_memory(a, repodata, st.st_size);
-	if(ret != ARCHIVE_OK) {
+	if(archive_read_open_memory(a, repodata, st.st_size) != ARCHIVE_OK) {
 		fprintf(stderr, "error: failed to load repo: %s: %s\n", repofile,
 				archive_error_string(a));
 		goto cleanup;
 	}
 
 	while(archive_read_next_header(a, &e) == ARCHIVE_OK) {
-		entryname = archive_entry_pathname(e);
-		slash = strrchr(entryname, '/');
-		if(!slash || strcmp(slash, "/files") != 0) {
+		const char *entryname = archive_entry_pathname(e);
+		size_t len;
+		int r;
+
+		if(entryname == NULL) {
+			/* libarchive error */
 			continue;
 		}
 
-		ret = parse_pkgname(pkg, entryname);
-		if(ret != 0) {
+		len = strlen(entryname);
+		if(len < 6 || memcmp(&entryname[len - 6], "/files", 6) != 0) {
+			continue;
+		}
+
+		if(parse_pkgname(pkg, entryname, len) != 0) {
 			fprintf(stderr, "error parsing pkgname from: %s\n", entryname);
 			continue;
 		}
 
-		ret = config.filefunc(repo->name, pkg, a, result);
+		r = config.filefunc(repo->name, pkg, a, result);
 
 		/* clean out the struct, but don't get rid of it entirely */
 		free(pkg->name);
 		free(pkg->version);
 
-		switch(ret) {
+		switch(r) {
 			case -1:
 				/* error */
 				/* FALLTHROUGH */
