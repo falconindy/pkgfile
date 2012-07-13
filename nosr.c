@@ -292,16 +292,16 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 
 static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len)
 {
-	const char *slash, *ptr = memrchr(entryname, '-', len);
+	const char *dash, *slash = memrchr(entryname, '/', len);
 
-	if(ptr) {
-		slash = ptr;
-		while(--ptr && ptr > entryname && *ptr != '-');
-		while(*++slash && *slash != '/');
+	if(slash) {
+		dash = slash;
+		while(--dash && dash > entryname && *dash != '-');
+		while(--dash && dash > entryname && *dash != '-');
 
-		if(*slash == '/' && *ptr == '-') {
-			pkg->name = strndup(entryname, ptr - entryname);
-			pkg->version = strndup(ptr + 1, slash - ptr - 1);
+		if(*dash == '-') {
+			pkg->name = strndup(entryname, dash - entryname);
+			pkg->version = strndup(dash + 1, slash - dash - 1);
 			return 0;
 		}
 	}
