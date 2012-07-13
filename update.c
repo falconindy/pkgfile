@@ -299,7 +299,7 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 static int repack_repo_data(const struct repo_t *repo)
 {
 	char diskfile[PATH_MAX], tmpfile[PATH_MAX];
-	int ret = -1;
+	int p, ret = -1;
 	struct archive *tarball, *cpio;
 	struct archive_entry *ae;
 
@@ -308,8 +308,9 @@ static int repack_repo_data(const struct repo_t *repo)
 	 * methods. this also gives us an opportunity to rewrite the archive as CPIO,
 	 * which is marginally faster given our staunch sequential access. */
 
-	snprintf(tmpfile, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
-	snprintf(diskfile, PATH_MAX, CACHEPATH "/%s.files", repo->name);
+	p = snprintf(tmpfile, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
+	memcpy(diskfile, tmpfile, p);
+	diskfile[p - 1] = '\0';
 
 	tarball = archive_read_new();
 	cpio = archive_write_new();
