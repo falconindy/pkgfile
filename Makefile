@@ -10,9 +10,7 @@ SRC = $(wildcard *.c)
 OBJ = $(SRC:.c=.o)
 
 all: $(OUT) doc
-
-.c.o:
-	$(CC) -c $(CFLAGS) $<
+$(OUT): $(OBJ)
 
 doc: nosr.1
 nosr.1: README.pod
