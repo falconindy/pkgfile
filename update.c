@@ -79,35 +79,34 @@ static double humanize_size(off_t bytes, const char target_unit, int precision,
 	return val;
 }
 
-static char *strtrim(char *str)
+static size_t strtrim(char *str)
 {
-	char *pch = str;
+	char *left = str, *right;
 
-	if(str == NULL || *str == '\0') {
-		/* string is empty, so we're done. */
-		return str;
+	if(!str || *str == '\0') {
+		return 0;
 	}
 
-	while(isspace((unsigned char)*pch)) {
-		pch++;
+	while(isspace((unsigned char)*left)) {
+		left++;
 	}
-	if(pch != str) {
-		memmove(str, pch, (strlen(pch) + 1));
+	if(left != str) {
+		memmove(str, left, (strlen(left) + 1));
 	}
 
-	/* check if there wasn't anything but whitespace in the string. */
 	if(*str == '\0') {
-		return str;
+		return 0;
 	}
 
-	pch = (str + (strlen(str) - 1));
-	while(isspace((unsigned char)*pch)) {
-		pch--;
+	right = (char*)rawmemchr(str, '\0') - 1;
+	while(isspace((unsigned char)*right)) {
+		right--;
 	}
-	*++pch = '\0';
+	*++right = '\0';
 
-	return str;
+	return right - left;
 }
+
 static char *strreplace(const char *str, const char *needle, const char *replace)
 {
 	const char *p, *q;
@@ -209,13 +208,16 @@ static int add_servers_from_include(struct repo_t *repo, char *file)
 	}
 
 	while(fgets(line, 4096, fp)) {
-		if((ptr = strchr(line, '#'))) {
+		ptr = strchr(line, '#');
+		if(ptr) {
 			*ptr = '\0';
 		}
-		if(*strtrim(line) == '\0') {
+
+		if(strtrim(line) == 0) {
 			continue;
 		}
 
+		/* we don't deal with nested includes */
 		if(strncmp(line, server, strlen(server)) == 0) {
 			ptr = line_get_val(line, "=");
 			repo_add_server(repo, ptr);
@@ -246,16 +248,21 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 	}
 
 	while(fgets(line, 4096, fp)) {
-		if((ptr = strchr(line, '#'))) {
+		size_t len;
+
+		ptr = strchr(line, '#');
+		if(ptr) {
 			*ptr = '\0';
 		}
-		if(*strtrim(line) == '\0') {
+
+		len = strtrim(line);
+		if(len == 0) {
 			continue;
 		}
 
-		if(line[0] == '[' && line[strlen(line) - 1] == ']') {
+		if(line[0] == '[' && line[len - 1] == ']') {
 			free(section);
-			section = strndup(&line[1], strlen(line) - 2);
+			section = strndup(&line[1], len - 2);
 			if(strcmp(section, "options") == 0) {
 				in_options = 1;
 				continue;
