@@ -1,6 +1,6 @@
-OUT        = nosr
-VERSION    = 0.1
-CPPFLAGS  := -DVERSION=\"$(VERSION)\" -D_FILE_OFFSET_BITS=64 $(CPPFLAGS)
+OUT        = pkgfile
+VERSION    = 1
+CPPFLAGS  := -DVERSION=\"v$(VERSION)\" -D_FILE_OFFSET_BITS=64 $(CPPFLAGS)
 CFLAGS    := -std=c99 -g -pedantic -pthread -Wall -Wextra $(CFLAGS) $(CPPFLAGS)
 LDFLAGS   := -pthread -larchive -lpcre -lcurl $(LDFLAGS)
 
@@ -12,21 +12,25 @@ OBJ = $(SRC:.c=.o)
 all: $(OUT) doc
 $(OUT): $(OBJ)
 
-doc: nosr.1
-nosr.1: README.pod
-	pod2man --section=1 --center="Nosr Manual" --name="NOSR" --release="nosr $(VERSION)" $< > $@
+doc: pkgfile.1
+pkgfile.1: README.pod
+	pod2man --section=1 --center="pkgfile Manual" --name="pkgfile" --release="pkgfile $(VERSION)" $< > $@
 
 $(OUT): $(OBJ)
 	$(CC) -o $@ $(OBJ) $(LDFLAGS)
 
 install: all
-	install -Dm755 nosr $(DESTDIR)$(PREFIX)/bin/nosr
-	install -Dm644 nosr.1 $(DESTDIR)$(PREFIX)/share/man/man1/nosr.1
-	install -dm775 $(DESTDIR)/var/cache/nosr
-	install -Dm644 bash_completion $(DESTDIR)/usr/share/bash-completion/completions/nosr
+	install -Dm755 pkgfile $(DESTDIR)$(PREFIX)/bin/pkgfile
+	ln -s pkgfile $(DESTDIR)$(PREFIX)/bin/nosr
+	install -Dm644 pkgfile.1 $(DESTDIR)$(PREFIX)/share/man/man1/pkgfile.1
+	install -dm775 $(DESTDIR)/var/cache/pkgfile
+	install -Dm644 bash_completion $(DESTDIR)/usr/share/bash-completion/completions/pkgfile
+
+dist:
+	git archive --format=tar --prefix=$(OUT)-$(VERSION)/ v$(VERSION) | gzip -9 > $(OUT)-$(VERSION).tar.gz
 
 strip: $(OUT)
 	strip --strip-all $(OUT)
 
 clean:
-	$(RM) $(OBJ) $(OUT) nosr.1
+	$(RM) $(OBJ) $(OUT) pkgfile.1

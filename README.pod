@@ -1,17 +1,17 @@
 =head1 NAME
 
-nosr - an alpm .files metadata explorer
+pkgfile - an alpm .files metadata explorer
 
 =head1 SYNOPSIS
 
-Usage: I<nosr> [operation] [options] target
+Usage: I<pkgfile> [operation] [options] target
 
 =head1 DESCRIPTION
 
-nosr searches the .files metadata created by B<repo-add>(8) to retrieve file
+pkgfile searches the .files metadata created by B<repo-add>(8) to retrieve file
 information about packages. By default, the provided target is considered to be
-a filename and nosr will return the package(s) which contain this file. The
-repos which nosr searches is determined by those enabled in
+a filename and pkgfile will return the package(s) which contain this file. The
+repos which pkgfile searches is determined by those enabled in
 I</etc/pacman.conf>.
 
 =head1 OPERATIONS
@@ -95,12 +95,12 @@ will decrease performance, but may be desirable for disk space concerns.
 
 =head1 MATCHING
 
-In --search mode and without the --regex or --glob option, nosr will attempt to
+In --search mode and without the --regex or --glob option, pkgfile will attempt to
 match the provided target as an exact filename. If the target contains a '/'
 character, a full path match will be attempted. With --regex and --glob enabled
-searching, nosr will always match against the full pathname.
+searching, pkgfile will always match against the full pathname.
 
-In --list mode and without the --regex or --glob option, nosr will attempt to
+In --list mode and without the --regex or --glob option, pkgfile will attempt to
 match the provided target as an exact package name. If the target contains a '/'
 character, the text before the slash will be assumed to be a repository and the
 search will be restricted. This behavior is disabled with --glob and --regex, and
@@ -110,7 +110,7 @@ only matching against the package name will occur.
 
 =over 4
 
-=item I</var/cache/nosr>
+=item I</var/cache/pkgfile>
 
 Storage location for metadata.
 
@@ -120,7 +120,7 @@ Storage location for metadata.
 
 It is recommended that the .files databases are updated on a regular basis in
 order to ensure accurate results. This is easily accomplished by adding a cron
-job to run I<nosr> with the B<--update> flag daily.
+job to run I<pkgfile> with the B<--update> flag daily.
 
 =head1 SEE ALSO
 

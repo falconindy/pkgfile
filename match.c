@@ -26,7 +26,7 @@
 
 #include "macro.h"
 #include "match.h"
-#include "nosr.h"
+#include "pkgfile.h"
 
 int match_glob(const filterpattern_t *pattern, const char *line, int UNUSED len,
 		int flags)

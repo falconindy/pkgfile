@@ -20,16 +20,16 @@
  * THE SOFTWARE.
  */
 
-#ifndef _NOSR_MATCH_H
-#define _NOSR_MATCH_H
+#ifndef _PKGFILE_MATCH_H
+#define _PKGFILE_MATCH_H
 
-#include "nosr.h"
+#include "pkgfile.h"
 
 int match_glob(const filterpattern_t *filter, const char *line,  int len, int flags);
 int match_regex(const filterpattern_t *filter, const char *line, int len, int flags);
 int match_exact(const filterpattern_t *filter, const char *line, int len, int flags);
 void free_regex(filterpattern_t *pattern);
 
-#endif /* _NOSR_MATCH_H */
+#endif /* _PKGFILE_MATCH_H */
 
 /* vim: set ts=2 sw=2 noet: */

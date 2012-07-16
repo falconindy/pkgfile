@@ -20,17 +20,17 @@
  * THE SOFTWARE.
  */
 
-#ifndef _NOSR_UPDATE_H
-#define _NOSR_UPDATE_H
+#ifndef _PKGFILE_UPDATE_H
+#define _PKGFILE_UPDATE_H
 
 #define PACMANCONFIG "/etc/pacman.conf"
 
 #include "repo.h"
 
 struct repo_t **find_active_repos(const char *filename, int *repocount);
-int nosr_update(struct repo_t **repos, int repocount, struct config_t *config);
+int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config);
 void repo_free(struct repo_t *repo);
 
-#endif /* _NOSR_UPDATE_H */
+#endif /* _PKGFILE_UPDATE_H */
 
 /* vim: set ts=2 sw=2 noet: */

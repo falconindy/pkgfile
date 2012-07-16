@@ -35,7 +35,7 @@
 #include <curl/curl.h>
 
 #include "macro.h"
-#include "nosr.h"
+#include "pkgfile.h"
 #include "update.h"
 
 static double simple_pow(int base, int exp)
@@ -668,7 +668,7 @@ static void wait_on_children(struct repo_t **repos, int repocount)
 	}
 }
 
-int nosr_update(struct repo_t **repos, int repocount, struct config_t *config)
+int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config)
 {
 	int i, r, force, xfer_count = 0, ret = 0;
 	struct utsname un;

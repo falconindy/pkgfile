@@ -20,8 +20,8 @@
  * THE SOFTWARE.
  */
 
-#ifndef _NOSR_UTIL_H
-#define _NOSR_UTIL_H
+#ifndef _PKGFILE_UTIL_H
+#define _PKGFILE_UTIL_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,6 +50,6 @@
                 })
 #endif
 
-#endif /* _NOSR_UTIL_H */
+#endif /* _PKGFILE_UTIL_H */
 
 /* vim: set ts=2 sw=2 noet: */

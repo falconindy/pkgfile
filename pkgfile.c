@@ -31,7 +31,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include "nosr.h"
+#include "pkgfile.h"
 #include "macro.h"
 #include "match.h"
 #include "result.h"
@@ -466,7 +466,7 @@ static compresstype_t validate_compression(const char *compress) {
 
 static void usage(void)
 {
-	fputs("nosr " VERSION "\nUsage: nosr [options] target\n\n", stdout);
+	fputs("pkgfile " VERSION "\nUsage: pkgfile [options] target\n\n", stdout);
 	fputs(
 			" Operations:\n"
 			"  -l, --list              list contents of a package\n"
@@ -697,7 +697,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(config.doupdate) {
-		ret = !!nosr_update(repos, repocount, &config);
+		ret = !!pkgfile_update(repos, repocount, &config);
 		goto cleanup;
 	}
 
@@ -729,7 +729,7 @@ int main(int argc, char *argv[])
 		}
 
 		if(!reposfound) {
-			fprintf(stderr, "error: No repo files found. Please run `nosr --update'.\n");
+			fprintf(stderr, "error: No repo files found. Please run `pkgfile --update'.\n");
 		}
 
 		ret = ret > 0 ? 0 : 1;

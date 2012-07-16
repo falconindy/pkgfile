@@ -20,8 +20,8 @@
  * THE SOFTWARE.
  */
 
-#ifndef _NOSR_H
-#define _NOSR_H
+#ifndef _PKGFILE_H
+#define _PKGFILE_H
 
 #include <stdbool.h>
 
@@ -32,7 +32,7 @@
 
 #include "result.h"
 
-#define CACHEPATH  "/var/cache/nosr"
+#define CACHEPATH  "/var/cache/pkgfile"
 #define DBPATH     "/var/lib/pacman"
 
 #ifndef BUFSIZ
@@ -116,6 +116,6 @@ struct config_t {
 	compresstype_t compress;
 };
 
-#endif /* _NOSR_H */
+#endif /* _PKGFILE_H */
 
 /* vim: set ts=2 sw=2 noet: */

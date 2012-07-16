@@ -20,8 +20,8 @@
  * THE SOFTWARE.
  */
 
-#ifndef _NOSR_REPO_H
-#define _NOSR_REPO_H
+#ifndef _PKGFILE_REPO_H
+#define _PKGFILE_REPO_H
 
 #define _GNU_SOURCE
 #include <limits.h>
@@ -29,7 +29,7 @@
 
 #include <curl/curl.h>
 
-#include "nosr.h"
+#include "pkgfile.h"
 
 struct repo_t {
 	char *name;
@@ -70,6 +70,6 @@ struct repo_t *repo_new(const char *reponame);
 void repo_free(struct repo_t *repo);
 int repo_add_server(struct repo_t *repo, const char *server);
 
-#endif /* _NOSR_REPO_H */
+#endif /* _PKGFILE_REPO_H */
 
 /* vim: set ts=2 sw=2 noet: */

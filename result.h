@@ -20,8 +20,8 @@
  * THE SOFTWARE.
  */
 
-#ifndef _NOSR_RESULT_H
-#define _NOSR_RESULT_H
+#ifndef _PKGFILE_RESULT_H
+#define _PKGFILE_RESULT_H
 
 struct result_t {
 	size_t count;
@@ -36,6 +36,6 @@ void result_free(struct result_t *result);
 size_t result_print(struct result_t *result);
 int result_cmp(const void *r1, const void *r2);
 
-#endif /* _NOSR_RESULT_H */
+#endif /* _PKGFILE_RESULT_H */
 
 /* vim: set ts=2 sw=2 noet: */
