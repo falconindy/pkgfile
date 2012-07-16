@@ -517,10 +517,6 @@ static int parse_opts(int argc, char **argv)
 	/* defaults */
 	config.filefunc = search_metafile;
 
-	if(strcmp(argv0_base, "nosr-update") == 0) {
-		config.doupdate = 1;
-	}
-
 	while((opt = getopt_long(argc, argv, "bdghilqR:rsuvz", opts, &opt_idx)) != -1) {
 		switch(opt) {
 			case 'b':
