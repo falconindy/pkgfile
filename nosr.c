@@ -497,7 +497,6 @@ static void usage(void)
 static int parse_opts(int argc, char **argv)
 {
 	int opt, opt_idx;
-	const char *argv0_base;
 	static const struct option opts[] = {
 		{"binaries",    no_argument,        0, 'b'},
 		{"compress",    optional_argument,  0, 'z'},
@@ -517,14 +516,6 @@ static int parse_opts(int argc, char **argv)
 
 	/* defaults */
 	config.filefunc = search_metafile;
-
-	/* catch nosr-update for cron jobs */
-	argv0_base = strrchr(argv[0], '/');
-	if(argv0_base) {
-		++argv0_base;
-	} else {
-		argv0_base = argv[0];
-	}
 
 	if(strcmp(argv0_base, "nosr-update") == 0) {
 		config.doupdate = 1;

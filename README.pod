@@ -118,13 +118,9 @@ Storage location for metadata.
 
 =head1 UPDATING VIA CRON
 
-It's recommended that nosr's metadata files are updated on a daily basis. This
-can easily be accomplished by symlinking nosr into your daily cron rotation as
-the name B<nosr-update>. For example:
-
-  ln -s /usr/bin/nosr /etc/cron.daily/nosr-update
-
-This will ensure that your cron daemon runs the job on a daily basis.
+It is recommended that the .files databases are updated on a regular basis in
+order to ensure accurate results. This is easily accomplished by adding a cron
+job to run I<nosr> with the B<--update> flag daily.
 
 =head1 SEE ALSO
 
