@@ -22,7 +22,7 @@ $(OUT): $(OBJ)
 install: all
 	install -Dm755 nosr $(DESTDIR)$(PREFIX)/bin/nosr
 	install -Dm644 nosr.1 $(DESTDIR)$(PREFIX)/share/man/man1/nosr.1
-	install -d $(DESTDIR)/var/cache/nosr
+	install -dm775 $(DESTDIR)/var/cache/nosr
 	install -Dm644 bash_completion $(DESTDIR)/usr/share/bash-completion/completions/nosr
 
 strip: $(OUT)
