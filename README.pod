@@ -95,10 +95,11 @@ will decrease performance, but may be desirable for disk space concerns.
 
 =head1 MATCHING
 
-In --search mode and without the --regex or --glob option, pkgfile will attempt to
-match the provided target as an exact filename. If the target contains a '/'
+In --search mode and without the --regex or --glob option, pkgfile will attempt
+to match the provided target as an exact filename. If the target contains a '/'
 character, a full path match will be attempted. With --regex and --glob enabled
-searching, pkgfile will always match against the full pathname.
+searching, pkgfile will always match against the full pathname. Note that full
+paths in the search database do not begin with a B</>.
 
 In --list mode and without the --regex or --glob option, pkgfile will attempt to
 match the provided target as an exact package name. If the target contains a '/'

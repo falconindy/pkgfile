@@ -31,13 +31,7 @@
 int match_glob(const filterpattern_t *pattern, const char *line, int UNUSED len,
 		int flags)
 {
-	const char *glob = pattern->glob;
-	
-	if(glob[0] == '/') {
-		glob++;
-	}
-
-	return fnmatch(glob, line, flags);
+	return fnmatch(pattern->glob, line, flags);
 }
 
 int match_regex(const filterpattern_t *pattern, const char *line, int len,
@@ -62,17 +56,11 @@ int match_exact(const filterpattern_t *pattern, const char *line, int len, int f
 {
 	const char *ptr = line, *match = pattern->glob;
 
-	/* if the search string contains a /, don't just search on basenames. since
-	 * our files DB doesn't contain leading slashes (for good reason), advance
-	 * the pointer on the line to compare against */
-	if(match[0] == '/') {
-		match++;
-	} else {
-		const char *slash =
-				len == -1 ? strrchr(line, '/') : memrchr(line, '/', len - 1);
-		if(slash) {
-			ptr = slash + 1;
-		}
+	const char *slash =
+			len == -1 ? strrchr(line, '/') : memrchr(line, '/', len - 1);
+
+	if(slash) {
+		ptr = slash + 1;
 	}
 
 	return flags ? strcasecmp(match, ptr) : strcmp(match, ptr);

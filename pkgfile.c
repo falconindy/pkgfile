@@ -274,12 +274,13 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 		}
 
 		if(config.quiet) {
-			if(asprintf(&line, "/%s", buf.line) == -1) {
+			line = strdup(buf.line);
+			if(line == NULL) {
 				fprintf(stderr, "error: failed to allocate memory\n");
 				return 1;
 			}
 		} else {
-			if(asprintf(&line, "%s/%s /%s", repo, pkg->name, buf.line) == -1) {
+			if(asprintf(&line, "%s/%s %s", repo, pkg->name, buf.line) == -1) {
 				fprintf(stderr, "error: failed to allocate memory\n");
 				return 1;
 			}
@@ -415,21 +416,6 @@ static int compile_pcre_expr(struct pcre_data *re, const char *preg, int flags)
 	const char *err;
 	char *anchored = NULL;
 	int err_offset;
-
-	/* did the user try to anchor this at BOL? */
-	if(preg[0] == '^') {
-		/* goddamnit, they did. cut off the first character. Conditionally also
-		 * drop the second character if its a slash. This is ugly and hackish, but
-		 * it's also a fairly odd edge case. --glob is a much better choice here,
-		 * as its self-anchoring. */
-		preg++;
-		if(preg[0] == '/') {
-			preg++;
-		}
-		anchored = strdup(preg);
-		preg = anchored;
-		flags |= PCRE_ANCHORED;
-	}
 
 	re->re = pcre_compile(preg, flags, &err, &err_offset, NULL);
 	free(anchored);
