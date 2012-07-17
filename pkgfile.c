@@ -225,7 +225,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 		if(!found && config.filterfunc(&config.filter, buf.line, (int)len, config.icase) == 0) {
 			char *line;
 			if(config.verbose) {
-				if(asprintf(&line, "%s/%s %s\t/%s", repo, pkg->name, pkg->version, buf.line) == -1) {
+				if(asprintf(&line, "%s/%s %s\t%s", repo, pkg->name, pkg->version, buf.line) == -1) {
 					fprintf(stderr, "error: failed to allocate memory\n");
 					return -1;
 				};
