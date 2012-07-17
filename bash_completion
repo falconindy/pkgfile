@@ -1,6 +1,6 @@
 #!/bin/bash
 
-_nosr() {
+_pkgfile() {
   local cur prev repos
 
   _get_comp_words_by_ref cur prev
@@ -21,6 +21,6 @@ _nosr() {
   fi
 }
 
-complete -F _nosr nosr
+complete -F _pkgfile pkgfile nosr
 
 # ex:et ts=2 sw=2 ft=sh
