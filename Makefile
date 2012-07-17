@@ -21,7 +21,6 @@ $(OUT): $(OBJ)
 
 install: all
 	install -Dm755 pkgfile $(DESTDIR)$(PREFIX)/bin/pkgfile
-	ln -s pkgfile $(DESTDIR)$(PREFIX)/bin/nosr
 	install -Dm644 pkgfile.1 $(DESTDIR)$(PREFIX)/share/man/man1/pkgfile.1
 	install -dm775 $(DESTDIR)/var/cache/pkgfile
 	install -Dm644 bash_completion $(DESTDIR)/usr/share/bash-completion/completions/pkgfile
