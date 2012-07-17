@@ -21,6 +21,6 @@ _pkgfile() {
   fi
 }
 
-complete -F _pkgfile pkgfile nosr
+complete -F _pkgfile pkgfile
 
 # ex:et ts=2 sw=2 ft=sh
