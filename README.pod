@@ -115,6 +115,13 @@ only matching against the package name will occur.
 
 Storage location for metadata.
 
+=item I</usr/share/doc/pkgfile/command-not-found.bash>
+
+=item I</usr/share/doc/pkgfile/command-not-found.zsh>
+
+zsh and bash compatible functions which can be included in shell initalization
+to run pkgfile when an executed command is not found.
+
 =back
 
 =head1 UPDATING VIA CRON
