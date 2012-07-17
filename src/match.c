@@ -20,58 +20,49 @@
  * THE SOFTWARE.
  */
 
-#define _GNU_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
+#include <fnmatch.h>
 #include <string.h>
 
 #include "macro.h"
-#include "repo.h"
+#include "match.h"
+#include "pkgfile.h"
 
-struct repo_t *repo_new(const char *reponame)
+int match_glob(const filterpattern_t *pattern, const char *line, int UNUSED len,
+		int flags)
 {
-	struct repo_t *repo;
-
-	CALLOC(repo, 1, sizeof(struct repo_t), return NULL);
-
-	if(asprintf(&repo->name, "%s", reponame) == -1) {
-		fprintf(stderr, "error: failed to allocate memory\n");
-		free(repo);
-		return NULL;
-	}
-
-	/* assume glorious failure */
-	repo->err = 1;
-
-	return repo;
+	return fnmatch(pattern->glob, line, flags);
 }
 
-void repo_free(struct repo_t *repo)
+int match_regex(const filterpattern_t *pattern, const char *line, int len,
+		int UNUSED flags)
 {
-	int i;
+	const struct pcre_data *re = &pattern->re;
 
-	free(repo->name);
-	for(i = 0; i < repo->servercount; i++) {
-		free(repo->servers[i]);
+	if(len == -1) {
+		len = (int)strlen(line);
 	}
-	free(repo->servers);
 
-	free(repo);
+	return pcre_exec(re->re, re->re_extra, line, len, 0, 0, NULL, 0) < 0;
 }
 
-int repo_add_server(struct repo_t *repo, const char *server)
+void free_regex(filterpattern_t *pattern)
 {
-	if(!repo) {
-		return 1;
+	pcre_free(pattern->re.re);
+	pcre_free(pattern->re.re_extra);
+}
+
+int match_exact(const filterpattern_t *pattern, const char *line, int len, int flags)
+{
+	const char *ptr = line, *match = pattern->glob;
+
+	const char *slash =
+			len == -1 ? strrchr(line, '/') : memrchr(line, '/', len - 1);
+
+	if(slash) {
+		ptr = slash + 1;
 	}
 
-	repo->servers = realloc(repo->servers,
-			sizeof(char *) * (repo->servercount + 1));
-
-	repo->servers[repo->servercount] = strdup(server);
-	repo->servercount++;
-
-	return 0;
+	return flags ? strcasecmp(match, ptr) : strcmp(match, ptr);
 }
 
 /* vim: set ts=2 sw=2 noet: */

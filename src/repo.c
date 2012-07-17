@@ -20,17 +20,57 @@
  * THE SOFTWARE.
  */
 
-#ifndef _PKGFILE_UPDATE_H
-#define _PKGFILE_UPDATE_H
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define PACMANCONFIG "/etc/pacman.conf"
-
+#include "macro.h"
 #include "repo.h"
 
-struct repo_t **find_active_repos(const char *filename, int *repocount);
-int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config);
-void repo_free(struct repo_t *repo);
+struct repo_t *repo_new(const char *reponame)
+{
+	struct repo_t *repo;
 
-#endif /* _PKGFILE_UPDATE_H */
+	CALLOC(repo, 1, sizeof(struct repo_t), return NULL);
+
+	if(asprintf(&repo->name, "%s", reponame) == -1) {
+		fprintf(stderr, "error: failed to allocate memory\n");
+		free(repo);
+		return NULL;
+	}
+
+	/* assume glorious failure */
+	repo->err = 1;
+
+	return repo;
+}
+
+void repo_free(struct repo_t *repo)
+{
+	int i;
+
+	free(repo->name);
+	for(i = 0; i < repo->servercount; i++) {
+		free(repo->servers[i]);
+	}
+	free(repo->servers);
+
+	free(repo);
+}
+
+int repo_add_server(struct repo_t *repo, const char *server)
+{
+	if(!repo) {
+		return 1;
+	}
+
+	repo->servers = realloc(repo->servers,
+			sizeof(char *) * (repo->servercount + 1));
+
+	repo->servers[repo->servercount] = strdup(server);
+	repo->servercount++;
+
+	return 0;
+}
 
 /* vim: set ts=2 sw=2 noet: */

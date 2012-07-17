@@ -20,50 +20,55 @@
  * THE SOFTWARE.
  */
 
-#define _GNU_SOURCE
-#include <fnmatch.h>
-#include <string.h>
+#ifndef _PKGFILE_REPO_H
+#define _PKGFILE_REPO_H
 
-#include "macro.h"
-#include "match.h"
+#include <limits.h>
+#include <sys/time.h>
+
+#include <curl/curl.h>
+
 #include "pkgfile.h"
 
-int match_glob(const filterpattern_t *pattern, const char *line, int UNUSED len,
-		int flags)
-{
-	return fnmatch(pattern->glob, line, flags);
-}
+struct repo_t {
+	char *name;
+	char **servers;
+	int servercount;
+	int filefound;
+	char *arch;
 
-int match_regex(const filterpattern_t *pattern, const char *line, int len,
-		int UNUSED flags)
-{
-	const struct pcre_data *re = &pattern->re;
+	const struct config_t *config;
 
-	if(len == -1) {
-		len = (int)strlen(line);
-	}
+	/* download stuff */
 
-	return pcre_exec(re->re, re->re_extra, line, len, 0, 0, NULL, 0) < 0;
-}
+	/* curl easy handle */
+	CURL *curl;
+	/* url being fetched */
+	char *url;
+	/* destination */
+	char diskfile[PATH_MAX];
+	/* index to currently in-use server */
+	int server_idx;
+	/* write buffer for downloaded data */
+	unsigned char *data;
+	/* size of write_buffer */
+	size_t buflen;
+	/* error buffer */
+	char errmsg[CURL_ERROR_SIZE];
+	/* numeric err for determining success */
+	int err;
+	/* force update repos */
+	short force;
+	/* start time for download */
+	struct timeval dl_time_start;
+	/* PID of repo_repack worker */
+	pid_t worker;
+};
 
-void free_regex(filterpattern_t *pattern)
-{
-	pcre_free(pattern->re.re);
-	pcre_free(pattern->re.re_extra);
-}
+struct repo_t *repo_new(const char *reponame);
+void repo_free(struct repo_t *repo);
+int repo_add_server(struct repo_t *repo, const char *server);
 
-int match_exact(const filterpattern_t *pattern, const char *line, int len, int flags)
-{
-	const char *ptr = line, *match = pattern->glob;
-
-	const char *slash =
-			len == -1 ? strrchr(line, '/') : memrchr(line, '/', len - 1);
-
-	if(slash) {
-		ptr = slash + 1;
-	}
-
-	return flags ? strcasecmp(match, ptr) : strcmp(match, ptr);
-}
+#endif /* _PKGFILE_REPO_H */
 
 /* vim: set ts=2 sw=2 noet: */

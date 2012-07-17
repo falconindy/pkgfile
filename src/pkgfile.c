@@ -20,7 +20,6 @@
  * THE SOFTWARE.
  */
 
-#define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
 #include <fnmatch.h>
@@ -36,6 +35,11 @@
 #include "match.h"
 #include "result.h"
 #include "update.h"
+
+#ifdef GIT_VERSION
+#undef PACKAGE_VERSION
+#define PACKAGE_VERSION GIT_VERSION
+#endif
 
 static struct config_t config;
 
@@ -452,7 +456,7 @@ static compresstype_t validate_compression(const char *compress) {
 
 static void usage(void)
 {
-	fputs("pkgfile " VERSION "\nUsage: pkgfile [options] target\n\n", stdout);
+	fputs("pkgfile " PACKAGE_VERSION "\nUsage: pkgfile [options] target\n\n", stdout);
 	fputs(
 			" Operations:\n"
 			"  -l, --list              list contents of a package\n"

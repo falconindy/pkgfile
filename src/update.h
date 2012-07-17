@@ -20,56 +20,16 @@
  * THE SOFTWARE.
  */
 
-#ifndef _PKGFILE_REPO_H
-#define _PKGFILE_REPO_H
+#ifndef _PKGFILE_UPDATE_H
+#define _PKGFILE_UPDATE_H
 
-#define _GNU_SOURCE
-#include <limits.h>
-#include <sys/time.h>
+#define PACMANCONFIG "/etc/pacman.conf"
 
-#include <curl/curl.h>
+#include "repo.h"
 
-#include "pkgfile.h"
+struct repo_t **find_active_repos(const char *filename, int *repocount);
+int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config);
 
-struct repo_t {
-	char *name;
-	char **servers;
-	int servercount;
-	int filefound;
-	char *arch;
-
-	const struct config_t *config;
-
-	/* download stuff */
-
-	/* curl easy handle */
-	CURL *curl;
-	/* url being fetched */
-	char *url;
-	/* destination */
-	char diskfile[PATH_MAX];
-	/* index to currently in-use server */
-	int server_idx;
-	/* write buffer for downloaded data */
-	unsigned char *data;
-	/* size of write_buffer */
-	size_t buflen;
-	/* error buffer */
-	char errmsg[CURL_ERROR_SIZE];
-	/* numeric err for determining success */
-	int err;
-	/* force update repos */
-	short force;
-	/* start time for download */
-	struct timeval dl_time_start;
-	/* PID of repo_repack worker */
-	pid_t worker;
-};
-
-struct repo_t *repo_new(const char *reponame);
-void repo_free(struct repo_t *repo);
-int repo_add_server(struct repo_t *repo, const char *server);
-
-#endif /* _PKGFILE_REPO_H */
+#endif /* _PKGFILE_UPDATE_H */
 
 /* vim: set ts=2 sw=2 noet: */

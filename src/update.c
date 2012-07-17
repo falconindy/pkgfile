@@ -20,9 +20,9 @@
  * THE SOFTWARE.
  */
 
-#define _GNU_SOURCE
 #include <ctype.h>
 #include <errno.h>
+#include <float.h>
 #include <limits.h>
 #include <math.h>
 #include <string.h>
@@ -523,7 +523,7 @@ static void print_download_success(struct repo_t *repo, int remaining)
 	xfered_human = humanize_size(repo->buflen, '\0', -1, &xfered_label);
 
 	printf("  download complete: %-20s [", repo->name);
-	if(rate == INFINITY) {
+	if(fabs(rate - INFINITY) < DBL_EPSILON) {
 		width = printf(" [%6.1f %3s  %7s ",
 				xfered_human, xfered_label, "----");
 	} else {
@@ -600,10 +600,13 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 
 	curl_multi_perform(multi, &active_handles);
 	while(active_handles > 0) {
-		int rc, maxfd =-1;
-		long curl_timeout;;
+		int rc, maxfd = -1;
+		long curl_timeout;
 		struct timeval timeout = { 1, 0 };
-		fd_set fdread, fdwrite, fdexcep;
+
+		fd_set fdread;
+		fd_set fdwrite;
+		fd_set fdexcep;
 
 		curl_multi_timeout(multi, &curl_timeout);
 		if(curl_timeout >= 0) {
