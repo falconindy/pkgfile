@@ -11,9 +11,6 @@ shelldata_DATA = \
 	extra/command-not-found.bash \
 	extra/command-not-found.zsh
 
-dist_bashcompletion_DATA = \
-	extra/bash-completion
-
 EXTRA_DIST = \
 	README.pod \
 	extra/bash-completion \
