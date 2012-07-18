@@ -37,7 +37,7 @@ will be downloaded. Pass this option twice to force update repo databases.
 
 =back
 
-=head1 FILTERING
+=head1 MATCHING
 
 =over 4
 
@@ -53,17 +53,9 @@ Match directories in search results.
 
 Enable shell-style glob pattern matching. See B<glob>(7).
 
-=item B<-h>, B<--help>
-
-Display the help message and quit.
-
 =item B<-i>, B<--ignorecase>
 
 Disable case sensitivity in matching.
-
-=item B<-q>, B<--quiet>
-
-Output less when using the B<--list> operation.
 
 =item B<-r>, B<--regex>
 
@@ -72,10 +64,6 @@ Enable regular expression matching. See B<pcre>(3).
 =item B<-R>, B<--repo>
 
 Search only the specific repo.
-
-=item B<-v>, B<--verbose>
-
-Output more. This applies to the search operation.
 
 =back
 
@@ -86,6 +74,14 @@ Output more. This applies to the search operation.
 =item B<-0>, B<--null>
 
 Delimit output with null bytes rather than newline characters.
+
+=item B<-q>, B<--quiet>
+
+Output less when using the B<--list> operation.
+
+=item B<-v>, B<--verbose>
+
+Output more. This applies to the search operation.
 
 =item B<-w>, B<--raw>
 

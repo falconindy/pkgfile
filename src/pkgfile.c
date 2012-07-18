@@ -474,18 +474,18 @@ static void usage(void)
 			"  -u, --update            update repo files lists\n\n",
 			stdout);
 	fputs(
-			" Filtering:\n"
+			" Matching:\n"
 			"  -b, --binaries          return only files contained in a bin dir\n"
 			"  -d, --directories       match directories in searches\n"
 			"  -g, --glob              enable matching with glob characters\n"
 			"  -i, --ignorecase        use case insensitive matching\n"
-			"  -q, --quiet             output less when listing\n"
-			"  -R, --repo REPO         search a specific repo\n"
-			"  -r, --regex             enable matching with pcre\n"
-			"  -v, --verbose           output more\n\n",
+			"  -R, --repo REPO         search a singular repo\n"
+			"  -r, --regex             enable matching with pcre\n\n",
 			stdout);
 	fputs(
 			" Output:\n"
+			"  -q, --quiet             output less when listing\n"
+			"  -v, --verbose           output more\n"
 			"  -w, --raw               disable output justification\n"
 			"  -0, --null              null terminate output\n\n",
 			stdout);
