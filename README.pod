@@ -18,18 +18,18 @@ I</etc/pacman.conf>.
 
 =over 4
 
-=item B<-l, --list>
+=item B<-l>, B<--list>
 
 The target is considered to be a package name rather than a filename, and the
 contents of the named package are returned. This allows for repo/package style
 syntax to limit the depth of the search.
 
-=item B<-s, --search>
+=item B<-s>, B<--search>
 
 Search for packages containing the provided target. This is the default mode of
 operation.
 
-=item B<-u, --update>
+=item B<-u>, B<--update>
 
 Update the stored metadata files. It is recommended to create a daily cron job
 with this command to ensure accurate results. By default, only modified repos
@@ -41,39 +41,39 @@ will be downloaded. Pass this option twice to force update repo databases.
 
 =over 4
 
-=item B<-b, --binaries>
+=item B<-b>, B<--binaries>
 
 Return only files which are contained within a bin or sbin directory.
 
-=item B<-d, --directories>
+=item B<-d>, B<--directories>
 
 Match directories in search results.
 
-=item B<-g, --glob>
+=item B<-g>, B<--glob>
 
 Enable shell-style glob pattern matching. See B<glob>(7).
 
-=item B<-h, --help>
+=item B<-h>, B<--help>
 
 Display the help message and quit.
 
-=item B<-i, --ignorecase>
+=item B<-i>, B<--ignorecase>
 
 Disable case sensitivity in matching.
 
-=item B<-q, --quiet>
+=item B<-q>, B<--quiet>
 
 Output less when using the B<--list> operation.
 
-=item B<-r, --regex>
+=item B<-r>, B<--regex>
 
 Enable regular expression matching. See B<pcre>(3).
 
-=item B<-R, --repo>
+=item B<-R>, B<--repo>
 
 Search only the specific repo.
 
-=item B<-v, --verbose>
+=item B<-v>, B<--verbose>
 
 Output more. This applies to the search operation.
 
