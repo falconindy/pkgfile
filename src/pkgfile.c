@@ -486,7 +486,8 @@ static void usage(void)
 			stdout);
 	fputs(
 			" Output:\n"
-			"  -w, --raw               disable output justification\n\n",
+			"  -w, --raw               disable output justification\n"
+			"  -0, --null              null terminate output\n\n",
 			stdout);
 	fputs(
 			" Downloading:\n"
@@ -516,14 +517,19 @@ static int parse_opts(int argc, char **argv)
 		{"update",      no_argument,        0, 'u'},
 		{"verbose",     no_argument,        0, 'v'},
 		{"raw",         no_argument,        0, 'w'},
+		{"null",        no_argument,        0, '0'},
 		{0,0,0,0}
 	};
 
 	/* defaults */
 	config.filefunc = search_metafile;
+	config.eol = '\n';
 
-	while((opt = getopt_long(argc, argv, "bdghilqR:rsuvwz", opts, &opt_idx)) != -1) {
+	while((opt = getopt_long(argc, argv, "0bdghilqR:rsuvwz", opts, &opt_idx)) != -1) {
 		switch(opt) {
+			case '0':
+				config.eol = '\0';
+				break;
 			case 'b':
 				config.binaries = true;
 				break;
@@ -612,7 +618,7 @@ static int search_single_repo(struct repo_t **repos, int repocount, char *search
 		if(strcmp(repos[i]->name, targetrepo) == 0) {
 			struct result_t *result = load_repo(repos[i]);
 			ret = (result->count == 0);
-			result_print(result, config.raw ? 0 : result->max_prefixlen);
+			result_print(result, config.raw ? 0 : result->max_prefixlen, config.eol);
 			result_free(result);
 			goto finish;
 		}
@@ -735,7 +741,7 @@ int main(int argc, char *argv[])
 		prefixlen = config.raw ? 0 : results_get_prefixlen(results, repocount);
 		for(ret = i = 0; i < repocount; i++) {
 			reposfound += repos[i]->filefound;
-			ret += (int)result_print(results[i], prefixlen);
+			ret += (int)result_print(results[i], prefixlen, config.eol);
 			result_free(results[i]);
 		}
 

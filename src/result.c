@@ -140,7 +140,7 @@ static int linecmp(const void *l1, const void *l2)
 	return strcmp(line1->prefix, line2->prefix);
 }
 
-size_t result_print(struct result_t *result, int prefixlen)
+size_t result_print(struct result_t *result, int prefixlen, char eol)
 {
 	size_t i;
 
@@ -152,10 +152,10 @@ size_t result_print(struct result_t *result, int prefixlen)
 
 	for(i = 0; i < result->count; i++) {
 		if(result->lines[i]->entry) {
-			printf("%-*s\t%s\n", prefixlen, result->lines[i]->prefix,
-					result->lines[i]->entry);
+			printf("%-*s\t%s%c", prefixlen, result->lines[i]->prefix,
+					result->lines[i]->entry, eol);
 		} else {
-			printf("%-*s\n", prefixlen, result->lines[i]->prefix);
+			printf("%-*s%c", 0, result->lines[i]->prefix, eol);
 		}
 	}
 

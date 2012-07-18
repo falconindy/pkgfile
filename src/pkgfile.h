@@ -114,6 +114,7 @@ struct config_t {
 	bool quiet;
 	bool verbose;
 	bool raw;
+	char eol;
 	compresstype_t compress;
 };
 

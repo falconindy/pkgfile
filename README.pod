@@ -83,6 +83,10 @@ Output more. This applies to the search operation.
 
 =over 4
 
+=item B<-0>, B<--null>
+
+Delimit output with null bytes rather than newline characters.
+
 =item B<-w>, B<--raw>
 
 Avoid justification of 2 column output.
