@@ -228,19 +228,25 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 
 		if(!found && config.filterfunc(&config.filter, buf.line, (int)len, config.icase) == 0) {
 			char *line;
+			int prefixlen;
 			if(config.verbose) {
-				if(asprintf(&line, "%s/%s %s\t%s", repo, pkg->name, pkg->version, buf.line) == -1) {
+				prefixlen = asprintf(&line, "%s/%s %s", repo, pkg->name, pkg->version);
+				if(prefixlen < 0) {
 					fprintf(stderr, "error: failed to allocate memory\n");
 					return -1;
-				};
+				}
+				result_add(result, line, buf.line, prefixlen);
+				free(line);
 			} else {
 				found = 1;
-				if(asprintf(&line, "%s/%s", repo, pkg->name) == -1) {
+				prefixlen = asprintf(&line, "%s/%s", repo, pkg->name);
+				if(prefixlen < 0) {
 					fprintf(stderr, "error: failed to allocate memory\n");
 					return -1;
-				};
+				}
+				result_add(result, line, NULL, prefixlen);
+				free(line);
 			}
-			result_add(result, line);
 		}
 	}
 
@@ -271,6 +277,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 	/* ...and then the meat of the metadata */
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
 		const size_t len = strip_newline(&buf);
+		int prefixlen;
 		char *line;
 
 		if(len == 0 || (config.binaries && !is_binary(buf.line, len))) {
@@ -278,18 +285,21 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 		}
 
 		if(config.quiet) {
+			prefixlen = buf.real_line_size;
 			line = strdup(buf.line);
 			if(line == NULL) {
 				fprintf(stderr, "error: failed to allocate memory\n");
 				return 1;
 			}
 		} else {
-			if(asprintf(&line, "%s/%s %s", repo, pkg->name, buf.line) == -1) {
+			prefixlen = asprintf(&line, "%s/%s", repo, pkg->name);
+			if(prefixlen < 0) {
 				fprintf(stderr, "error: failed to allocate memory\n");
 				return 1;
 			}
 		}
-		result_add(result, line);
+		result_add(result, line, config.quiet ? NULL : buf.line, prefixlen);
+		free(line);
 	}
 
 	return 1;
@@ -475,6 +485,10 @@ static void usage(void)
 			"  -v, --verbose           output more\n\n",
 			stdout);
 	fputs(
+			" Output:\n"
+			"  -w, --raw               disable output justification\n\n",
+			stdout);
+	fputs(
 			" Downloading:\n"
 			"  -z, --compress[=type]   compress downloaded repos\n\n",
 			stdout);
@@ -501,13 +515,14 @@ static int parse_opts(int argc, char **argv)
 		{"search",      no_argument,        0, 's'},
 		{"update",      no_argument,        0, 'u'},
 		{"verbose",     no_argument,        0, 'v'},
+		{"raw",         no_argument,        0, 'w'},
 		{0,0,0,0}
 	};
 
 	/* defaults */
 	config.filefunc = search_metafile;
 
-	while((opt = getopt_long(argc, argv, "bdghilqR:rsuvz", opts, &opt_idx)) != -1) {
+	while((opt = getopt_long(argc, argv, "bdghilqR:rsuvwz", opts, &opt_idx)) != -1) {
 		switch(opt) {
 			case 'b':
 				config.binaries = true;
@@ -555,6 +570,9 @@ static int parse_opts(int argc, char **argv)
 			case 'v':
 				config.verbose = true;
 				break;
+			case 'w':
+				config.raw = true;
+				break;
 			case 'z':
 				if(optarg != NULL) {
 					config.compress = validate_compression(optarg);
@@ -594,7 +612,7 @@ static int search_single_repo(struct repo_t **repos, int repocount, char *search
 		if(strcmp(repos[i]->name, targetrepo) == 0) {
 			struct result_t *result = load_repo(repos[i]);
 			ret = (result->count == 0);
-			result_print(result);
+			result_print(result, config.raw ? 0 : result->max_prefixlen);
 			result_free(result);
 			goto finish;
 		}
@@ -711,10 +729,13 @@ int main(int argc, char *argv[])
 			config.targetrepo) {
 		ret = search_single_repo(repos, repocount, argv[optind]);
 	} else {
+		int prefixlen;
 		results = search_all_repos(repos, repocount);
+
+		prefixlen = config.raw ? 0 : results_get_prefixlen(results, repocount);
 		for(ret = i = 0; i < repocount; i++) {
 			reposfound += repos[i]->filefound;
-			ret += (int)result_print(results[i]);
+			ret += (int)result_print(results[i], prefixlen);
 			result_free(results[i]);
 		}
 

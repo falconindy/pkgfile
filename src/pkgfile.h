@@ -113,6 +113,7 @@ struct config_t {
 	bool icase;
 	bool quiet;
 	bool verbose;
+	bool raw;
 	compresstype_t compress;
 };
 

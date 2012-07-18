@@ -79,6 +79,16 @@ Output more. This applies to the search operation.
 
 =back
 
+=head1 OUTPUT
+
+=over 4
+
+=item B<-w>, B<--raw>
+
+Avoid justification of 2 column output.
+
+=back
+
 =head1 DOWNLOADING
 
 =over 4

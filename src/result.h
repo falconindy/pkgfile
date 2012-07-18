@@ -23,18 +23,25 @@
 #ifndef _PKGFILE_RESULT_H
 #define _PKGFILE_RESULT_H
 
+struct line_t {
+	char *prefix;
+	char *entry;
+};
+
 struct result_t {
 	size_t count;
 	size_t maxcount;
 	char *name;
-	char **list;
+	struct line_t **lines;
+	int max_prefixlen;
 };
 
 struct result_t *result_new(char *name, size_t initial_size);
-int result_add(struct result_t *result, char *name);
+int result_add(struct result_t *result, char *repo, char *entry, int prefixlen);
 void result_free(struct result_t *result);
-size_t result_print(struct result_t *result);
+size_t result_print(struct result_t *result, int prefixlen);
 int result_cmp(const void *r1, const void *r2);
+int results_get_prefixlen(struct result_t **results, int count);
 
 #endif /* _PKGFILE_RESULT_H */
 

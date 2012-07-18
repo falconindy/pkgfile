@@ -25,11 +25,47 @@
 #include "macro.h"
 #include "result.h"
 
+static void line_free(struct line_t *line)
+{
+	if(!line) {
+		return;
+	}
+
+	free(line->prefix);
+	free(line->entry);
+	free(line);
+}
+
+static struct line_t *line_new(char *prefix, char *entry)
+{
+	struct line_t *line;
+
+	CALLOC(line, 1, sizeof(struct line_t), return NULL);
+
+	line->prefix = strdup(prefix);
+	if(line->prefix == NULL) {
+		fprintf(stderr, "error: failed to allocate memory\n");
+		line_free(line);
+		return NULL;
+	}
+
+	if(entry) {
+		line->entry = strdup(entry);
+		if(line->entry == NULL) {
+			fprintf(stderr, "error: failed to allocate memory\n");
+			line_free(line);
+			return NULL;
+		}
+	}
+
+	return line;
+}
+
 static int result_grow(struct result_t *result)
 {
 	size_t newsz = result->maxcount * 3;
-	result->list = realloc(result->list, newsz * sizeof(char *));
-	if(!result->list) {
+	result->lines = realloc(result->lines, newsz * sizeof(struct line_t*));
+	if(!result->lines) {
 		return 1;
 	}
 
@@ -44,8 +80,8 @@ struct result_t *result_new(char *name, size_t initial_size)
 
 	CALLOC(result, 1, sizeof(struct result_t), return NULL);
 
-	result->list = calloc(initial_size, sizeof(char *));
-	if(!result->list) {
+	result->lines = calloc(initial_size, sizeof(struct line_t*));
+	if(!result->lines) {
 		free(result);
 		return NULL;
 	}
@@ -56,9 +92,9 @@ struct result_t *result_new(char *name, size_t initial_size)
 	return result;
 }
 
-int result_add(struct result_t *result, char *name)
+int result_add(struct result_t *result, char *prefix, char *entry, int prefixlen)
 {
-	if(!result || !name) {
+	if(!result || !prefix) {
 		return 1;
 	}
 
@@ -68,7 +104,11 @@ int result_add(struct result_t *result, char *name)
 		}
 	}
 
-	result->list[result->count] = name;
+	if(prefixlen > result->max_prefixlen) {
+		result->max_prefixlen = prefixlen;
+	}
+
+	result->lines[result->count] = line_new(prefix, entry);
 	result->count++;
 
 	return 0;
@@ -82,22 +122,25 @@ void result_free(struct result_t *result)
 		return;
 	}
 
-	if(result->list) {
+	if(result->lines) {
 		for(i = 0; i < result->count; i++) {
-			free(result->list[i]);
+			line_free(result->lines[i]);
 		}
-		free(result->list);
+		free(result->lines);
 	}
 	free(result->name);
 	free(result);
 }
 
-static int stringcmp(const void *s1, const void *s2)
+static int linecmp(const void *l1, const void *l2)
 {
-	return strcmp(*(const char **)s1, *(const char **)s2);
+	const struct line_t *line1 = l1;
+	const struct line_t *line2 = l2;
+
+	return strcmp(line1->prefix, line2->prefix);
 }
 
-size_t result_print(struct result_t *result)
+size_t result_print(struct result_t *result, int prefixlen)
 {
 	size_t i;
 
@@ -105,10 +148,15 @@ size_t result_print(struct result_t *result)
 		return 0;
 	}
 
-	qsort(result->list, result->count, sizeof(char *), stringcmp);
+	qsort(result->lines, result->count, sizeof(char *), linecmp);
 
 	for(i = 0; i < result->count; i++) {
-		printf("%s\n", result->list[i]);
+		if(result->lines[i]->entry) {
+			printf("%-*s\t%s\n", prefixlen, result->lines[i]->prefix,
+					result->lines[i]->entry);
+		} else {
+			printf("%-*s\n", prefixlen, result->lines[i]->prefix);
+		}
 	}
 
 	return result->count;
@@ -120,6 +168,17 @@ int result_cmp(const void *r1, const void *r2)
 	struct result_t *result2 = *(struct result_t **)r2;
 
 	return strcmp(result1->name, result2->name);
+}
+
+int results_get_prefixlen(struct result_t **results, int count)
+{
+	int maxlen = 0, i;
+
+	for(i = 0; i < count; i++) {
+		maxlen = MAX(maxlen, results[i]->max_prefixlen);
+	}
+
+	return maxlen;
 }
 
 /* vim: set ts=2 sw=2 noet: */
