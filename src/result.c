@@ -134,8 +134,8 @@ void result_free(struct result_t *result)
 
 static int linecmp(const void *l1, const void *l2)
 {
-	const struct line_t *line1 = l1;
-	const struct line_t *line2 = l2;
+	const struct line_t *line1 = *(struct line_t **)l1;
+	const struct line_t *line2 = *(struct line_t **)l2;
 
 	return strcmp(line1->prefix, line2->prefix);
 }
