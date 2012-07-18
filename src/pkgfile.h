@@ -31,8 +31,8 @@
 
 #include "result.h"
 
-#define CACHEPATH  "/var/cache/pkgfile"
-#define DBPATH     "/var/lib/pacman"
+#define CACHEPATH  LOCALSTATEDIR "/cache/pkgfile"
+#define DBPATH     LOCALSTATEDIR "/lib/pacman"
 
 #ifndef BUFSIZ
 # define BUFSIZ 8192
