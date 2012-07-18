@@ -20,8 +20,7 @@
  * THE SOFTWARE.
  */
 
-#ifndef _PKGFILE_REPO_H
-#define _PKGFILE_REPO_H
+#pragma once
 
 #include <limits.h>
 #include <sys/time.h>
@@ -68,7 +67,5 @@ struct repo_t {
 struct repo_t *repo_new(const char *reponame);
 void repo_free(struct repo_t *repo);
 int repo_add_server(struct repo_t *repo, const char *server);
-
-#endif /* _PKGFILE_REPO_H */
 
 /* vim: set ts=2 sw=2 noet: */

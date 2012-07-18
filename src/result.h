@@ -20,8 +20,7 @@
  * THE SOFTWARE.
  */
 
-#ifndef _PKGFILE_RESULT_H
-#define _PKGFILE_RESULT_H
+#pragma once
 
 struct line_t {
 	char *prefix;
@@ -42,7 +41,5 @@ void result_free(struct result_t *result);
 size_t result_print(struct result_t *result, int prefixlen, char eol);
 int result_cmp(const void *r1, const void *r2);
 int results_get_prefixlen(struct result_t **results, int count);
-
-#endif /* _PKGFILE_RESULT_H */
 
 /* vim: set ts=2 sw=2 noet: */

@@ -20,8 +20,7 @@
  * THE SOFTWARE.
  */
 
-#ifndef _PKGFILE_UTIL_H
-#define _PKGFILE_UTIL_H
+#pragma once
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,7 +48,5 @@
                         _a > _b ? _a : _b;      \
                 })
 #endif
-
-#endif /* _PKGFILE_UTIL_H */
 
 /* vim: set ts=2 sw=2 noet: */

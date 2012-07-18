@@ -20,8 +20,7 @@
  * THE SOFTWARE.
  */
 
-#ifndef _PKGFILE_UPDATE_H
-#define _PKGFILE_UPDATE_H
+#pragma once
 
 #define PACMANCONFIG "/etc/pacman.conf"
 
@@ -29,7 +28,5 @@
 
 struct repo_t **find_active_repos(const char *filename, int *repocount);
 int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config);
-
-#endif /* _PKGFILE_UPDATE_H */
 
 /* vim: set ts=2 sw=2 noet: */

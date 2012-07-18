@@ -20,8 +20,7 @@
  * THE SOFTWARE.
  */
 
-#ifndef _PKGFILE_H
-#define _PKGFILE_H
+#pragma once
 
 #include <stdbool.h>
 
@@ -117,7 +116,5 @@ struct config_t {
 	char eol;
 	compresstype_t compress;
 };
-
-#endif /* _PKGFILE_H */
 
 /* vim: set ts=2 sw=2 noet: */
