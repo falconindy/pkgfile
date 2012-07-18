@@ -76,6 +76,8 @@ pkgfile.1: README.pod
 install-data-local:
 	$(MKDIR_P) $(DESTDIR)$(prefix)/share/bash-completion/completions
 	$(INSTALL_DATA) $(top_srcdir)/extra/bash-completion $(DESTDIR)$(bashcompletiondir)/pkgfile
+	$(MKDIR_P) $(DESTDIR)$(localstatedir)/cache/pkgfile
+	chmod 775 $(DESTDIR)$(localstatedir)/cache/pkgfile
 
 uninstall-local:
 	$(RM) $(DESTDIR)$(bashcompletiondir)/pkgfile
