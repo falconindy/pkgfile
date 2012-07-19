@@ -5,6 +5,7 @@ CLEANFILES = \
 	$(dist_man_MANS)
 
 bashcompletiondir=$(datarootdir)/bash-completion/completions
+zshcompletiondir=$(datarootdir)/zsh/site-functions
 shelldatadir = $(datarootdir)/doc/pkgfile
 
 shelldata_DATA = \
@@ -14,6 +15,7 @@ shelldata_DATA = \
 EXTRA_DIST = \
 	README.pod \
 	extra/bash-completion \
+	extra/zsh-completion \
 	extra/command-not-found.bash \
 	extra/command-not-found.zsh
 
@@ -74,10 +76,13 @@ pkgfile.1: README.pod
 		--release="pkgfile $(REAL_PACKAGE_VERSION)" $< > $@
 
 install-data-local:
-	$(MKDIR_P) $(DESTDIR)$(prefix)/share/bash-completion/completions
+	$(MKDIR_P) $(DESTDIR)$(bashcompletiondir)
 	$(INSTALL_DATA) $(top_srcdir)/extra/bash-completion $(DESTDIR)$(bashcompletiondir)/pkgfile
+	$(MKDIR_P) $(DESTDIR)$(zshcompletiondir)
+	$(INSTALL_DATA) $(top_srcdir)/extra/zsh-completion $(DESTDIR)$(zshcompletiondir)/_pkgfile
 	$(MKDIR_P) $(DESTDIR)$(localstatedir)/cache/pkgfile
 	chmod 775 $(DESTDIR)$(localstatedir)/cache/pkgfile
 
 uninstall-local:
 	$(RM) $(DESTDIR)$(bashcompletiondir)/pkgfile
+	$(RM) $(DESTDIR)$(zshcompletiondir)/_pkgfile
