@@ -113,15 +113,16 @@ static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 		}
 
 		if(eol) {
-			size_t len = b->real_line_size = (size_t)(eol - b->block_offset);
+			size_t len = (size_t)(eol - b->block_offset);
 			memcpy(b->line_offset, b->block_offset, len);
 			b->line_offset[len] = '\0';
 			b->block_offset = eol + 1;
+			b->real_line_size = b->line_offset + len - b->line;
 			/* this is the main return point; from here you can read b->line */
 			return ARCHIVE_OK;
 		} else {
 			/* we've looked through the whole block but no newline, copy it */
-			size_t len = b->real_line_size = (size_t)(b->block + b->block_size - b->block_offset);
+			size_t len = (size_t)(b->block + b->block_size - b->block_offset);
 			memcpy(b->line_offset, b->block_offset, len);
 			b->line_offset += len;
 			b->block_offset = b->block + b->block_size;
@@ -129,6 +130,7 @@ static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 			 * returned on next call */
 			if(len == 0) {
 				b->line_offset[0] = '\0';
+				b->real_line_size = b->line_offset - b->line;
 				return ARCHIVE_OK;
 			}
 		}
