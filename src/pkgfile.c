@@ -480,7 +480,7 @@ static void usage(void)
 			"  -g, --glob              enable matching with glob characters\n"
 			"  -i, --ignorecase        use case insensitive matching\n"
 			"  -R, --repo REPO         search a singular repo\n"
-			"  -r, --regex             enable matching with pcre\n\n",
+			"  -r, --regex             enable matching with regular expressions\n\n",
 			stdout);
 	fputs(
 			" Output:\n"
