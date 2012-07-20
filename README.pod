@@ -77,11 +77,11 @@ Delimit output with null bytes rather than newline characters.
 
 =item B<-q>, B<--quiet>
 
-Output less when using the B<--list> operation.
+Output less. This applies to the B<--list> operation.
 
 =item B<-v>, B<--verbose>
 
-Output more. This applies to the search operation.
+Output more. This applies to the B<--search> operation.
 
 =item B<-w>, B<--raw>
 
