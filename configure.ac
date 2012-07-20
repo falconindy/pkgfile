@@ -28,6 +28,12 @@ AC_ARG_ENABLE(git-version,
 		[enable use of git version in version string if available]),
 	[wantgitver=$enableval], [wantgitver=check])
 
+AC_ARG_WITH(cachedir,
+	AS_HELP_STRING([--with-cachedir=path],
+		[location of .files cachedir]),
+	[cachepath=$withval], [cachepath=/var/cache/pkgfile])
+AC_DEFINE_UNQUOTED([CACHEPATH], "$cachepath", [Path to .files cachedir])
+
 # Enable or disable use of git version in pacman version string
 AC_MSG_CHECKING(whether to use git version if available)
 if test "x$wantgitver" != "xno" ; then
@@ -103,8 +109,9 @@ AC_CONFIG_FILES([
 
 AC_OUTPUT
 AC_MSG_RESULT([
-	prefix:                 ${prefix}
-	datarootdir:            ${datarootdir}
+	prefix:                 $(eval echo ${prefix})
+	datarootdir:            $(eval echo ${datarootdir})
+	cache directory:        $(eval echo ${cachepath})
 
 	using git version:      ${usegitver}
 
