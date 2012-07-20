@@ -430,16 +430,14 @@ cleanup:
 static int compile_pcre_expr(struct pcre_data *re, const char *preg, int flags)
 {
 	const char *err;
-	char *anchored = NULL;
 	int err_offset;
 
 	re->re = pcre_compile(preg, flags, &err, &err_offset, NULL);
-	free(anchored);
-
 	if(!re->re) {
 		fprintf(stderr, "error: failed to compile regex at char %d: %s\n", err_offset, err);
 		return 1;
 	}
+
 	re->re_extra = pcre_study(re->re, PCRE_STUDY_JIT_COMPILE, &err);
 	if(err) {
 		fprintf(stderr, "error: failed to study regex: %s\n", err);
