@@ -230,9 +230,8 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 
 		if(!found && config.filterfunc(&config.filter, buf.line, (int)len, config.icase) == 0) {
 			char *line;
-			int prefixlen;
 			if(config.verbose) {
-				prefixlen = asprintf(&line, "%s/%s %s", repo, pkg->name, pkg->version);
+				int prefixlen = asprintf(&line, "%s/%s %s", repo, pkg->name, pkg->version);
 				if(prefixlen < 0) {
 					fprintf(stderr, "error: failed to allocate memory\n");
 					return -1;
@@ -241,12 +240,11 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 				free(line);
 			} else {
 				found = 1;
-				prefixlen = asprintf(&line, "%s/%s", repo, pkg->name);
-				if(prefixlen < 0) {
+				if(asprintf(&line, "%s/%s", repo, pkg->name) < 0) {
 					fprintf(stderr, "error: failed to allocate memory\n");
 					return -1;
 				}
-				result_add(result, line, NULL, prefixlen);
+				result_add(result, line, NULL, 0);
 				free(line);
 			}
 		}
@@ -279,7 +277,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 	/* ...and then the meat of the metadata */
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
 		const size_t len = strip_newline(&buf);
-		int prefixlen;
+		int prefixlen = 0;
 		char *line;
 
 		if(len == 0 || (config.binaries && !is_binary(buf.line, len))) {
@@ -287,7 +285,6 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 		}
 
 		if(config.quiet) {
-			prefixlen = buf.real_line_size;
 			line = strdup(buf.line);
 			if(line == NULL) {
 				fprintf(stderr, "error: failed to allocate memory\n");
