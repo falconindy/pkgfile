@@ -140,24 +140,36 @@ static int linecmp(const void *l1, const void *l2)
 	return strcmp(line1->prefix, line2->prefix);
 }
 
-size_t result_print(struct result_t *result, int prefixlen, char eol)
+static void result_print_long(struct result_t *result, int prefixlen, char eol)
 {
 	size_t i;
 
+	for(i = 0; i < result->count; i++) {
+		printf("%-*s\t%s%c", prefixlen, result->lines[i]->prefix,
+				result->lines[i]->entry, eol);
+	}
+}
+
+static void result_print_short(struct result_t *result, char eol)
+{
+	size_t i;
+
+	for(i = 0; i < result->count; i++) {
+		printf("%s%c", result->lines[i]->prefix, eol);
+	}
+}
+
+size_t result_print(struct result_t *result, int prefixlen, char eol)
+{
 	if(!result->count) {
 		return 0;
 	}
 
 	qsort(result->lines, result->count, sizeof(char *), linecmp);
 
-	for(i = 0; i < result->count; i++) {
-		if(result->lines[i]->entry) {
-			printf("%-*s\t%s%c", prefixlen, result->lines[i]->prefix,
-					result->lines[i]->entry, eol);
-		} else {
-			printf("%-*s%c", 0, result->lines[i]->prefix, eol);
-		}
-	}
+	prefixlen == 0 ?
+			result_print_short(result, eol) :
+			result_print_long(result, prefixlen, eol);
 
 	return result->count;
 }
