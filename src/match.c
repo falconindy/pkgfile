@@ -55,11 +55,12 @@ int match_exact(const filterpattern_t *pattern, const char *line, int len, int f
 {
 	const char *ptr = line, *match = pattern->glob;
 
-	const char *slash =
-			len == -1 ? strrchr(line, '/') : memrchr(line, '/', len - 1);
-
-	if(slash) {
-		ptr = slash + 1;
+	/* if pattern doesn't contain a slash, match on basenames only */
+	if(strchr(match, '/') == NULL) {
+		const char *slash = memrchr(line, '/', len - 1);
+		if(slash != NULL) {
+			ptr = slash + 1;
+		}
 	}
 
 	return flags ? strcasecmp(match, ptr) : strcmp(match, ptr);
