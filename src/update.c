@@ -303,6 +303,15 @@ static int repack_repo_data(const struct repo_t *repo)
 	struct archive *tarball, *cpio;
 	struct archive_entry *ae;
 
+	static int (*write_add_filter[])(struct archive *) = {
+		[COMPRESS_NONE] = NULL,
+		[COMPRESS_GZIP] = archive_write_add_filter_gzip,
+		[COMPRESS_BZIP2] = archive_write_add_filter_bzip2,
+		[COMPRESS_LZMA] = archive_write_add_filter_lzma,
+		[COMPRESS_XZ] = archive_write_add_filter_xz,
+		[COMPRESS_INVALID] = NULL,
+	};
+
 	/* generally, repo files are gzip compressed, but there's no guarantee of
 	 * this. in order to be compression-agnostic, use libarchive's reader/writer
 	 * methods. this also gives us an opportunity to rewrite the archive as CPIO,
@@ -329,22 +338,8 @@ static int repack_repo_data(const struct repo_t *repo)
 		goto done;
 	}
 
-	switch(repo->config->compress) {
-		case COMPRESS_INVALID:
-		case COMPRESS_NONE:
-			break;
-		case COMPRESS_GZIP:
-			archive_write_add_filter_gzip(cpio);
-			break;
-		case COMPRESS_BZIP2:
-			archive_write_add_filter_bzip2(cpio);
-			break;
-		case COMPRESS_LZMA:
-			archive_write_add_filter_lzma(cpio);
-			break;
-		case COMPRESS_XZ:
-			archive_write_add_filter_xz(cpio);
-			break;
+	if(write_add_filter[repo->config->compress]) {
+		write_add_filter[repo->config->compress](cpio);
 	}
 
 	archive_write_set_format_cpio(cpio);
