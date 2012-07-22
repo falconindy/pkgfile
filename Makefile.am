@@ -6,7 +6,7 @@ CLEANFILES = \
 
 bashcompletiondir=$(datarootdir)/bash-completion/completions
 zshcompletiondir=$(datarootdir)/zsh/site-functions
-shelldatadir = $(datarootdir)/doc/pkgfile
+shelldatadir=$(datarootdir)/doc/pkgfile
 
 shelldata_DATA = \
 	extra/command-not-found.bash \
