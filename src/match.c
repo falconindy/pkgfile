@@ -37,7 +37,9 @@ int match_regex(const filterpattern_t *pattern, const char *line, int len,
 		int UNUSED flags)
 {
 	const struct pcre_data *re = &pattern->re;
-	return pcre_exec(re->re, re->re_extra, line, len, 0, 0, NULL, 0) < 0;
+
+	return pcre_exec(re->re, re->re_extra, line, len, 0,
+			PCRE_NO_UTF16_CHECK, NULL, 0) < 0;
 }
 
 void free_regex(filterpattern_t *pattern)
@@ -46,7 +48,8 @@ void free_regex(filterpattern_t *pattern)
 	pcre_free(pattern->re.re_extra);
 }
 
-int match_exact(const filterpattern_t *pattern, const char *line, int len, int flags)
+int match_exact(const filterpattern_t *pattern, const char *line, int len,
+		int flags)
 {
 	const char *ptr = line, *match = pattern->glob;
 
