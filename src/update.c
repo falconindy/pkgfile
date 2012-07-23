@@ -498,11 +498,11 @@ static int print_rate(double xfer, const char *xfer_label,
 {
 	/* We will show 1.62M/s, 11.6M/s, but 116K/s and 1116K/s */
 	if(rate < 9.995) {
-		return printf("%6.1f %3s  %4.2f%c/s", xfer, xfer_label, rate, rate_label);
+		return printf("%8.1f %3s  %4.2f%c/s", xfer, xfer_label, rate, rate_label);
 	} else if(rate < 99.95) {
-		return printf("%6.1f %3s  %4.1f%c/s", xfer, xfer_label, rate, rate_label);
+		return printf("%8.1f %3s  %4.1f%c/s", xfer, xfer_label, rate, rate_label);
 	} else {
-		return printf("%6.1f %3s  %4.f%c/s", xfer, xfer_label, rate, rate_label);
+		return printf("%8.1f %3s  %4.f%c/s", xfer, xfer_label, rate, rate_label);
 	}
 }
 
