@@ -247,9 +247,10 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 		return NULL;
 	}
 
-	while(fgets(line, 4096, fp)) {
+	while(fgets(line, sizeof(line), fp)) {
 		size_t len;
 
+		/* remove comments */
 		ptr = strchr(line, '#');
 		if(ptr) {
 			*ptr = '\0';
@@ -260,12 +261,12 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 			continue;
 		}
 
+		/* found a section header */
 		if(line[0] == '[' && line[len - 1] == ']') {
 			free(section);
 			section = strndup(&line[1], len - 2);
-			if(strcmp(section, "options") == 0) {
+			if((len - 2) == 7 && memcmp(section, "options", 7) == 0) {
 				in_options = 1;
-				continue;
 			} else {
 				in_options = 0;
 				active_repos = realloc(active_repos, sizeof(struct repo_t *) * (*repocount + 2));
@@ -274,6 +275,7 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 			}
 		}
 
+		/* ignore the contents of the [options] section */
 		if(in_options) {
 			continue;
 		}
