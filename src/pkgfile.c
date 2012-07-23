@@ -336,7 +336,7 @@ static void *load_repo(void *repo_obj)
 	void *repodata = MAP_FAILED;
 
 	repo = repo_obj;
-	snprintf(repofile, sizeof(repofile), "%s.files", repo->name);
+	snprintf(repofile, sizeof(repofile), CACHEPATH "/%s.files", repo->name);
 	result = result_new(repo->name, 50);
 
 	a = archive_read_new();
@@ -691,11 +691,6 @@ int main(int argc, char *argv[])
 
 	if(mkdir(CACHEPATH, 0755) != 0 && errno != EEXIST) {
 		fprintf(stderr, "error: failed to create cachedir: " CACHEPATH ": %s\n", strerror(errno));
-		return 2;
-	}
-
-	if(chdir(CACHEPATH)) {
-		fprintf(stderr, "error: failed to chdir to " CACHEPATH ": %s\n", strerror(errno));
 		return 2;
 	}
 
