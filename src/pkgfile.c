@@ -329,7 +329,7 @@ static void *load_repo(void *repo_obj)
 	char repofile[FILENAME_MAX];
 	struct archive *a;
 	struct archive_entry *e;
-	struct pkg_t *pkg;
+	struct pkg_t pkg;
 	struct repo_t *repo;
 	struct result_t *result;
 	struct stat st;
@@ -338,7 +338,7 @@ static void *load_repo(void *repo_obj)
 	repo = repo_obj;
 	snprintf(repofile, sizeof(repofile), "%s.files", repo->name);
 	result = result_new(repo->name, 50);
-	CALLOC(pkg, 1, sizeof(struct pkg_t), return (void *)result);
+	memset(&pkg, 0, sizeof(struct pkg_t));
 
 	a = archive_read_new();
 	archive_read_support_format_all(a);
@@ -385,16 +385,16 @@ static void *load_repo(void *repo_obj)
 			continue;
 		}
 
-		if(parse_pkgname(pkg, entryname, len) != 0) {
+		if(parse_pkgname(&pkg, entryname, len) != 0) {
 			fprintf(stderr, "error parsing pkgname from: %s\n", entryname);
 			continue;
 		}
 
-		r = config.filefunc(repo->name, pkg, a, result);
+		r = config.filefunc(repo->name, &pkg, a, result);
 
 		/* clean out the struct, but don't get rid of it entirely */
-		free(pkg->name);
-		free(pkg->version);
+		free(pkg.name);
+		free(pkg.version);
 
 		switch(r) {
 			case -1:
@@ -412,7 +412,6 @@ done:
 	archive_read_close(a);
 
 cleanup:
-	free(pkg);
 	archive_read_finish(a);
 	if(fd >= 0) {
 		close(fd);
