@@ -338,7 +338,6 @@ static void *load_repo(void *repo_obj)
 	repo = repo_obj;
 	snprintf(repofile, sizeof(repofile), "%s.files", repo->name);
 	result = result_new(repo->name, 50);
-	memset(&pkg, 0, sizeof(struct pkg_t));
 
 	a = archive_read_new();
 	archive_read_support_format_all(a);
