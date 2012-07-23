@@ -596,7 +596,7 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 	int active_handles;
 
 	curl_multi_perform(multi, &active_handles);
-	while(active_handles > 0) {
+	do {
 		int rc, maxfd = -1;
 		long curl_timeout;
 		struct timeval timeout = { 1, 0 };
@@ -644,7 +644,7 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 				break;
 			}
 		}
-	}
+	} while(active_handles > 0);
 
 	return 0;
 }
