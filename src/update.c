@@ -405,7 +405,7 @@ static int repack_repo_data_async(struct repo_t *repo)
 	repo->worker = fork();
 
 	if(repo->worker < 0) {
-		perror("failed to fork new process");
+		perror("warning: failed to fork new process");
 
 		/* don't just give up, try to repack the repo synchronously */
 		return repack_repo_data(repo);
