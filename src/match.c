@@ -37,11 +37,6 @@ int match_regex(const filterpattern_t *pattern, const char *line, int len,
 		int UNUSED flags)
 {
 	const struct pcre_data *re = &pattern->re;
-
-	if(len == -1) {
-		len = (int)strlen(line);
-	}
-
 	return pcre_exec(re->re, re->re_extra, line, len, 0, 0, NULL, 0) < 0;
 }
 
