@@ -43,8 +43,7 @@ AM_LDFLAGS = \
 
 AM_CPPFLAGS = \
 	-imacros $(top_builddir)/config.h \
-	-I${top_srcdir}/src \
-	-DLOCALSTATEDIR="\"$(localstatedir)"\"
+	-I${top_srcdir}/src
 
 pkgfile_SOURCES = \
 	src/match.c src/match.h \
