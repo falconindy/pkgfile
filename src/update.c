@@ -687,6 +687,11 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 
 	curl_global_init(CURL_GLOBAL_ALL);
 	cmulti = curl_multi_init();
+	if(cmulti == NULL) {
+		/* this can only fail due to out an OOM condition */
+		fprintf(stderr, "failed to initialize curl: %s\n", strerror(ENOMEM));
+		return 1;
+	}
 
 	uname(&un);
 	force = (config->doupdate > 1);
