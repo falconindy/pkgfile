@@ -683,6 +683,8 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 		return 1;
 	}
 
+	printf(":: Updating %d repos...\n", repocount);
+
 	curl_global_init(CURL_GLOBAL_ALL);
 	cmulti = curl_multi_init();
 
