@@ -41,11 +41,9 @@ if test "x$wantgitver" != "xno" ; then
 	AC_CHECK_PROGS([GIT], [git])
 	AC_CHECK_FILE([.git/], hasgitdir=yes)
 	if test $GIT -a "x$hasgitdir" = "xyes"; then
-		AC_MSG_RESULT([yes])
 		usegitver=yes
 		AC_DEFINE([USE_GIT_VERSION], , [Use GIT version in version string])
 	else
-		AC_MSG_RESULT([no, git or .git dir missing])
 		usegitver=no
 	fi
 else
