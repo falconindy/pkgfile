@@ -655,22 +655,39 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 }
 
 
-static void wait_on_children(struct repo_t **repos, int repocount)
+static int reap_children(struct repo_t **repos, int repocount)
 {
-	int i, running = 0;
+	int i, r = 0, running = 0;
 
-	/* immediately reap active children, but don't yet wait on stragglers */
+	/* immediately reap zombies, but don't wait on still active children */
 	for(i = 0; i < repocount; i++) {
-		if(repos[i]->worker > 0 && waitpid(repos[i]->worker, NULL, WNOHANG) <= 0) {
-			running++;
+		int stat_loc;
+		if(repos[i]->worker > 0) {
+			if(wait4(repos[i]->worker, &stat_loc, WNOHANG, NULL) == 0) {
+				running++;
+			} else {
+				/* exited, grab the status */
+				r += WEXITSTATUS(stat_loc);
+			}
 		}
 	}
 
 	if(running > 0) {
+		int stat_loc;
 		printf(":: waiting on %d process%s to finish repacking repos...\n",
 				running, running == 1 ? "" : "es");
-		while(wait(NULL) == 0 || errno != ECHILD);
+		for(;;) {
+			pid_t pid = wait4(-1, &stat_loc, 0, NULL);
+			if(pid < 0 && errno == ECHILD) {
+				/* no more children */
+				break;
+			} else if(pid > 0) {
+				r += WEXITSTATUS(stat_loc);
+			}
+		}
 	}
+
+	return r;
 }
 
 int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config)
@@ -741,7 +758,9 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 		print_total_dl_stats(xfer_count, duration, total_xfer);
 	}
 
-	wait_on_children(repos, repocount);
+	if(reap_children(repos, repocount) != 0) {
+		ret = 1;
+	}
 
 	curl_multi_cleanup(cmulti);
 	curl_global_cleanup();
