@@ -495,6 +495,13 @@ static double timediff(const struct timeval *start, const struct timeval *end)
 	return e_sec - s_sec;
 }
 
+static double timediff_since(const struct timeval *since)
+{
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	return timediff(since, &now);
+}
+
 static int print_rate(double xfer, const char *xfer_label,
 		double rate, const char rate_label)
 {
@@ -512,11 +519,9 @@ static void print_download_success(struct repo_t *repo, int remaining)
 {
 	const char *rate_label, *xfered_label;
 	double rate, xfered_human;
-	struct timeval now;
 	int width;
 
-	gettimeofday(&now, NULL);
-	rate = repo->buflen / timediff(&repo->dl_time_start, &now);
+	rate = repo->buflen / timediff_since(&repo->dl_time_start);
 	xfered_human = humanize_size(repo->buflen, '\0', -1, &xfered_label);
 
 	printf("  download complete: %-20s [", repo->name);
@@ -673,7 +678,7 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 	int i, r, force, xfer_count = 0, ret = 0;
 	struct utsname un;
 	CURLM *cmulti;
-	struct timeval t_start, t_end;
+	struct timeval t_start;
 	off_t total_xfer = 0;
 	double duration;
 
@@ -709,8 +714,7 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 
 	gettimeofday(&t_start, NULL);
 	hit_multi_handle_until_candy_comes_out(cmulti);
-	gettimeofday(&t_end, NULL);
-	duration = timediff(&t_start, &t_end);
+	duration = timediff_since(&t_start);
 
 	/* remove handles, aggregate results */
 	for(i = 0; i < repocount; i++) {
