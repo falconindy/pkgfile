@@ -396,15 +396,15 @@ static void *load_repo(void *repo_obj)
 		free(pkg.version);
 
 		switch(r) {
-			case -1:
-				/* error */
-				/* FALLTHROUGH */
-			case 0:
-				/* done */
-				goto done;
-			case 1:
-				/* continue */
-				break;
+		case -1:
+			/* error */
+			/* FALLTHROUGH */
+		case 0:
+			/* done */
+			goto done;
+		case 1:
+			/* continue */
+			break;
 		}
 	}
 done:
@@ -520,73 +520,77 @@ static int parse_opts(int argc, char **argv)
 	config.filefunc = search_metafile;
 	config.eol = '\n';
 
-	while((opt = getopt_long(argc, argv, "0bdghilqR:rsuvwz", opts, &opt_idx)) != -1) {
+	for(;;) {
+		opt = getopt_long(argc, argv, "0bdghilqR:rsuvwz", opts, &opt_idx);
+		if(opt < 0) {
+			break;
+		}
 		switch(opt) {
-			case '0':
-				config.eol = '\0';
-				break;
-			case 'b':
-				config.binaries = true;
-				break;
-			case 'd':
-				config.directories = true;
-				break;
-			case 'g':
-				if(config.filterby != FILTER_EXACT) {
-					fprintf(stderr, "error: --glob cannot be used with --%s option\n",
-							filtermethods[config.filterby]);
-					return 1;
-				}
-				config.filterby = FILTER_GLOB;
-				break;
-			case 'h':
-				usage();
-				exit(EXIT_SUCCESS);
-			case 'i':
-				config.icase = true;
-				break;
-			case 'l':
-				config.filefunc = list_metafile;
-				break;
-			case 'q':
-				config.quiet = true;
-				break;
-			case 'R':
-				config.targetrepo = optarg;
-				break;
-			case 'r':
-				if(config.filterby != FILTER_EXACT) {
-					fprintf(stderr, "error: --regex cannot be used with --%s option\n",
-							filtermethods[config.filterby]);
-					return 1;
-				}
-				config.filterby = FILTER_REGEX;
-				break;
-			case 's':
-				config.filefunc = search_metafile;
-				break;
-			case 'u':
-				config.doupdate++;
-				break;
-			case 'v':
-				config.verbose = true;
-				break;
-			case 'w':
-				config.raw = true;
-				break;
-			case 'z':
-				if(optarg != NULL) {
-					config.compress = validate_compression(optarg);
-					if(config.compress == COMPRESS_INVALID) {
-						fprintf(stderr, "error: invalid compression option %s\n", optarg);
-						return 1;
-					}
-				} else {
-					config.compress = COMPRESS_GZIP;
-				}
-				break;
-			default:
+		case '0':
+			config.eol = '\0';
+			break;
+		case 'b':
+			config.binaries = true;
+			break;
+		case 'd':
+			config.directories = true;
+			break;
+		case 'g':
+			if(config.filterby != FILTER_EXACT) {
+				fprintf(stderr, "error: --glob cannot be used with --%s option\n",
+						filtermethods[config.filterby]);
 				return 1;
+			}
+			config.filterby = FILTER_GLOB;
+			break;
+		case 'h':
+			usage();
+			exit(EXIT_SUCCESS);
+		case 'i':
+			config.icase = true;
+			break;
+		case 'l':
+			config.filefunc = list_metafile;
+			break;
+		case 'q':
+			config.quiet = true;
+			break;
+		case 'R':
+			config.targetrepo = optarg;
+			break;
+		case 'r':
+			if(config.filterby != FILTER_EXACT) {
+				fprintf(stderr, "error: --regex cannot be used with --%s option\n",
+						filtermethods[config.filterby]);
+				return 1;
+			}
+			config.filterby = FILTER_REGEX;
+			break;
+		case 's':
+			config.filefunc = search_metafile;
+			break;
+		case 'u':
+			config.doupdate++;
+			break;
+		case 'v':
+			config.verbose = true;
+			break;
+		case 'w':
+			config.raw = true;
+			break;
+		case 'z':
+			if(optarg != NULL) {
+				config.compress = validate_compression(optarg);
+				if(config.compress == COMPRESS_INVALID) {
+					fprintf(stderr, "error: invalid compression option %s\n", optarg);
+					return 1;
+				}
+			} else {
+				config.compress = COMPRESS_GZIP;
+			}
+			break;
+		default:
+			return 1;
 		}
 	}
 
@@ -657,23 +661,23 @@ static struct result_t **search_all_repos(struct repo_t **repos, int repocount)
 static int filter_setup(char *arg)
 {
 	switch(config.filterby) {
-		case FILTER_EXACT:
-			config.filter.glob = arg;
-			config.filterfunc = match_exact;
-			break;
-		case FILTER_GLOB:
-			config.icase *= FNM_CASEFOLD;
-			config.filter.glob = arg;
-			config.filterfunc = match_glob;
-			break;
-		case FILTER_REGEX:
-			config.icase *= PCRE_CASELESS;
-			config.filterfunc = match_regex;
-			config.filterfree = free_regex;
-			if(compile_pcre_expr(&config.filter.re, arg, config.icase) != 0) {
-				return 1;
-			}
-			break;
+	case FILTER_EXACT:
+		config.filter.glob = arg;
+		config.filterfunc = match_exact;
+		break;
+	case FILTER_GLOB:
+		config.icase *= FNM_CASEFOLD;
+		config.filter.glob = arg;
+		config.filterfunc = match_glob;
+		break;
+	case FILTER_REGEX:
+		config.icase *= PCRE_CASELESS;
+		config.filterfunc = match_regex;
+		config.filterfree = free_regex;
+		if(compile_pcre_expr(&config.filter.re, arg, config.icase) != 0) {
+			return 1;
+		}
+		break;
 	}
 
 	return 0;
