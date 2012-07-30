@@ -496,8 +496,9 @@ static void usage(void)
 
 static int parse_opts(int argc, char **argv)
 {
-	int opt, opt_idx;
-	static const struct option opts[] = {
+	int opt;
+	static const char *shortopts = "0bdghilqR:rsuvwz::";
+	static const struct option longopts[] = {
 		{"binaries",    no_argument,        0, 'b'},
 		{"compress",    optional_argument,  0, 'z'},
 		{"directories", no_argument,        0, 'd'},
@@ -521,7 +522,7 @@ static int parse_opts(int argc, char **argv)
 	config.eol = '\n';
 
 	for(;;) {
-		opt = getopt_long(argc, argv, "0bdghilqR:rsuvwz", opts, &opt_idx);
+		opt = getopt_long(argc, argv, shortopts, longopts, NULL);
 		if(opt < 0) {
 			break;
 		}
