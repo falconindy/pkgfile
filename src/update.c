@@ -539,14 +539,16 @@ static void print_total_dl_stats(int count, double duration, off_t total_xfer)
 {
 	const char *rate_label, *xfered_label;
 	double rate, xfered_human, rate_human;
+	int width;
 
 	rate = total_xfer / duration;
 	xfered_human = humanize_size(total_xfer, '\0', -1, &xfered_label);
 	rate_human = humanize_size(rate, '\0', -1, &rate_label);
 
-	printf(":: download complete in %.2fs [%2d files", duration, count);
+	width = printf(":: download complete in %.2fs", duration);
+	printf("%*s<", 42 - width, "");
 	print_rate(xfered_human, xfered_label, rate_human, rate_label[0]);
-	fputs(" ]\n", stdout);
+	printf(" %2d files    >\n", count);
 }
 
 static int read_multi_msg(CURLM *multi, int remaining)
