@@ -716,7 +716,7 @@ int main(int argc, char *argv[])
 
 	/* sanity check */
 	if(config.filefunc == list_metafile && config.filterby != FILTER_EXACT) {
-		fprintf(stderr, "error: --regex and --glob are not allowed with --list\n");
+		fprintf(stderr, "error: --regex and --glob cannot be used with --list\n");
 		goto cleanup;
 	}
 
