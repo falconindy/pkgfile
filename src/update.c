@@ -337,7 +337,7 @@ static int repack_repo_data(const struct repo_t *repo)
 	if(ret != ARCHIVE_OK) {
 		fprintf(stderr, "failed to create archive reader for %s: %s\n",
 				repo->name, archive_error_string(tarball));
-		goto done;
+		goto open_error;
 	}
 
 	if(write_add_filter[repo->config->compress]) {
@@ -349,18 +349,17 @@ static int repack_repo_data(const struct repo_t *repo)
 	if(ret != ARCHIVE_OK) {
 		fprintf(stderr, "failed to open file for writing: %s: %s\n",
 				tmpfile, archive_error_string(cpio));
-		goto done;
+		goto open_error;
 	}
 
 	while(archive_read_next_header(tarball, &ae) == ARCHIVE_OK) {
-		unsigned char buf[BUFSIZ];
-		int done = 0;
 		if(archive_write_header(cpio, ae) != ARCHIVE_OK) {
 			fprintf(stderr, "failed to write cpio header: %s\n",
 					archive_error_string(cpio));
-			break;
+			goto write_error;
 		}
 		for(;;) {
+			unsigned char buf[BUFSIZ];
 			int bytes_r = archive_read_data(tarball, buf, sizeof(buf));
 			if(bytes_r == 0) {
 				break;
@@ -369,20 +368,18 @@ static int repack_repo_data(const struct repo_t *repo)
 			if(archive_write_data(cpio, buf, bytes_r) != bytes_r) {
 				fprintf(stderr, "failed to write %d bytes to new files db: %s\n",
 						bytes_r, archive_error_string(cpio));
-				done = 1;
-				break;
+				goto write_error;
 			}
-		}
-		if(done) {
-			break;
 		}
 	}
 
-	archive_write_close(cpio);
-	archive_read_close(tarball);
 	ret = 0;
 
-done:
+write_error:
+	archive_write_close(cpio);
+	archive_read_close(tarball);
+
+open_error:
 	archive_write_free(cpio);
 	archive_read_free(tarball);
 
