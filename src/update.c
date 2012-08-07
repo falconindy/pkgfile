@@ -335,7 +335,7 @@ static int repack_repo_data(const struct repo_t *repo)
 	archive_read_support_compression_all(tarball);
 	ret = archive_read_open_memory(tarball, repo->data, repo->buflen);
 	if(ret != ARCHIVE_OK) {
-		fprintf(stderr, "failed to create archive reader for %s: %s\n",
+		fprintf(stderr, "error: failed to create archive reader for %s: %s\n",
 				repo->name, archive_error_string(tarball));
 		goto open_error;
 	}
@@ -347,15 +347,15 @@ static int repack_repo_data(const struct repo_t *repo)
 	archive_write_set_format_cpio(cpio);
 	ret = archive_write_open_filename(cpio, tmpfile);
 	if(ret != ARCHIVE_OK) {
-		fprintf(stderr, "failed to open file for writing: %s: %s\n",
+		fprintf(stderr, "error: failed to open file for writing: %s: %s\n",
 				tmpfile, archive_error_string(cpio));
 		goto open_error;
 	}
 
 	while(archive_read_next_header(tarball, &ae) == ARCHIVE_OK) {
 		if(archive_write_header(cpio, ae) != ARCHIVE_OK) {
-			fprintf(stderr, "failed to write cpio header: %s\n",
-					archive_error_string(cpio));
+			fprintf(stderr, "error: failed to write cpio header in %s: %s\n",
+					tmpfile, strerror(errno));
 			goto write_error;
 		}
 		for(;;) {
@@ -366,8 +366,8 @@ static int repack_repo_data(const struct repo_t *repo)
 			}
 
 			if(archive_write_data(cpio, buf, bytes_r) != bytes_r) {
-				fprintf(stderr, "failed to write %d bytes to new files db: %s\n",
-						bytes_r, archive_error_string(cpio));
+				fprintf(stderr, "error: failed to write %d bytes to %s: %s\n",
+						bytes_r, tmpfile, strerror(errno));
 				goto write_error;
 			}
 		}
