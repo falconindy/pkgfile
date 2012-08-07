@@ -327,7 +327,7 @@ static int repack_repo_data(const struct repo_t *repo)
 	cpio = archive_write_new();
 
 	if(tarball == NULL || cpio == NULL) {
-		fprintf(stderr, "failed to allocate memory for archive objects\n");
+		fprintf(stderr, "error: failed to allocate memory for archive objects\n");
 		return -1;
 	}
 
@@ -385,13 +385,13 @@ open_error:
 
 	if(ret == 0) {
 		if(rename(tmpfile, diskfile) != 0) {
-			fprintf(stderr, "failed to rotate new repo for %s into place: %s\n",
+			fprintf(stderr, "error: failed to rotate new repo for %s into place: %s\n",
 					repo->name, strerror(errno));
 		}
 	} else {
 		/* oh noes! */
 		if(unlink(tmpfile) < 0 && errno != ENOENT) {
-			fprintf(stderr, "failed to unlink temporary file: %s: %s\n", tmpfile,
+			fprintf(stderr, "error: failed to unlink temporary file: %s: %s\n", tmpfile,
 					strerror(errno));
 		}
 	}
@@ -710,7 +710,7 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 	cmulti = curl_multi_init();
 	if(cmulti == NULL) {
 		/* this can only fail due to out an OOM condition */
-		fprintf(stderr, "failed to initialize curl: %s\n", strerror(ENOMEM));
+		fprintf(stderr, "error: failed to initialize curl: %s\n", strerror(ENOMEM));
 		return 1;
 	}
 
