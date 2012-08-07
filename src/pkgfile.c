@@ -308,19 +308,28 @@ static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len)
 {
 	const char *dash, *slash = memrchr(entryname, '/', len);
 
-	if(slash) {
-		dash = slash;
-		while(--dash && dash > entryname && *dash != '-');
-		while(--dash && dash > entryname && *dash != '-');
-
-		if(*dash == '-') {
-			pkg->name = strndup(entryname, dash - entryname);
-			pkg->version = strndup(dash + 1, slash - dash - 1);
-			return 0;
-		}
+	if(!slash) {
+		return -EINVAL;
 	}
 
-	return 1;
+	dash = slash;
+	while(dash > entryname && --dash && *dash != '-');
+	while(dash > entryname && --dash && *dash != '-');
+
+	if(*dash != '-') {
+		return -EINVAL;
+	}
+
+	pkg->name = strdup(entryname);
+	if(pkg->name == NULL) {
+		return -ENOMEM;
+	}
+
+	/* ->name and ->version share the same memory */
+	pkg->name[dash - entryname] = pkg->name[slash - entryname] = '\0';
+	pkg->version = &pkg->name[dash - entryname + 1];
+
+	return 0;
 }
 
 static void *load_repo(void *repo_obj)
@@ -384,8 +393,10 @@ static void *load_repo(void *repo_obj)
 			continue;
 		}
 
-		if(parse_pkgname(&pkg, entryname, len) != 0) {
-			fprintf(stderr, "error parsing pkgname from: %s\n", entryname);
+		r = parse_pkgname(&pkg, entryname, len);
+		if(r < 0) {
+			fprintf(stderr, "error parsing pkgname from: %s: %s\n", entryname,
+					strerror(-r));
 			continue;
 		}
 
@@ -393,7 +404,6 @@ static void *load_repo(void *repo_obj)
 
 		/* clean out the struct, but don't get rid of it entirely */
 		free(pkg.name);
-		free(pkg.version);
 
 		switch(r) {
 		case -1:
