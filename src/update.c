@@ -98,7 +98,7 @@ static size_t strtrim(char *str)
 		return 0;
 	}
 
-	right = (char*)rawmemchr(str, '\0') - 1;
+	right = (char *)rawmemchr(str, '\0') - 1;
 	while(isspace((unsigned char)*right)) {
 		right--;
 	}
@@ -122,7 +122,7 @@ static char *strreplace(const char *str, const char *needle, const char *replace
 	p = str;
 	q = strstr(p, needle);
 	while(q) {
-		list[listsz++] = (char*)q;
+		list[listsz++] = (char *)q;
 		p = q + needlesz;
 		q = strstr(p, needle);
 	}
