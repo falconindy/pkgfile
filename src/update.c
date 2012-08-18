@@ -717,6 +717,9 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 	uname(&un);
 	force = (config->doupdate > 1);
 
+	/* ensure all our DBs are 0644 */
+	umask(0022);
+
 	/* prime the handle by adding a URL from each repo */
 	for(i = 0; i < repocount; i++) {
 		repos[i]->arch = un.machine;
