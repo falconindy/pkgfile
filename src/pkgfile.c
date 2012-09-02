@@ -286,7 +286,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 
 static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len)
 {
-	const char *dash, *slash = memrchr(entryname, '/', len);
+	const char *dash, *slash = &entryname[len];
 
 	if(!slash) {
 		return -EINVAL;

@@ -312,13 +312,21 @@ static int endswith(const char *s, const char *postfix)
 }
 
 static int write_cpio_entry(struct archive *in, struct archive_entry *ae,
-		struct archive *out, const char *tmpfile)
+		const char *entryname, struct archive *out, const char *tmpfile)
 {
 	off_t entry_size = archive_entry_size(ae);
+	char *s, *slash;
 	int first = 1;
 
 	/* adjust the archive size for removing the first line */
 	archive_entry_set_size(ae, entry_size - sizeof("%FILES") - 1);
+
+	/* store the metadata as simply $pkgname-$pkgver-$pkgrel */
+	s = strdup(entryname);
+	slash = strrchr(s, '/');
+	*slash = '\0';
+	archive_entry_update_pathname_utf8(ae, s);
+	free(s);
 
 	if(archive_write_header(out, ae) != ARCHIVE_OK) {
 		fprintf(stderr, "error: failed to write cpio header in %s: %s\n",
@@ -411,7 +419,7 @@ static int repack_repo_data(const struct repo_t *repo)
 			continue;
 		}
 
-		if(write_cpio_entry(tarball, ae, cpio, tmpfile) != 0) {
+		if(write_cpio_entry(tarball, ae, entryname, cpio, tmpfile) != 0) {
 			goto write_error;
 		}
 	}
