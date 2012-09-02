@@ -298,6 +298,19 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 	return active_repos;
 }
 
+static int endswith(const char *s, const char *postfix)
+{
+	size_t sl, pl;
+
+	sl = strlen(s);
+	pl = strlen(postfix);
+
+	if (pl == 0 || sl < pl)
+		return 0;
+
+	return memcmp(s + sl - pl, postfix, pl) == 0;
+}
+
 static int repack_repo_data(const struct repo_t *repo)
 {
 	char diskfile[PATH_MAX], tmpfile[PATH_MAX];
@@ -353,6 +366,13 @@ static int repack_repo_data(const struct repo_t *repo)
 	}
 
 	while(archive_read_next_header(tarball, &ae) == ARCHIVE_OK) {
+		const char *entryname = archive_entry_pathname(ae);
+
+		/* ignore everything but the /files metadata */
+		if(!endswith(entryname, "/files")) {
+			continue;
+		}
+
 		if(archive_write_header(cpio, ae) != ARCHIVE_OK) {
 			fprintf(stderr, "error: failed to write cpio header in %s: %s\n",
 					tmpfile, strerror(errno));

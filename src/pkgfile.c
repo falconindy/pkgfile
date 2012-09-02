@@ -389,10 +389,6 @@ static void *load_repo(void *repo_obj)
 		}
 
 		len = strlen(entryname);
-		if(len < 6 || memcmp(&entryname[len - 6], "/files", 6) != 0) {
-			continue;
-		}
-
 		r = parse_pkgname(&pkg, entryname, len);
 		if(r < 0) {
 			fprintf(stderr, "error parsing pkgname from: %s: %s\n", entryname,
