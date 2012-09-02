@@ -697,36 +697,17 @@ static void hit_multi_handle_until_candy_comes_out(CURLM *multi)
 
 	curl_multi_perform(multi, &active_handles);
 	do {
-		int maxfd = -1;
-		long curl_timeout;
-		struct timeval timeout = { 1, 0 };
-
-		fd_set fdread;
-		fd_set fdwrite;
-		fd_set fdexcep;
-
-		curl_multi_timeout(multi, &curl_timeout);
-		if(curl_timeout >= 0) {
-			timeout.tv_sec = curl_timeout / 1000;
-			if(timeout.tv_sec > 1) {
-				timeout.tv_sec = 1;
-			} else {
-				timeout.tv_usec = (curl_timeout % 1000) * 1000;
-			}
-		}
-
-		FD_ZERO(&fdread);
-		FD_ZERO(&fdwrite);
-		FD_ZERO(&fdexcep);
-
-		curl_multi_fdset(multi, &fdread, &fdwrite, &fdexcep, &maxfd);
-		if(select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout) < 0) {
-			fprintf(stderr, "error: failed to call select: %s\n", strerror(errno));
+		int rc = curl_multi_wait(multi, NULL, 0, -1, NULL);
+		if(rc != CURLM_OK) {
+			fprintf(stderr, "error: curl_multi_wait failed (%d)\n", rc);
 			break;
 		}
 
-		/* select(2) timeout or data available to read */
-		curl_multi_perform(multi, &active_handles);
+		rc = curl_multi_perform(multi, &active_handles);
+		if(rc != CURLM_OK) {
+			fprintf(stderr, "error: curl_multi_perform failed (%d)\n", rc);
+			break;
+		}
 
 		/* read any pending messages */
 		for(;;) {
