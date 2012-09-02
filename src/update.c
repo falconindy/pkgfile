@@ -367,11 +367,16 @@ static int repack_repo_data(const struct repo_t *repo)
 
 	while(archive_read_next_header(tarball, &ae) == ARCHIVE_OK) {
 		const char *entryname = archive_entry_pathname(ae);
+		off_t entry_size = archive_entry_size(ae);
+		int first = 1;
 
 		/* ignore everything but the /files metadata */
 		if(!endswith(entryname, "/files")) {
 			continue;
 		}
+
+		/* adjust the archive size for removing the first line */
+		archive_entry_set_size(ae, entry_size - sizeof("%FILES") - 1);
 
 		if(archive_write_header(cpio, ae) != ARCHIVE_OK) {
 			fprintf(stderr, "error: failed to write cpio header in %s: %s\n",
@@ -383,6 +388,13 @@ static int repack_repo_data(const struct repo_t *repo)
 			int bytes_r = archive_read_data(tarball, buf, sizeof(buf));
 			if(bytes_r == 0) {
 				break;
+			}
+
+			if(first) {
+				/* trim out the %FILES% header */
+				memmove(buf, &buf[sizeof("%FILES%")], bytes_r);
+				bytes_r -= sizeof("%FILES%");
+				first = 0;
 			}
 
 			if(archive_write_data(cpio, buf, bytes_r) != bytes_r) {

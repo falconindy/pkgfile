@@ -198,20 +198,10 @@ static bool is_directory(const char *line, const size_t len)
 static int search_metafile(const char *repo, struct pkg_t *pkg,
 		struct archive *a, struct result_t *result) {
 	int found = 0;
-	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
 
 	memset(&buf, 0, sizeof(buf));
 	buf.max_line_size = 512 * 1024;
-
-	/* read until we hit the %FILES% header */
-	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
-		const size_t len = strip_newline(&buf);
-
-		if(len == 7 && memcmp(buf.line, files, 7) == 0) {
-			break;
-		}
-	}
 
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
 		const size_t len = strip_newline(&buf);
@@ -255,7 +245,6 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 
 static int list_metafile(const char *repo, struct pkg_t *pkg,
 		struct archive *a, struct result_t *result) {
-	const char * const files = "%FILES%";
 	struct archive_read_buffer buf;
 
 	if((config.icase ? strcasecmp : strcmp)(config.filter.glob, pkg->name) != 0) {
@@ -264,15 +253,6 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 
 	memset(&buf, 0, sizeof(buf));
 	buf.max_line_size = 512 * 1024;
-
-	/* read until we hit the %FILES% header */
-	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
-		const size_t len = strip_newline(&buf);
-
-		if(len == 7 && memcmp(buf.line, files, 7) == 0) {
-			break;
-		}
-	}
 
 	/* ...and then the meat of the metadata */
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
