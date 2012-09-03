@@ -103,7 +103,7 @@ will decrease performance, but may be desirable for disk space concerns.
 
 =back
 
-=head1 MATCHING
+=head1 MATCHING HEURISTICS
 
 In --search mode and without the --regex or --glob option, pkgfile will attempt
 to match the provided target as an exact filename. If the target contains a '/'
@@ -114,8 +114,7 @@ paths in the search database do not begin with a B</>.
 In --list mode and without the --regex or --glob option, pkgfile will attempt to
 match the provided target as an exact package name. If the target contains a '/'
 character, the text before the slash will be assumed to be a repository and the
-search will be restricted. This behavior is disabled with --glob and --regex, and
-only matching against the package name will occur.
+search will be restricted.
 
 =head1 FILES
 
