@@ -145,15 +145,6 @@ cleanup:
 	}
 }
 
-static size_t strip_newline(struct archive_read_buffer *buf)
-{
-	if(buf->line[buf->real_line_size - 1] == '\n') {
-		buf->line[buf->real_line_size - 1] = '\0';
-		buf->real_line_size--;
-	}
-	return buf->real_line_size;
-}
-
 static bool is_binary(const char *line, const size_t len)
 {
 	const char *ptr;
@@ -204,7 +195,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 	buf.max_line_size = 512 * 1024;
 
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
-		const size_t len = strip_newline(&buf);
+		const size_t len = buf.real_line_size;
 
 		if(len == 0) {
 			continue;
@@ -256,7 +247,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 
 	/* ...and then the meat of the metadata */
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
-		const size_t len = strip_newline(&buf);
+		const size_t len = buf.real_line_size;
 		int prefixlen = 0;
 		char *line;
 
