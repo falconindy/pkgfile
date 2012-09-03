@@ -114,4 +114,6 @@ struct config_t {
 	compresstype_t compress;
 };
 
+int archive_fgets(struct archive *a, struct archive_read_buffer *b);
+
 /* vim: set ts=2 sw=2 noet: */

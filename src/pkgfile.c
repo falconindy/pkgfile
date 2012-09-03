@@ -48,7 +48,7 @@ static const char *filtermethods[] = {
 	[FILTER_REGEX] = "regex"
 };
 
-static int archive_fgets(struct archive *a, struct archive_read_buffer *b)
+int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 {
 	/* ensure we start populating our line buffer at the beginning */
 	b->line_offset = b->line;

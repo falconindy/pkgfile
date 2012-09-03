@@ -315,11 +315,36 @@ static int write_cpio_entry(struct archive *in, struct archive_entry *ae,
 		const char *entryname, struct archive *out, const char *tmpfile)
 {
 	off_t entry_size = archive_entry_size(ae);
-	char *s, *slash;
-	int first = 1;
+	struct archive_read_buffer buf;
+	char *slash, *entry_data, *s;
+	int r, rc = -1, bytes_w = 0;
+	size_t alloc_size;
 
-	/* adjust the archive size for removing the first line */
-	archive_entry_set_size(ae, entry_size - sizeof("%FILES") - 1);
+	/* be generous */
+	alloc_size = entry_size * 1.5;
+	MALLOC(entry_data, alloc_size, return -1);
+
+	memset(&buf, 0, sizeof(struct archive_read_buffer));
+	buf.max_line_size = 512 * 1024;
+
+	/* discard the first line */
+	archive_fgets(in, &buf);
+
+	while(archive_fgets(in, &buf) == ARCHIVE_OK && buf.real_line_size > 0) {
+		/* ensure enough memory */
+		if(bytes_w + buf.real_line_size + 1 > alloc_size) {
+			entry_data = realloc(entry_data, alloc_size * 1.5);
+		}
+
+		/* do the copy, with a slash prepended */
+		entry_data[bytes_w++] = '/';
+		memcpy(&entry_data[bytes_w], buf.line, buf.real_line_size);
+		bytes_w += buf.real_line_size;
+		entry_data[bytes_w++] = '\n';
+	}
+
+	/* adjust the entry size for removing the first line and adding slashes */
+	archive_entry_set_size(ae, bytes_w);
 
 	/* store the metadata as simply $pkgname-$pkgver-$pkgrel */
 	s = strdup(entryname);
@@ -331,30 +356,22 @@ static int write_cpio_entry(struct archive *in, struct archive_entry *ae,
 	if(archive_write_header(out, ae) != ARCHIVE_OK) {
 		fprintf(stderr, "error: failed to write cpio header in %s: %s\n",
 				tmpfile, strerror(errno));
-		return -1;
-	}
-	for(;;) {
-		unsigned char buf[BUFSIZ];
-		int bytes_r = archive_read_data(in, buf, sizeof(buf));
-		if(bytes_r == 0) {
-			break;
-		}
-
-		if(first) {
-			/* trim out the %FILES% header */
-			memmove(buf, &buf[sizeof("%FILES%")], bytes_r);
-			bytes_r -= sizeof("%FILES%");
-			first = 0;
-		}
-
-		if(archive_write_data(out, buf, bytes_r) != bytes_r) {
-			fprintf(stderr, "error: failed to write %d bytes to %s: %s\n",
-					bytes_r, tmpfile, strerror(errno));
-			return -1;
-		}
+		goto error;
 	}
 
-	return 0;
+	r = archive_write_data(out, entry_data, bytes_w);
+	if(r != bytes_w) {
+		fprintf(stderr, "error: write failure to %s (%d != %jd): %s\n",
+				tmpfile, r, entry_size, strerror(errno));
+		goto error;
+	}
+
+	rc = 0;
+
+error:
+	free(entry_data);
+
+	return rc;
 }
 
 static int repack_repo_data(const struct repo_t *repo)
