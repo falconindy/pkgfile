@@ -22,7 +22,7 @@ PKG_CHECK_MODULES(PCRE,    [ libpcre ])
 PKG_CHECK_MODULES(ARCHIVE, [ libarchive >= 3.0.0 ])
 PKG_CHECK_MODULES(CURL,    [ libcurl >= 7.19.4 ])
 
-# Help line for using git version in pacman version string
+# Help line for using git version in pkgfile version string
 AC_ARG_ENABLE(git-version,
 	AS_HELP_STRING([--disable-git-version],
 		[enable use of git version in version string if available]),
@@ -35,7 +35,7 @@ AC_ARG_WITH(cachedir,
 AC_DEFINE_UNQUOTED([CACHEPATH], "$CACHEPATH", [Path to .files cachedir])
 AC_SUBST([CACHEPATH])
 
-# Enable or disable use of git version in pacman version string
+# Enable or disable use of git version in pkgfile version string
 AC_MSG_CHECKING(whether to use git version if available)
 if test "x$wantgitver" != "xno" ; then
 	AC_CHECK_PROGS([GIT], [git])

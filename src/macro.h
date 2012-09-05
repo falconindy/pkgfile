@@ -31,6 +31,8 @@
 #define FREE(p) do { free(p); p = NULL; } while(0)
 #define UNUSED __attribute__((unused))
 
+#define MAX_LINE_SIZE (512 * 1024) /* used by archive_fgets */
+
 #ifndef MIN
 #define MIN(a,b)                                \
         __extension__ ({                        \

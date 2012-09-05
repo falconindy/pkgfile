@@ -325,7 +325,6 @@ static int write_cpio_entry(struct archive *in, struct archive_entry *ae,
 	MALLOC(entry_data, alloc_size, return -1);
 
 	memset(&buf, 0, sizeof(struct archive_read_buffer));
-	buf.max_line_size = 512 * 1024;
 
 	/* discard the first line */
 	archive_fgets(in, &buf);

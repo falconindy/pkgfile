@@ -96,7 +96,7 @@ int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 			 * so we know the result is unsigned and can fit in size_t */
 			size_t new = eol ? (size_t)(eol - b->block_offset) : block_remaining;
 			size_t needed = (size_t)((b->line_offset - b->line) + new + 1);
-			if(needed > b->max_line_size) {
+			if(needed > MAX_LINE_SIZE) {
 				b->ret = -ERANGE;
 				goto cleanup;
 			}
@@ -123,8 +123,7 @@ int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 		} else {
 			/* we've looked through the whole block but no newline, copy it */
 			size_t len = (size_t)(b->block + b->block_size - b->block_offset);
-			memcpy(b->line_offset, b->block_offset, len);
-			b->line_offset += len;
+			b->line_offset = mempcpy(b->line_offset, b->block_offset, len);
 			b->block_offset = b->block + b->block_size;
 			/* there was no new data, return what is left; saved ARCHIVE_EOF will be
 			 * returned on next call */
@@ -192,7 +191,6 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 	struct archive_read_buffer buf;
 
 	memset(&buf, 0, sizeof(buf));
-	buf.max_line_size = 512 * 1024;
 
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
 		const size_t len = buf.real_line_size;
@@ -238,12 +236,11 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 		struct archive *a, struct result_t *result) {
 	struct archive_read_buffer buf;
 
-	if((config.icase ? strcasecmp : strcmp)(config.filter.glob, pkg->name) != 0) {
+	if((config.icase ? strcasecmp : strcmp)(config.filter.glob.glob, pkg->name) != 0) {
 		return 1;
 	}
 
 	memset(&buf, 0, sizeof(buf));
-	buf.max_line_size = 512 * 1024;
 
 	/* ...and then the meat of the metadata */
 	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
@@ -586,7 +583,7 @@ static int search_single_repo(struct repo_t **repos, int repocount, char *search
 		slash = strchr(searchstring, '/');
 		targetrepo = strdup(searchstring);
 		targetrepo[slash - searchstring] = '\0';
-		config.filter.glob = &slash[1];
+		config.filter.glob.glob = &slash[1];
 	}
 
 	config.filterby = FILTER_EXACT;
@@ -638,14 +635,17 @@ static struct result_t **search_all_repos(struct repo_t **repos, int repocount)
 
 static int filter_setup(char *arg)
 {
+
+	config.filter.glob.globlen = strlen(arg);
+
 	switch(config.filterby) {
 	case FILTER_EXACT:
-		config.filter.glob = arg;
-		config.filterfunc = match_exact;
+		config.filter.glob.glob = arg;
+		config.filterfunc = strchr(arg, '/') ? match_exact : match_exact_basename;
 		break;
 	case FILTER_GLOB:
 		config.icase *= FNM_CASEFOLD;
-		config.filter.glob = arg;
+		config.filter.glob.glob = arg;
 		config.filterfunc = match_glob;
 		break;
 	case FILTER_REGEX:

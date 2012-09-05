@@ -56,14 +56,13 @@ struct archive_read_buffer {
 	char *line;
 	char *line_offset;
 	size_t line_size;
-	size_t max_line_size;
 	size_t real_line_size;
 
 	char *block;
 	char *block_offset;
 	size_t block_size;
 
-	int ret;
+	long ret;
 };
 
 typedef enum _filterstyle_t {
@@ -86,7 +85,10 @@ typedef union _filterpattern_t {
 		pcre *re;
 		pcre_extra *re_extra;
 	} re;
-	char *glob;
+	struct glob_data {
+		char *glob;
+		int globlen;
+	} glob;
 } filterpattern_t;
 
 struct pkg_t {

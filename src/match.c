@@ -30,7 +30,7 @@
 int match_glob(const filterpattern_t *pattern, const char *line, int UNUSED len,
 		int flags)
 {
-	return fnmatch(pattern->glob, line, flags);
+	return fnmatch(pattern->glob.glob, line, flags);
 }
 
 int match_regex(const filterpattern_t *pattern, const char *line, int len,
@@ -48,20 +48,31 @@ void free_regex(filterpattern_t *pattern)
 	pcre_free(pattern->re.re_extra);
 }
 
+int match_exact_basename(const filterpattern_t *pattern, const char *line, int len,
+		int flags)
+{
+	const char *ptr = line, *match = pattern->glob.glob;
+
+	/* match on basenames only */
+	const char *slash = memrchr(line, '/', len - 1);
+	if(slash != NULL)
+		ptr = slash + 1;
+
+	if (pattern->glob.globlen != len - (ptr - line))
+		return -1;
+
+	return flags ? strcasecmp(match, ptr) : strcmp(match, ptr);
+}
+
 int match_exact(const filterpattern_t *pattern, const char *line, int len,
 		int flags)
 {
-	const char *ptr = line, *match = pattern->glob;
+	if (pattern->glob.globlen != len)
+		return -1;
 
-	/* if pattern doesn't contain a slash, match on basenames only */
-	if(strchr(match, '/') == NULL) {
-		const char *slash = memrchr(line, '/', len - 1);
-		if(slash != NULL) {
-			ptr = slash + 1;
-		}
-	}
-
-	return flags ? strcasecmp(match, ptr) : strcmp(match, ptr);
+	return flags ?
+		strcasecmp(pattern->glob.glob, line) :
+		strcmp(pattern->glob.glob, line);
 }
 
 /* vim: set ts=2 sw=2 noet: */
