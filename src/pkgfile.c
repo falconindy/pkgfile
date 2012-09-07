@@ -269,7 +269,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 		free(line);
 	}
 
-	return 1;
+	return 0;
 }
 
 static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len)
