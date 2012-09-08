@@ -59,9 +59,6 @@ pkgfile_CFLAGS = \
 	$(CURL_CFLAGS) \
 	$(PCRE_CFLAGS)
 
-pkgfile_LDFLAGS = \
-	$(AM_LDFLAGS)
-
 pkgfile_LDADD = \
 	$(ARCHIVE_LIBS) \
 	$(CURL_LIBS) \
