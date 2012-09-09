@@ -671,11 +671,6 @@ int main(int argc, char *argv[])
 		return 2;
 	}
 
-	if(mkdir(CACHEPATH, 0755) != 0 && errno != EEXIST) {
-		fprintf(stderr, "error: failed to create cachedir: " CACHEPATH ": %s\n", strerror(errno));
-		return 2;
-	}
-
 	repos = find_active_repos(PACMANCONFIG, &repocount);
 	if(!repocount) {
 		fprintf(stderr, "error: no repos found in " PACMANCONFIG "\n");
