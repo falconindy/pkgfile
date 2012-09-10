@@ -62,7 +62,8 @@ pkgfile_CFLAGS = \
 pkgfile_LDADD = \
 	$(ARCHIVE_LIBS) \
 	$(CURL_LIBS) \
-	$(PCRE_LIBS)
+	$(PCRE_LIBS) \
+	$(TCMALLOC_LIBS)
 
 pkgfile.1: README.pod
 	$(AM_V_GEN)$(POD2MAN) \

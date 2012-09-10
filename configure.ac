@@ -35,6 +35,11 @@ AC_ARG_WITH(cachedir,
 AC_DEFINE_UNQUOTED([CACHEPATH], "$CACHEPATH", [Path to .files cachedir])
 AC_SUBST([CACHEPATH])
 
+AC_ARG_WITH(tcmalloc,
+	AS_HELP_STRING([--with-tcmalloc=check],
+		[enable use of libtcmalloc]),
+	[wanttcmalloc=$withval], [wanttcmalloc=check])
+
 # Enable or disable use of git version in pkgfile version string
 AC_MSG_CHECKING(whether to use git version if available)
 if test "x$wantgitver" != "xno" ; then
@@ -51,6 +56,20 @@ else
 	usegitver=no
 fi
 AM_CONDITIONAL(USE_GIT_VERSION, test "x$usegitver" = "xyes")
+
+allocator=libc
+AC_MSG_CHECKING(whether to use tcmalloc)
+if test "x$wanttcmalloc" != "xno" ; then
+	PKG_CHECK_EXISTS([libtcmalloc], [havetcmalloc=yes], [havetcmalloc=no])
+	if test "x$havetcmalloc" = "xyes"; then
+		PKG_CHECK_MODULES(TCMALLOC, [libtcmalloc])
+		allocator=tcmalloc
+	else
+		if test "x$wanttcmalloc" = "xyes"; then
+			AC_MSG_ERROR([*** tcmalloc support requested but library not found])
+		fi
+	fi
+fi
 
 CC_CHECK_FLAGS_APPEND(with_cflags, [CFLAGS], [\
 	-g \
@@ -113,6 +132,7 @@ AC_MSG_RESULT([
 	cache directory:        ${CACHEPATH}
 
 	using git version:      ${usegitver}
+	allocator:              ${allocator}
 
 	compiler:               ${CC}
 	cflags:                 ${with_cflags} ${CFLAGS}

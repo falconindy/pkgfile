@@ -3,3 +3,6 @@ Requirements:
   - libarchive
   - pcre
   - pthreads
+
+Optional:
+  - libtcmalloc
