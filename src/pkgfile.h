@@ -100,7 +100,7 @@ struct config_t {
 	filterstyle_t filterby;
 	filterpattern_t filter;
 	int (*filefunc)(const char *repo, struct pkg_t *pkg, struct archive* a,
-			struct result_t *result);
+			struct result_t *result, struct archive_read_buffer *buf);
 	int (*filterfunc)(const filterpattern_t *filter, const char *line, int len,
 			int flags);
 	void (*filterfree)(filterpattern_t *filter);

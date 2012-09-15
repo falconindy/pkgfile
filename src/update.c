@@ -325,6 +325,8 @@ static int write_cpio_entry(struct archive *in, struct archive_entry *ae,
 	MALLOC(entry_data, alloc_size, return -1);
 
 	memset(&buf, 0, sizeof(struct archive_read_buffer));
+	MALLOC(buf.line, MAX_LINE_SIZE, return -1);
+	buf.line[0] = '\0';
 
 	/* discard the first line */
 	archive_fgets(in, &buf);
@@ -369,6 +371,7 @@ static int write_cpio_entry(struct archive *in, struct archive_entry *ae,
 
 error:
 	free(entry_data);
+	free(buf.line);
 
 	return rc;
 }

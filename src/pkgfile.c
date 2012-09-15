@@ -54,7 +54,7 @@ int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 	b->line_offset = b->line;
 
 	while(1) {
-		size_t block_remaining;
+		size_t new, block_remaining;
 		char *eol;
 
 		/* have we processed this entire block? */
@@ -62,7 +62,7 @@ int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 			int64_t offset;
 			if(b->ret == ARCHIVE_EOF) {
 				/* reached end of archive on the last read, now we are out of data */
-				goto cleanup;
+				return b->ret;
 			}
 
 			/* zero-copy - this is the entire next block of data. */
@@ -73,7 +73,7 @@ int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 
 			/* error, cleanup */
 			if(b->ret < ARCHIVE_OK) {
-				goto cleanup;
+				return b->ret;
 			}
 		} else {
 			block_remaining = b->block + b->block_size - b->block_offset;
@@ -85,31 +85,11 @@ int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 			eol = memchr(b->block_offset, '\0', block_remaining);
 		}
 
-		/* allocate our buffer, or ensure our existing one is big enough */
-		if(!b->line) {
-			/* set the initial buffer to the read block_size */
-			CALLOC(b->line, b->block_size + 1, sizeof(char), b->ret = -ENOMEM; goto cleanup);
-			b->line_size = b->block_size + 1;
-			b->line_offset = b->line;
-		} else {
-			/* note: we know eol > b->block_offset and b->line_offset > b->line,
-			 * so we know the result is unsigned and can fit in size_t */
-			size_t new = eol ? (size_t)(eol - b->block_offset) : block_remaining;
-			size_t needed = (size_t)((b->line_offset - b->line) + new + 1);
-			if(needed > MAX_LINE_SIZE) {
-				b->ret = -ERANGE;
-				goto cleanup;
-			}
-			if(needed > b->line_size) {
-				/* need to realloc + copy data to fit total length */
-				char *new_line;
-				CALLOC(new_line, needed, sizeof(char), b->ret = -ENOMEM; goto cleanup);
-				memcpy(new_line, b->line, b->line_size);
-				b->line_size = needed;
-				b->line_offset = new_line + (b->line_offset - b->line);
-				free(b->line);
-				b->line = new_line;
-			}
+		/* note: we know eol > b->block_offset and b->line_offset > b->line,
+		 * so we know the result is unsigned and can fit in size_t */
+		new = eol ? (size_t)(eol - b->block_offset) : block_remaining;
+		if((b->line_offset - b->line + new + 1) > MAX_LINE_SIZE) {
+			return -ERANGE;
 		}
 
 		if(eol) {
@@ -135,13 +115,7 @@ int archive_fgets(struct archive *a, struct archive_read_buffer *b)
 		}
 	}
 
-cleanup:
-	{
-		int ret = b->ret;
-		FREE(b->line);
-		memset(b, 0, sizeof(struct archive_read_buffer));
-		return ret;
-	}
+	return b->ret;
 }
 
 static bool is_binary(const char *line, const size_t len)
@@ -186,28 +160,25 @@ static bool is_directory(const char *line, const size_t len)
 }
 
 static int search_metafile(const char *repo, struct pkg_t *pkg,
-		struct archive *a, struct result_t *result) {
+		struct archive *a, struct result_t *result, struct archive_read_buffer *buf) {
 	int found = 0;
-	struct archive_read_buffer buf;
 
-	memset(&buf, 0, sizeof(buf));
-
-	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
-		const size_t len = buf.real_line_size;
+	while(archive_fgets(a, buf) == ARCHIVE_OK) {
+		const size_t len = buf->real_line_size;
 
 		if(len == 0) {
 			continue;
 		}
 
-		if(!config.directories && is_directory(buf.line, len)) {
+		if(!config.directories && is_directory(buf->line, len)) {
 			continue;
 		}
 
-		if(config.binaries && !is_binary(buf.line, len)) {
+		if(config.binaries && !is_binary(buf->line, len)) {
 			continue;
 		}
 
-		if(!found && config.filterfunc(&config.filter, buf.line, (int)len, config.icase) == 0) {
+		if(!found && config.filterfunc(&config.filter, buf->line, (int)len, config.icase) == 0) {
 			char *line;
 			if(config.verbose) {
 				int prefixlen = asprintf(&line, "%s/%s %s", repo, pkg->name, pkg->version);
@@ -215,7 +186,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 					fprintf(stderr, "error: failed to allocate memory\n");
 					return -1;
 				}
-				result_add(result, line, buf.line, prefixlen);
+				result_add(result, line, buf->line, prefixlen);
 				free(line);
 			} else {
 				found = 1;
@@ -233,27 +204,22 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 }
 
 static int list_metafile(const char *repo, struct pkg_t *pkg,
-		struct archive *a, struct result_t *result) {
-	struct archive_read_buffer buf;
-
+		struct archive *a, struct result_t *result, struct archive_read_buffer *buf) {
 	if((config.icase ? strcasecmp : strcmp)(config.filter.glob.glob, pkg->name) != 0) {
 		return 1;
 	}
 
-	memset(&buf, 0, sizeof(buf));
-
-	/* ...and then the meat of the metadata */
-	while(archive_fgets(a, &buf) == ARCHIVE_OK) {
-		const size_t len = buf.real_line_size;
+	while(archive_fgets(a, buf) == ARCHIVE_OK) {
+		const size_t len = buf->real_line_size;
 		int prefixlen = 0;
 		char *line;
 
-		if(len == 0 || (config.binaries && !is_binary(buf.line, len))) {
+		if(len == 0 || (config.binaries && !is_binary(buf->line, len))) {
 			continue;
 		}
 
 		if(config.quiet) {
-			line = strdup(buf.line);
+			line = strdup(buf->line);
 			if(line == NULL) {
 				fprintf(stderr, "error: failed to allocate memory\n");
 				return 1;
@@ -265,7 +231,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 				return 1;
 			}
 		}
-		result_add(result, line, config.quiet ? NULL : buf.line, prefixlen);
+		result_add(result, line, config.quiet ? NULL : buf->line, prefixlen);
 		free(line);
 	}
 
@@ -304,6 +270,7 @@ static void *load_repo(void *repo_obj)
 {
 	int fd = -1;
 	char repofile[FILENAME_MAX];
+	char *line;
 	struct archive *a;
 	struct archive_entry *e;
 	struct pkg_t pkg;
@@ -311,6 +278,7 @@ static void *load_repo(void *repo_obj)
 	struct result_t *result;
 	struct stat st;
 	void *repodata = MAP_FAILED;
+	struct archive_read_buffer read_buffer;
 
 	repo = repo_obj;
 	snprintf(repofile, sizeof(repofile), CACHEPATH "/%s.files", repo->name);
@@ -319,6 +287,10 @@ static void *load_repo(void *repo_obj)
 	a = archive_read_new();
 	archive_read_support_format_all(a);
 	archive_read_support_compression_all(a);
+
+	memset(&read_buffer, 0, sizeof(struct archive_read_buffer));
+	MALLOC(read_buffer.line, MAX_LINE_SIZE, return NULL);
+	line = read_buffer.line_offset = read_buffer.line;
 
 	fd = open(repofile, O_RDONLY);
 	if(fd < 0) {
@@ -364,7 +336,9 @@ static void *load_repo(void *repo_obj)
 			continue;
 		}
 
-		r = config.filefunc(repo->name, &pkg, a, result);
+		memset(&read_buffer, 0, sizeof(struct archive_read_buffer));
+		read_buffer.line = line;
+		r = config.filefunc(repo->name, &pkg, a, result, &read_buffer);
 
 		/* clean out the struct, but don't get rid of it entirely */
 		free(pkg.name);
@@ -385,6 +359,7 @@ done:
 	archive_read_close(a);
 
 cleanup:
+	free(read_buffer.line);
 	archive_read_finish(a);
 	if(fd >= 0) {
 		close(fd);
