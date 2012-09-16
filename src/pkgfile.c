@@ -289,8 +289,7 @@ static void *load_repo(void *repo_obj)
 	archive_read_support_compression_all(a);
 
 	memset(&read_buffer, 0, sizeof(struct archive_read_buffer));
-	MALLOC(read_buffer.line, MAX_LINE_SIZE, return NULL);
-	line = read_buffer.line_offset = read_buffer.line;
+	MALLOC(line, MAX_LINE_SIZE, return NULL);
 
 	fd = open(repofile, O_RDONLY);
 	if(fd < 0) {
@@ -359,7 +358,7 @@ done:
 	archive_read_close(a);
 
 cleanup:
-	free(read_buffer.line);
+	free(line);
 	archive_read_finish(a);
 	if(fd >= 0) {
 		close(fd);
