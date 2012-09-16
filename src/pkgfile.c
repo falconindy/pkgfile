@@ -367,7 +367,7 @@ cleanup:
 		munmap(repodata, st.st_size);
 	}
 
-	return (void *)result;
+	return result;
 }
 
 static int compile_pcre_expr(struct pcre_data *re, const char *preg, int flags)
