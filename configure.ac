@@ -63,6 +63,8 @@ if test "x$wanttcmalloc" != "xno" ; then
 	PKG_CHECK_EXISTS([libtcmalloc], [havetcmalloc=yes], [havetcmalloc=no])
 	if test "x$havetcmalloc" = "xyes"; then
 		PKG_CHECK_MODULES(TCMALLOC, [libtcmalloc])
+		# upstream recommends these, but doesn't include them in the .pc file
+		TCMALLOC_CFLAGS="-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free"
 		allocator=tcmalloc
 	else
 		if test "x$wanttcmalloc" = "xyes"; then
