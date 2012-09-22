@@ -28,7 +28,6 @@ bin_PROGRAMS = \
 if USE_GIT_VERSION
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty | sed 's/^v//')
 REAL_PACKAGE_VERSION = $(GIT_VERSION)
-DEFS += -DGIT_VERSION=\"$(GIT_VERSION)\"
 else
 REAL_PACKAGE_VERSION = $(PACKAGE_VERSION)
 endif
@@ -43,7 +42,8 @@ AM_LDFLAGS = \
 
 AM_CPPFLAGS = \
 	-imacros $(top_builddir)/config.h \
-	-I${top_srcdir}/src
+	-I${top_srcdir}/src \
+	-DGIT_VERSION=\"$(GIT_VERSION)\"
 
 pkgfile_SOURCES = \
 	src/match.c src/match.h \
@@ -65,6 +65,7 @@ pkgfile_LDADD = \
 	$(CURL_LIBS) \
 	$(PCRE_LIBS) \
 	$(TCMALLOC_LIBS)
+# tcmalloc must be last to avoid heapchecker issues
 
 pkgfile.1: README.pod
 	$(AM_V_GEN)$(POD2MAN) \
