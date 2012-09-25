@@ -55,11 +55,13 @@ int match_exact_basename(const filterpattern_t *pattern, const char *line, int l
 
 	/* match on basenames only */
 	const char *slash = memrchr(line, '/', len - 1);
-	if(slash != NULL)
+	if(slash != NULL) {
 		ptr = slash + 1;
+	}
 
-	if (pattern->glob.globlen != len - (ptr - line))
+	if(pattern->glob.globlen != len - (ptr - line)) {
 		return -1;
+	}
 
 	return flags ? strcasecmp(match, ptr) : strcmp(match, ptr);
 }
@@ -67,8 +69,9 @@ int match_exact_basename(const filterpattern_t *pattern, const char *line, int l
 int match_exact(const filterpattern_t *pattern, const char *line, int len,
 		int flags)
 {
-	if (pattern->glob.globlen != len)
+	if(pattern->glob.globlen != len) {
 		return -1;
+	}
 
 	return flags ?
 		strcasecmp(pattern->glob.glob, line) :
