@@ -38,6 +38,15 @@
 #include "pkgfile.h"
 #include "update.h"
 
+struct archive_conv {
+	struct archive *in;
+	struct archive *out;
+	struct archive_entry *ae;
+	const char *reponame;
+	char tmpfile[PATH_MAX];
+	char diskfile[PATH_MAX];
+};
+
 static double simple_pow(int base, int exp)
 {
 	double result = 1.0;
@@ -311,10 +320,9 @@ static int endswith(const char *s, const char *postfix)
 	return memcmp(s + sl - pl, postfix, pl) == 0;
 }
 
-static int write_cpio_entry(struct archive *in, struct archive_entry *ae,
-		const char *entryname, struct archive *out, const char *tmpfile)
+static int write_cpio_entry(struct archive_conv *conv, const char *entryname)
 {
-	off_t entry_size = archive_entry_size(ae);
+	off_t entry_size = archive_entry_size(conv->ae);
 	struct archive_read_buffer buf;
 	char *slash, *entry_data, *s;
 	int r, rc = -1, bytes_w = 0;
@@ -328,9 +336,9 @@ static int write_cpio_entry(struct archive *in, struct archive_entry *ae,
 	MALLOC(buf.line, MAX_LINE_SIZE, return -1);
 
 	/* discard the first line */
-	archive_fgets(in, &buf);
+	archive_fgets(conv->in, &buf);
 
-	while(archive_fgets(in, &buf) == ARCHIVE_OK && buf.real_line_size > 0) {
+	while(archive_fgets(conv->in, &buf) == ARCHIVE_OK && buf.real_line_size > 0) {
 		/* ensure enough memory */
 		if(bytes_w + buf.real_line_size + 1 > alloc_size) {
 			entry_data = realloc(entry_data, alloc_size * 1.5);
@@ -344,25 +352,25 @@ static int write_cpio_entry(struct archive *in, struct archive_entry *ae,
 	}
 
 	/* adjust the entry size for removing the first line and adding slashes */
-	archive_entry_set_size(ae, bytes_w);
+	archive_entry_set_size(conv->ae, bytes_w);
 
 	/* store the metadata as simply $pkgname-$pkgver-$pkgrel */
 	s = strdup(entryname);
 	slash = strrchr(s, '/');
 	*slash = '\0';
-	archive_entry_update_pathname_utf8(ae, s);
+	archive_entry_update_pathname_utf8(conv->ae, s);
 	free(s);
 
-	if(archive_write_header(out, ae) != ARCHIVE_OK) {
-		fprintf(stderr, "error: failed to write cpio header in %s: %s\n",
-				tmpfile, strerror(errno));
+	if(archive_write_header(conv->out, conv->ae) != ARCHIVE_OK) {
+		fprintf(stderr, "error: failed to write entry header: %s/%s: %s\n",
+				conv->reponame, archive_entry_pathname(conv->ae), strerror(errno));
 		goto error;
 	}
 
-	r = archive_write_data(out, entry_data, bytes_w);
+	r = archive_write_data(conv->out, entry_data, bytes_w);
 	if(r != bytes_w) {
-		fprintf(stderr, "error: write failure to %s (%d != %jd): %s\n",
-				tmpfile, r, entry_size, strerror(errno));
+		fprintf(stderr, "error: failed to write entry: %s/%s: %s\n",
+				conv->reponame, archive_entry_pathname(conv->ae), strerror(errno));
 		goto error;
 	}
 
@@ -377,10 +385,8 @@ error:
 
 static int repack_repo_data(const struct repo_t *repo)
 {
-	char diskfile[PATH_MAX], tmpfile[PATH_MAX];
+	struct archive_conv conv;
 	int p, ret = -1;
-	struct archive *tarball, *cpio;
-	struct archive_entry *ae;
 
 	static int (*write_add_filter[])(struct archive *) = {
 		[COMPRESS_NONE] = NULL,
@@ -396,48 +402,50 @@ static int repack_repo_data(const struct repo_t *repo)
 	 * methods. this also gives us an opportunity to rewrite the archive as CPIO,
 	 * which is marginally faster given our staunch sequential access. */
 
-	p = snprintf(tmpfile, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
-	memcpy(diskfile, tmpfile, p);
-	diskfile[p - 1] = '\0';
+	conv.reponame = repo->name;
+	p = snprintf(conv.tmpfile, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
+	memcpy(conv.diskfile, conv.tmpfile, p);
+	conv.diskfile[p - 1] = '\0';
 
-	tarball = archive_read_new();
-	cpio = archive_write_new();
+	conv.in = archive_read_new();
+	conv.out = archive_write_new();
 
-	if(tarball == NULL || cpio == NULL) {
+	if(conv.in == NULL || conv.out == NULL) {
 		fprintf(stderr, "error: failed to allocate memory for archive objects\n");
 		return -1;
 	}
 
-	archive_read_support_format_tar(tarball);
-	archive_read_support_compression_all(tarball);
-	ret = archive_read_open_memory(tarball, repo->data, repo->buflen);
+	archive_read_support_format_tar(conv.in);
+	archive_read_support_compression_all(conv.in);
+	ret = archive_read_open_memory(conv.in, repo->data, repo->buflen);
 	if(ret != ARCHIVE_OK) {
 		fprintf(stderr, "error: failed to create archive reader for %s: %s\n",
-				repo->name, archive_error_string(tarball));
+				repo->name, archive_error_string(conv.in));
 		goto open_error;
 	}
 
 	if(write_add_filter[repo->config->compress]) {
-		write_add_filter[repo->config->compress](cpio);
+		write_add_filter[repo->config->compress](conv.out);
 	}
 
-	archive_write_set_format_cpio(cpio);
-	ret = archive_write_open_filename(cpio, tmpfile);
+	archive_write_set_format_cpio(conv.out);
+	ret = archive_write_open_filename(conv.out, conv.tmpfile);
 	if(ret != ARCHIVE_OK) {
 		fprintf(stderr, "error: failed to open file for writing: %s: %s\n",
-				tmpfile, archive_error_string(cpio));
+				conv.tmpfile, archive_error_string(conv.out));
 		goto open_error;
 	}
 
-	while(archive_read_next_header(tarball, &ae) == ARCHIVE_OK) {
-		const char *entryname = archive_entry_pathname(ae);
+	while(archive_read_next_header(conv.in, &conv.ae) == ARCHIVE_OK) {
+		const char *entryname = archive_entry_pathname(conv.ae);
 
 		/* ignore everything but the /files metadata */
 		if(!endswith(entryname, "/files")) {
 			continue;
 		}
 
-		if(write_cpio_entry(tarball, ae, entryname, cpio, tmpfile) != 0) {
+		ret = write_cpio_entry(&conv, entryname);
+		if(ret < 0) {
 			goto write_error;
 		}
 	}
@@ -445,22 +453,22 @@ static int repack_repo_data(const struct repo_t *repo)
 	ret = 0;
 
 write_error:
-	archive_write_close(cpio);
-	archive_read_close(tarball);
+	archive_write_close(conv.out);
+	archive_read_close(conv.in);
 
 open_error:
-	archive_write_free(cpio);
-	archive_read_free(tarball);
+	archive_write_free(conv.out);
+	archive_read_free(conv.in);
 
 	if(ret == 0) {
-		if(rename(tmpfile, diskfile) != 0) {
+		if(rename(conv.tmpfile, conv.diskfile) != 0) {
 			fprintf(stderr, "error: failed to rotate new repo for %s into place: %s\n",
 					repo->name, strerror(errno));
 		}
 	} else {
 		/* oh noes! */
-		if(unlink(tmpfile) < 0 && errno != ENOENT) {
-			fprintf(stderr, "error: failed to unlink temporary file: %s: %s\n", tmpfile,
+		if(unlink(conv.tmpfile) < 0 && errno != ENOENT) {
+			fprintf(stderr, "error: failed to unlink temporary file: %s: %s\n", conv.tmpfile,
 					strerror(errno));
 		}
 	}
