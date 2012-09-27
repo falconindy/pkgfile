@@ -160,7 +160,8 @@ static bool is_directory(const char *line, const size_t len)
 }
 
 static int search_metafile(const char *repo, struct pkg_t *pkg,
-		struct archive *a, struct result_t *result, struct archive_read_buffer *buf) {
+		struct archive *a, struct result_t *result, struct archive_read_buffer *buf)
+{
 	int found = 0;
 
 	while(archive_fgets(a, buf) == ARCHIVE_OK) {
@@ -204,7 +205,8 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 }
 
 static int list_metafile(const char *repo, struct pkg_t *pkg,
-		struct archive *a, struct result_t *result, struct archive_read_buffer *buf) {
+		struct archive *a, struct result_t *result, struct archive_read_buffer *buf)
+{
 	if((config.icase ? strcasecmp : strcmp)(config.filter.glob.glob, pkg->name) != 0) {
 		return 1;
 	}
@@ -391,7 +393,8 @@ static int compile_pcre_expr(struct pcre_data *re, const char *preg, int flags)
 	return 0;
 }
 
-static compresstype_t validate_compression(const char *compress) {
+static compresstype_t validate_compression(const char *compress)
+{
 	if(strcmp(compress, "none") == 0) {
 		return COMPRESS_NONE;
 	} else if(strcmp(compress, "gzip") == 0) {
@@ -548,39 +551,26 @@ static int parse_opts(int argc, char **argv)
 
 static int search_single_repo(struct repo_t **repos, int repocount, char *searchstring)
 {
-	char *targetrepo = NULL, *slash;
-	int i, ret = 1;
+	char *targetrepo;
+	int i;
 
-	if(config.targetrepo) {
-		targetrepo = config.targetrepo;
-	} else {
-		slash = strchr(searchstring, '/');
-		targetrepo = strdup(searchstring);
-		targetrepo[slash - searchstring] = '\0';
-		config.filter.glob.glob = &slash[1];
-	}
-
+	targetrepo = config.targetrepo ? config.targetrepo : strsep(&searchstring, "/");
+	config.filter.glob.glob = searchstring;
 	config.filterby = FILTER_EXACT;
 
 	for(i = 0; i < repocount; i++) {
 		if(strcmp(repos[i]->name, targetrepo) == 0) {
 			struct result_t *result = load_repo(repos[i]);
-			ret = (result->count == 0);
 			result_print(result, config.raw ? 0 : result->max_prefixlen, config.eol);
 			result_free(result);
-			goto finish;
+			return result->count == 0;
 		}
 	}
 
 	/* repo not found */
 	fprintf(stderr, "error: repo not available: %s\n", targetrepo);
 
-finish:
-	if(!config.targetrepo) {
-		free(targetrepo);
-	}
-
-	return ret;
+	return 1;
 }
 
 static struct result_t **search_all_repos(struct repo_t **repos, int repocount)
