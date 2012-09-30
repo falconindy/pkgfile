@@ -383,11 +383,18 @@ error:
 	return rc;
 }
 
-static int repack_repo_data(const struct repo_t *repo)
+static void archive_conv_close(struct archive_conv *conv)
 {
-	struct archive_conv conv;
-	int p, ret = -1;
+	archive_write_close(conv->out);
+	archive_write_free(conv->out);
+	archive_read_close(conv->in);
+	archive_read_free(conv->in);
+}
 
+static int archive_conv_open(struct archive_conv *conv,
+		const struct repo_t *repo)
+{
+	int r;
 	static int (*write_add_filter[])(struct archive *) = {
 		[COMPRESS_NONE] = NULL,
 		[COMPRESS_GZIP] = archive_write_add_filter_gzip,
@@ -402,78 +409,88 @@ static int repack_repo_data(const struct repo_t *repo)
 	 * methods. this also gives us an opportunity to rewrite the archive as CPIO,
 	 * which is marginally faster given our staunch sequential access. */
 
-	conv.reponame = repo->name;
-	p = snprintf(conv.tmpfile, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
-	memcpy(conv.diskfile, conv.tmpfile, p);
-	conv.diskfile[p - 1] = '\0';
+	conv->reponame = repo->name;
+	r = snprintf(conv->tmpfile, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
+	memcpy(conv->diskfile, conv->tmpfile, r);
+	conv->diskfile[r - 1] = '\0';
 
-	conv.in = archive_read_new();
-	conv.out = archive_write_new();
+	conv->in = archive_read_new();
+	conv->out = archive_write_new();
 
-	if(conv.in == NULL || conv.out == NULL) {
+	if(conv->in == NULL || conv->out == NULL) {
 		fprintf(stderr, "error: failed to allocate memory for archive objects\n");
-		return -1;
+		return -ENOMEM;
 	}
 
-	archive_read_support_format_tar(conv.in);
-	archive_read_support_compression_all(conv.in);
-	ret = archive_read_open_memory(conv.in, repo->data, repo->buflen);
-	if(ret != ARCHIVE_OK) {
+	archive_read_support_format_tar(conv->in);
+	archive_read_support_compression_all(conv->in);
+	r = archive_read_open_memory(conv->in, repo->data, repo->buflen);
+	if(r != ARCHIVE_OK) {
 		fprintf(stderr, "error: failed to create archive reader for %s: %s\n",
-				repo->name, archive_error_string(conv.in));
+				repo->name, archive_error_string(conv->in));
 		goto open_error;
 	}
 
 	if(write_add_filter[repo->config->compress]) {
-		write_add_filter[repo->config->compress](conv.out);
+		write_add_filter[repo->config->compress](conv->out);
 	}
 
-	archive_write_set_format_cpio(conv.out);
-	ret = archive_write_open_filename(conv.out, conv.tmpfile);
-	if(ret != ARCHIVE_OK) {
+	archive_write_set_format_cpio(conv->out);
+	r = archive_write_open_filename(conv->out, conv->tmpfile);
+	if(r != ARCHIVE_OK) {
 		fprintf(stderr, "error: failed to open file for writing: %s: %s\n",
-				conv.tmpfile, archive_error_string(conv.out));
+				conv->tmpfile, archive_error_string(conv->out));
 		goto open_error;
+	}
+
+	return 0;
+
+open_error:
+	archive_write_free(conv->out);
+	archive_read_free(conv->in);
+
+	return -errno;
+}
+
+static int repack_repo_data(const struct repo_t *repo)
+{
+	struct archive_conv conv;
+	int ret;
+
+	if(archive_conv_open(&conv, repo) < 0) {
+		return -1;
 	}
 
 	while(archive_read_next_header(conv.in, &conv.ae) == ARCHIVE_OK) {
 		const char *entryname = archive_entry_pathname(conv.ae);
 
 		/* ignore everything but the /files metadata */
-		if(!endswith(entryname, "/files")) {
-			continue;
-		}
-
-		ret = write_cpio_entry(&conv, entryname);
-		if(ret < 0) {
-			goto write_error;
+		if(endswith(entryname, "/files")) {
+			ret = write_cpio_entry(&conv, entryname);
+			if(ret < 0) {
+				break;
+			}
 		}
 	}
 
-	ret = 0;
+	archive_conv_close(&conv);
 
-write_error:
-	archive_write_close(conv.out);
-	archive_read_close(conv.in);
-
-open_error:
-	archive_write_free(conv.out);
-	archive_read_free(conv.in);
-
-	if(ret == 0) {
-		if(rename(conv.tmpfile, conv.diskfile) != 0) {
-			fprintf(stderr, "error: failed to rotate new repo for %s into place: %s\n",
-					repo->name, strerror(errno));
-		}
-	} else {
+	if(ret < 0) {
 		/* oh noes! */
 		if(unlink(conv.tmpfile) < 0 && errno != ENOENT) {
 			fprintf(stderr, "error: failed to unlink temporary file: %s: %s\n", conv.tmpfile,
 					strerror(errno));
 		}
+		return -1;
 	}
 
-	return ret;
+	if(rename(conv.tmpfile, conv.diskfile) != 0) {
+		fprintf(stderr, "error: failed to rotate new repo for %s into place: %s\n",
+				repo->name, strerror(errno));
+		return -1;
+	}
+
+	return 0;
 }
 
 static int repack_repo_data_async(struct repo_t *repo)
