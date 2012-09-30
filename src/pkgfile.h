@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <limits.h>
 #include <stdbool.h>
 
 #include <archive.h>
@@ -92,7 +93,7 @@ typedef union _filterpattern_t {
 } filterpattern_t;
 
 struct pkg_t {
-	char *name;
+	char name[PATH_MAX];
 	char *version;
 };
 

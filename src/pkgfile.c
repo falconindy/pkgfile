@@ -256,10 +256,7 @@ static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len)
 		return -EINVAL;
 	}
 
-	pkg->name = strdup(entryname);
-	if(pkg->name == NULL) {
-		return -ENOMEM;
-	}
+	memcpy(pkg->name, entryname, len);
 
 	/* ->name and ->version share the same memory */
 	pkg->name[dash - entryname] = pkg->name[slash - entryname] = '\0';
@@ -340,9 +337,6 @@ static void *load_repo(void *repo_obj)
 		memset(&read_buffer, 0, sizeof(struct archive_read_buffer));
 		read_buffer.line = line;
 		r = config.filefunc(repo->name, &pkg, a, result, &read_buffer);
-
-		/* clean out the struct, but don't get rid of it entirely */
-		free(pkg.name);
 
 		switch(r) {
 		case -1:
