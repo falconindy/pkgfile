@@ -110,12 +110,7 @@ CC_CHECK_FLAGS_APPEND(with_cflags, [CFLAGS], [\
 	-Wnested-externs \
 	-Wchar-subscripts \
 	-Wtype-limits \
-	-Wuninitialized \
-	-fno-common \
-	-fdiagnostics-show-option \
-	-fvisibility=hidden \
-	-ffunction-sections \
-	-fdata-sections])
+	-Wuninitialized])
 AC_SUBST([WARNINGFLAGS], $with_cflags)
 
 CC_CHECK_FLAGS_APPEND([with_ldflags], [LDFLAGS], [ \
