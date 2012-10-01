@@ -767,7 +767,7 @@ static int reap_children(struct repo_t **repos, int repocount)
 
 	if(running > 0) {
 		int stat_loc;
-		printf(":: waiting on %d process%s to finish repacking repos...\n",
+		printf(":: waiting for %d process%s to finish repacking repos...\n",
 				running, running == 1 ? "" : "es");
 		for(;;) {
 			pid_t pid = wait4(-1, &stat_loc, 0, NULL);
