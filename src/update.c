@@ -695,7 +695,7 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 
 	curl_multi_perform(multi, &active_handles);
 	do {
-		int rc, maxfd = -1;
+		int maxfd = -1;
 		long curl_timeout;
 		struct timeval timeout = { 1, 0 };
 
@@ -718,18 +718,13 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 		FD_ZERO(&fdexcep);
 
 		curl_multi_fdset(multi, &fdread, &fdwrite, &fdexcep, &maxfd);
-
-		rc = select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
-		switch(rc) {
-		case -1:
+		if(select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout) < 0) {
 			fprintf(stderr, "error: failed to call select: %s\n", strerror(errno));
 			break;
-		case 0:
-			/* timeout, fallthrough */
-		default:
-			curl_multi_perform(multi, &active_handles);
-			break;
 		}
+
+		/* select(2) timeout or data available to read */
+		curl_multi_perform(multi, &active_handles);
 
 		/* read any pending messages */
 		for(;;) {
