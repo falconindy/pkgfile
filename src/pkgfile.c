@@ -201,14 +201,14 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 		}
 	}
 
-	return 1;
+	return 0;
 }
 
 static int list_metafile(const char *repo, struct pkg_t *pkg,
 		struct archive *a, struct result_t *result, struct archive_read_buffer *buf)
 {
 	if((config.icase ? strcasecmp : strcmp)(config.filter.glob.glob, pkg->name) != 0) {
-		return 1;
+		return 0;
 	}
 
 	while(archive_fgets(a, buf) == ARCHIVE_OK) {
@@ -224,20 +224,20 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 			line = strdup(buf->line);
 			if(line == NULL) {
 				fprintf(stderr, "error: failed to allocate memory\n");
-				return 1;
+				return 0;
 			}
 		} else {
 			prefixlen = asprintf(&line, "%s/%s", repo, pkg->name);
 			if(prefixlen < 0) {
 				fprintf(stderr, "error: failed to allocate memory\n");
-				return 1;
+				return 0;
 			}
 		}
 		result_add(result, line, config.quiet ? NULL : buf->line, prefixlen);
 		free(line);
 	}
 
-	return 0;
+	return -1;
 }
 
 static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len)
@@ -337,20 +337,11 @@ static void *load_repo(void *repo_obj)
 		memset(&read_buffer, 0, sizeof(struct archive_read_buffer));
 		read_buffer.line = line;
 		r = config.filefunc(repo->name, &pkg, a, result, &read_buffer);
-
-		switch(r) {
-		case -1:
-			/* error */
-			/* FALLTHROUGH */
-		case 0:
-			/* done */
-			goto done;
-		case 1:
-			/* continue */
+		if(r < 0) {
 			break;
 		}
 	}
-done:
+
 	archive_read_close(a);
 
 cleanup:
