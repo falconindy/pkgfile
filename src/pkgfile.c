@@ -569,7 +569,7 @@ static struct result_t **search_all_repos(struct repo_t **repos, int repocount)
 
 	/* load and process DBs */
 	for(i = 0; i < repocount; i++) {
-		pthread_create(&t[i], NULL, load_repo, (void *)repos[i]);
+		pthread_create(&t[i], NULL, load_repo, repos[i]);
 	}
 
 	/* gather results */
