@@ -732,8 +732,7 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 		for(;;) {
 			int r = read_multi_msg(multi, active_handles);
 			if(r == -EAGAIN) {
-				/* "ref" the active_handles -- there's still more to do */
-				active_handles++;
+				continue;
 			} else if(r == -ENOENT) {
 				/* we're out of messages */
 				break;
