@@ -691,7 +691,7 @@ static int read_multi_msg(CURLM *multi, int remaining)
 	return 0;
 }
 
-static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
+static void hit_multi_handle_until_candy_comes_out(CURLM *multi)
 {
 	int active_handles;
 
@@ -739,8 +739,6 @@ static int hit_multi_handle_until_candy_comes_out(CURLM *multi)
 			}
 		}
 	} while(active_handles > 0);
-
-	return 0;
 }
 
 
