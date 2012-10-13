@@ -584,7 +584,6 @@ static struct result_t **search_all_repos(struct repo_t **repos, int repocount)
 
 static int filter_setup(char *arg)
 {
-
 	config.filter.glob.globlen = strlen(arg);
 
 	switch(config.filterby) {
@@ -601,10 +600,7 @@ static int filter_setup(char *arg)
 		config.icase *= PCRE_CASELESS;
 		config.filterfunc = match_regex;
 		config.filterfree = free_regex;
-		if(compile_pcre_expr(&config.filter.re, arg, config.icase) != 0) {
-			return 1;
-		}
-		break;
+		return compile_pcre_expr(&config.filter.re, arg, config.icase);
 	}
 
 	return 0;
