@@ -203,16 +203,16 @@ static char *line_get_val(char *line, const char *sep)
 	return line;
 }
 
-static int add_servers_from_include(struct repo_t *repo, char *file)
+static int add_servers_from_include(struct repo_t *repo, const char *filename)
 {
 	char *ptr;
 	char line[4096];
 	const char * const server = "Server";
 	FILE *fp;
 
-	fp = fopen(file, "r");
+	fp = fopen(filename, "r");
 	if(!fp) {
-		perror("fopen");
+		fprintf(stderr, "error: failed to open %s: %s\n", filename, strerror(errno));
 		return 1;
 	}
 
