@@ -216,7 +216,7 @@ static int add_servers_from_include(struct repo_t *repo, char *file)
 		return 1;
 	}
 
-	while(fgets(line, 4096, fp)) {
+	while(fgets(line, sizeof(line), fp)) {
 		ptr = strchr(line, '#');
 		if(ptr) {
 			*ptr = '\0';
