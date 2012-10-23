@@ -1,7 +1,7 @@
 #!/bin/bash
 
 _pkgfile() {
-  local cur prev repos
+  local opts cur prev repos
 
   _get_comp_words_by_ref cur prev
 
