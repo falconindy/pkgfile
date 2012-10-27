@@ -6,8 +6,8 @@ _pkgfile() {
   _get_comp_words_by_ref cur prev
 
   opts="-l --list -s --search -u --update -b --binaries -g --glob -i
-        --ignorecase -q --quiet -R --repo -r --regex -h --help -v --verbose
-        -w --raw -z --compress"
+        --ignorecase -q --quiet -R --repo -r --regex -h --help -V --version
+        -v --verbose -w --raw -z --compress"
 
   if [[ $prev = -*R || $prev = '--repo' ]]; then
     repos=$(sed '/^\[\(.*\)\]$/!d;s//\1/g;/options/d' /etc/pacman.conf)

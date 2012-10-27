@@ -426,14 +426,20 @@ static void usage(void)
 			stdout);
 	fputs(
 			" General:\n"
-			"  -h, --help              display this help and exit\n\n",
+			"  -h, --help              display this help and exit\n"
+			"  -V, --version           display the version and exit\n\n",
 			stdout);
+}
+
+static void print_version(void)
+{
+	fputs(PACKAGE_NAME " v" PACKAGE_VERSION "\n", stdout);
 }
 
 static int parse_opts(int argc, char **argv)
 {
 	int opt;
-	static const char *shortopts = "0bdghilqR:rsuvwz::";
+	static const char *shortopts = "0bdghilqR:rsuVvwz::";
 	static const struct option longopts[] = {
 		{"binaries",    no_argument,        0, 'b'},
 		{"compress",    optional_argument,  0, 'z'},
@@ -447,6 +453,7 @@ static int parse_opts(int argc, char **argv)
 		{"regex",       no_argument,        0, 'r'},
 		{"search",      no_argument,        0, 's'},
 		{"update",      no_argument,        0, 'u'},
+		{"version",     no_argument,        0, 'V'},
 		{"verbose",     no_argument,        0, 'v'},
 		{"raw",         no_argument,        0, 'w'},
 		{"null",        no_argument,        0, '0'},
@@ -509,6 +516,9 @@ static int parse_opts(int argc, char **argv)
 		case 'u':
 			config.doupdate++;
 			break;
+		case 'V':
+			print_version();
+			exit(EXIT_SUCCESS);
 		case 'v':
 			config.verbose = true;
 			break;
