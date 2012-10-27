@@ -103,6 +103,20 @@ will decrease performance, but may be desirable for disk space concerns.
 
 =back
 
+=head1 GENERAL OPTIONS
+
+=over 4
+
+=item B<-h>, B<--help>
+
+Print help and exit.
+
+=item B<-V>, B<--version>
+
+Print the version and exit.
+
+=back
+
 =head1 MATCHING HEURISTICS
 
 In --search mode and without the --regex or --glob option, pkgfile will attempt
