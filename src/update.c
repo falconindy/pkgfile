@@ -552,7 +552,7 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo)
 	} else {
 		curl_multi_remove_handle(multi, repo->curl);
 		FREE(repo->url);
-		free(repo->data);
+		FREE(repo->data);
 		repo->buflen = 0;
 		repo->server_idx++;
 	}
