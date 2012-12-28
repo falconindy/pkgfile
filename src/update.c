@@ -512,20 +512,39 @@ static int repack_repo_data_async(struct repo_t *repo)
 
 static size_t write_response(void *ptr, size_t size, size_t nmemb, void *data)
 {
-	void *newdata;
+	void *writebuf;
 	const size_t realsize = size * nmemb;
+	size_t grow = 0;
 	struct repo_t *repo = (struct repo_t*)data;
 
-	newdata = realloc(repo->data, repo->buflen + realsize + 1);
-	if(!newdata) {
-		fprintf(stderr, "error: failed to reallocate %zd bytes\n",
-				repo->buflen + realsize + 1);
-		return 0;
+	if(repo->buflen + realsize > repo->capacity) {
+		double contentlen = 0;
+
+		/* alloc at once */
+		curl_easy_getinfo(repo->curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &contentlen);
+		if (contentlen >= 0) {
+			grow = contentlen;
+		} else {
+			/* crappy mirror, fallback on an incremental growth */
+			grow = repo->buflen + realsize;
+		}
 	}
 
-	repo->data = newdata;
+	/* hey, i just alloc'd you and this is crazy, but I need to
+	 * write more, so realloc maybe? */
+	if(grow > 0) {
+		writebuf = realloc(repo->data, grow + 1);
+		if(!writebuf) {
+			fprintf(stderr, "error: failed to reallocate %zd bytes\n",
+					repo->buflen + realsize + 1);
+			return 0;
+		}
+		repo->data = writebuf;
+	}
+
 	memcpy(&(repo->data[repo->buflen]), ptr, realsize);
 	repo->buflen += realsize;
+	repo->capacity += grow + 1;
 	repo->data[repo->buflen] = '\0';
 
 	return realsize;
@@ -553,6 +572,7 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo)
 		FREE(repo->url);
 		FREE(repo->data);
 		repo->buflen = 0;
+		repo->capacity = 0;
 		repo->server_idx++;
 	}
 

@@ -50,7 +50,9 @@ struct repo_t {
 	int server_idx;
 	/* write buffer for downloaded data */
 	unsigned char *data;
-	/* size of write_buffer */
+	/* max capacity of write buffer */
+	size_t capacity;
+	/* size of data written */
 	size_t buflen;
 	/* error buffer */
 	char errmsg[CURL_ERROR_SIZE];
