@@ -195,68 +195,32 @@ static char *prepare_url(const char *url, const char *repo, const char *arch)
 	return temp;
 }
 
-static char *line_get_val(char *line, const char *sep)
+static char *split_keyval(char *line, const char *sep)
 {
 	strsep(&line, sep);
-	strtrim(line);
 	return line;
 }
 
-static int add_servers_from_include(struct repo_t *repo, const char *filename)
+static int parse_one_file(const char *filename, char **section,
+		struct repo_t ***repos, int *repocount)
 {
+	FILE *fp;
 	char *ptr;
 	char line[4096];
 	const char * const server = "Server";
-	FILE *fp;
-
-	fp = fopen(filename, "r");
-	if(!fp) {
-		fprintf(stderr, "error: failed to open %s: %s\n", filename, strerror(errno));
-		return 1;
-	}
-
-	while(fgets(line, sizeof(line), fp)) {
-		ptr = strchr(line, '#');
-		if(ptr) {
-			*ptr = '\0';
-		}
-
-		if(strtrim(line) == 0) {
-			continue;
-		}
-
-		/* we don't deal with nested includes */
-		if(strncmp(line, server, strlen(server)) == 0) {
-			ptr = line_get_val(line, "=");
-			repo_add_server(repo, ptr);
-		}
-	}
-
-	fclose(fp);
-
-	return 0;
-}
-
-struct repo_t **find_active_repos(const char *filename, int *repocount)
-{
-	FILE *fp;
-	char *ptr, *section = NULL;
-	char line[4096];
-	const char * const server = "Server";
 	const char * const include = "Include";
-	struct repo_t **active_repos = NULL;
-	int in_options = 0;
-
-	*repocount = 0;
+	int in_options = 0, r = 0, lineno = 0;
+	struct repo_t **active_repos = *repos;
 
 	fp = fopen(filename, "r");
 	if(!fp) {
 		fprintf(stderr, "error: failed to open %s: %s\n", filename, strerror(errno));
-		return NULL;
+		return -errno;
 	}
 
 	while(fgets(line, sizeof(line), fp)) {
 		size_t len;
+		++lineno;
 
 		/* remove comments */
 		ptr = strchr(line, '#');
@@ -271,39 +235,66 @@ struct repo_t **find_active_repos(const char *filename, int *repocount)
 
 		/* found a section header */
 		if(line[0] == '[' && line[len - 1] == ']') {
-			free(section);
-			section = strndup(&line[1], len - 2);
-			if((len - 2) == 7 && memcmp(section, "options", 7) == 0) {
+			free(*section);
+			*section = strndup(&line[1], len - 2);
+			if(len - 2 == 7 && memcmp(*section, "options", 7) == 0) {
 				in_options = 1;
 			} else {
 				in_options = 0;
 				active_repos = realloc(active_repos, sizeof(struct repo_t *) * (*repocount + 2));
-				active_repos[*repocount] = repo_new(section);
+				active_repos[*repocount] = repo_new(*section);
 				(*repocount)++;
 			}
 		}
 
-		/* ignore the contents of the [options] section */
-		if(in_options) {
-			continue;
-		}
-
 		if(strchr(line, '=')) {
-			char *key = line, *val = line_get_val(line, "=");
+			char *key = line, *val = split_keyval(line, "=");
 			strtrim(key);
+			strtrim(val);
 
 			if(strcmp(key, server) == 0) {
-				repo_add_server(active_repos[*repocount - 1], val);
+				if(*section == NULL) {
+					fprintf(stderr, "error: failed to parse %s on line %d: found 'Server' directive "
+							"outside of a section\n", filename, lineno);
+					continue;
+				}
+				if(in_options) {
+					fprintf(stderr, "error: failed to parse %s on line %d: found 'Server' directive "
+							"in options section\n", filename, lineno);
+					continue;
+				}
+				r = repo_add_server(active_repos[*repocount - 1], val);
+				if (r < 0) {
+					break;
+				}
 			} else if(strcmp(key, include) == 0) {
-				add_servers_from_include(active_repos[*repocount - 1], val);
+				parse_one_file(val, section, &active_repos, repocount);
 			}
 		}
 	}
 
-	free(section);
 	fclose(fp);
 
-	return active_repos;
+	*repos = active_repos;
+
+	return r;
+}
+
+struct repo_t **find_active_repos(const char *filename, int *repocount)
+{
+	struct repo_t **repos = NULL;
+	char *section = NULL;
+
+	*repocount = 0;
+
+	if(parse_one_file(filename, &section, &repos, repocount) < 0) {
+		/* TODO: free repos on fail? */
+		return NULL;
+	}
+
+	free(section);
+
+	return repos;
 }
 
 static int endswith(const char *s, const char *postfix)
