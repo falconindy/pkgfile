@@ -23,6 +23,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <float.h>
+#include <glob.h>
 #include <limits.h>
 #include <math.h>
 #include <string.h>
@@ -201,6 +202,30 @@ static char *split_keyval(char *line, const char *sep)
 	return line;
 }
 
+static int parse_one_file(const char *, char **, struct repo_t ***, int *);
+
+static int parse_include(const char *include, char **section,
+		struct repo_t ***repos, int *repocount)
+{
+	glob_t globbuf;
+	size_t i;
+
+	if(glob(include, GLOB_NOCHECK, NULL, &globbuf) != 0) {
+		/*  */
+		fprintf(stderr, "warning: globbing failed on '%s': out of memory\n",
+				include);
+		return -ENOMEM;
+	}
+
+	for(i = 0; i < globbuf.gl_pathc; i++) {
+		parse_one_file(globbuf.gl_pathv[i], section, repos, repocount);
+	}
+
+	globfree(&globbuf);
+
+	return 0;
+}
+
 static int parse_one_file(const char *filename, char **section,
 		struct repo_t ***repos, int *repocount)
 {
@@ -268,7 +293,7 @@ static int parse_one_file(const char *filename, char **section,
 					break;
 				}
 			} else if(strcmp(key, include) == 0) {
-				parse_one_file(val, section, &active_repos, repocount);
+				parse_include(val, section, &active_repos, repocount);
 			}
 		}
 	}
