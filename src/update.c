@@ -211,7 +211,6 @@ static int parse_include(const char *include, char **section,
 	size_t i;
 
 	if(glob(include, GLOB_NOCHECK, NULL, &globbuf) != 0) {
-		/*  */
 		fprintf(stderr, "warning: globbing failed on '%s': out of memory\n",
 				include);
 		return -ENOMEM;
