@@ -437,7 +437,7 @@ static int archive_conv_open(struct archive_conv *conv,
 	}
 
 	archive_read_support_format_tar(conv->in);
-	archive_read_support_compression_all(conv->in);
+	archive_read_support_filter_all(conv->in);
 	r = archive_read_open_memory(conv->in, repo->data, repo->buflen);
 	if(r != ARCHIVE_OK) {
 		fprintf(stderr, "error: failed to create archive reader for %s: %s\n",

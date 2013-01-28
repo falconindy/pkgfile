@@ -285,7 +285,7 @@ static void *load_repo(void *repo_obj)
 
 	a = archive_read_new();
 	archive_read_support_format_all(a);
-	archive_read_support_compression_all(a);
+	archive_read_support_filter_all(a);
 
 	memset(&read_buffer, 0, sizeof(struct archive_read_buffer));
 	MALLOC(line, MAX_LINE_SIZE, return NULL);
@@ -346,7 +346,7 @@ static void *load_repo(void *repo_obj)
 
 cleanup:
 	free(line);
-	archive_read_finish(a);
+	archive_read_free(a);
 	if(fd >= 0) {
 		close(fd);
 	}
