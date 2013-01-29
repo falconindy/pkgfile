@@ -41,18 +41,6 @@
 # define PCRE_STUDY_JIT_COMPILE 0
 #endif
 
-/* allow compilation with libarchive < 3.0 */
-#if ARCHIVE_VERSION_NUMBER < 3000000
-# define archive_read_free(x)  archive_read_finish(x)
-# define archive_write_free(x) archive_write_finish(x)
-
-# define archive_write_add_filter_none(x)   archive_write_set_compression_none(x)
-# define archive_write_add_filter_gzip(x)   archive_write_set_compression_gzip(x)
-# define archive_write_add_filter_bzip2(x)  archive_write_set_compression_bzip2(x)
-# define archive_write_add_filter_lzma(x)   archive_write_set_compression_lzma(x)
-# define archive_write_add_filter_xz(x)     archive_write_set_compression_xz(x)
-#endif
-
 struct archive_read_buffer {
 	char *line;
 	char *line_offset;
