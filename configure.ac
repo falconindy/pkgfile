@@ -20,7 +20,7 @@ AM_SILENT_RULES([yes])
 
 PKG_CHECK_MODULES(PCRE,    [ libpcre ])
 PKG_CHECK_MODULES(ARCHIVE, [ libarchive >= 3.0.0 ])
-PKG_CHECK_MODULES(CURL,    [ libcurl >= 7.19.4 ])
+PKG_CHECK_MODULES(CURL,    [ libcurl >= 7.28.0 ])
 
 # Help line for using git version in pkgfile version string
 AC_ARG_ENABLE(git-version,
