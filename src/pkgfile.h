@@ -60,15 +60,6 @@ typedef enum _filterstyle_t {
 	FILTER_REGEX
 } filterstyle_t;
 
-typedef enum _compresstype_t {
-	COMPRESS_NONE = 0,
-	COMPRESS_GZIP,
-	COMPRESS_BZIP2,
-	COMPRESS_LZMA,
-	COMPRESS_XZ,
-	COMPRESS_INVALID
-} compresstype_t;
-
 typedef union _filterpattern_t {
 	struct pcre_data {
 		pcre *re;
@@ -102,7 +93,7 @@ struct config_t {
 	bool verbose;
 	bool raw;
 	char eol;
-	compresstype_t compress;
+	int compress;
 };
 
 int archive_fgets(struct archive *a, struct archive_read_buffer *b);

@@ -409,14 +409,6 @@ static int archive_conv_open(struct archive_conv *conv,
 		const struct repo_t *repo)
 {
 	int r;
-	static int (*write_add_filter[])(struct archive *) = {
-		[COMPRESS_NONE] = NULL,
-		[COMPRESS_GZIP] = archive_write_add_filter_gzip,
-		[COMPRESS_BZIP2] = archive_write_add_filter_bzip2,
-		[COMPRESS_LZMA] = archive_write_add_filter_lzma,
-		[COMPRESS_XZ] = archive_write_add_filter_xz,
-		[COMPRESS_INVALID] = NULL,
-	};
 
 	/* generally, repo files are gzip compressed, but there's no guarantee of
 	 * this. in order to be compression-agnostic, use libarchive's reader/writer
@@ -445,8 +437,8 @@ static int archive_conv_open(struct archive_conv *conv,
 		goto open_error;
 	}
 
-	if(write_add_filter[repo->config->compress]) {
-		write_add_filter[repo->config->compress](conv->out);
+	if(repo->config->compress > 0) {
+		archive_write_add_filter(conv->out, repo->config->compress);
 	}
 
 	archive_write_set_format_cpio(conv->out);

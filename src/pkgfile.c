@@ -378,20 +378,22 @@ static int compile_pcre_expr(struct pcre_data *re, const char *preg, int flags)
 	return 0;
 }
 
-static compresstype_t validate_compression(const char *compress)
+static int validate_compression(const char *compress)
 {
 	if(strcmp(compress, "none") == 0) {
-		return COMPRESS_NONE;
+		return ARCHIVE_FILTER_NONE;
 	} else if(strcmp(compress, "gzip") == 0) {
-		return COMPRESS_GZIP;
+		return ARCHIVE_FILTER_GZIP;
 	} else if(strcmp(compress, "bzip2") == 0) {
-		return COMPRESS_BZIP2;
+		return ARCHIVE_FILTER_BZIP2;
 	} else if(strcmp(compress, "lzma") == 0) {
-		return COMPRESS_LZMA;
+		return ARCHIVE_FILTER_LZMA;
+	} else if(strcmp(compress, "lzop") == 0) {
+		return ARCHIVE_FILTER_LZOP;
 	} else if(strcmp(compress, "xz") == 0) {
-		return COMPRESS_XZ;
+		return ARCHIVE_FILTER_XZ;
 	} else {
-		return COMPRESS_INVALID;
+		return -1;
 	}
 }
 
@@ -528,12 +530,12 @@ static int parse_opts(int argc, char **argv)
 		case 'z':
 			if(optarg != NULL) {
 				config.compress = validate_compression(optarg);
-				if(config.compress == COMPRESS_INVALID) {
+				if(config.compress < 0) {
 					fprintf(stderr, "error: invalid compression option %s\n", optarg);
 					return 1;
 				}
 			} else {
-				config.compress = COMPRESS_GZIP;
+				config.compress = ARCHIVE_FILTER_GZIP;
 			}
 			break;
 		default:
