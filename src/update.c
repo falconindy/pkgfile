@@ -188,7 +188,7 @@ static char *prepare_url(const char *url, const char *repo, const char *arch)
 	}
 
 	if(asprintf(&temp, "%s/%s.files", string, repo) == -1) {
-		fprintf(stderr, "error: failed to allocate memory\n");
+		fputs("error: failed to allocate memory\n", stderr);
 	}
 
 	free(string);
@@ -424,7 +424,7 @@ static int archive_conv_open(struct archive_conv *conv,
 	conv->out = archive_write_new();
 
 	if(conv->in == NULL || conv->out == NULL) {
-		fprintf(stderr, "error: failed to allocate memory for archive objects\n");
+		fputs("error: failed to allocate memory for archive objects\n", stderr);
 		return -ENOMEM;
 	}
 
@@ -589,7 +589,7 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo)
 
 	repo->url = prepare_url(repo->servers[repo->server_idx], repo->name, repo->arch);
 	if(repo->url == NULL) {
-		fprintf(stderr, "error: failed to allocate URL for download\n");
+		fputs("error: failed to allocate URL for download\n", stderr);
 		return -1;
 	}
 

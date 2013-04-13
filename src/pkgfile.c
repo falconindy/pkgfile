@@ -184,7 +184,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 			if(config.verbose) {
 				int prefixlen = asprintf(&line, "%s/%s %s", repo, pkg->name, pkg->version);
 				if(prefixlen < 0) {
-					fprintf(stderr, "error: failed to allocate memory\n");
+					fputs("error: failed to allocate memory\n", stderr);
 					return -1;
 				}
 				result_add(result, line, buf->line, prefixlen);
@@ -192,7 +192,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 			} else {
 				found = 1;
 				if(asprintf(&line, "%s/%s", repo, pkg->name) < 0) {
-					fprintf(stderr, "error: failed to allocate memory\n");
+					fputs("error: failed to allocate memory\n", stderr);
 					return -1;
 				}
 				result_add(result, line, NULL, 0);
@@ -223,13 +223,13 @@ static int list_metafile(const char *repo, struct pkg_t *pkg,
 		if(config.quiet) {
 			line = strdup(buf->line);
 			if(line == NULL) {
-				fprintf(stderr, "error: failed to allocate memory\n");
+				fputs("error: failed to allocate memory\n", stderr);
 				return 0;
 			}
 		} else {
 			prefixlen = asprintf(&line, "%s/%s", repo, pkg->name);
 			if(prefixlen < 0) {
-				fprintf(stderr, "error: failed to allocate memory\n");
+				fputs("error: failed to allocate memory\n", stderr);
 				return 0;
 			}
 		}
@@ -630,7 +630,7 @@ int main(int argc, char *argv[])
 
 	repos = find_active_repos(PACMANCONFIG, &repocount);
 	if(!repocount) {
-		fprintf(stderr, "error: no repos found in " PACMANCONFIG "\n");
+		fputs("error: no repos found in " PACMANCONFIG "\n", stderr);
 		return 1;
 	}
 
@@ -640,13 +640,13 @@ int main(int argc, char *argv[])
 	}
 
 	if(optind == argc) {
-		fprintf(stderr, "error: no target specified (use -h for help)\n");
+		fputs("error: no target specified (use -h for help)\n", stderr);
 		goto cleanup;
 	}
 
 	/* sanity check */
 	if(config.filefunc == list_metafile && config.filterby != FILTER_EXACT) {
-		fprintf(stderr, "error: --regex and --glob cannot be used with --list\n");
+		fputs("error: --regex and --glob cannot be used with --list\n", stderr);
 		goto cleanup;
 	}
 
@@ -670,7 +670,7 @@ int main(int argc, char *argv[])
 		}
 
 		if(!reposfound) {
-			fprintf(stderr, "error: No repo files found. Please run `pkgfile --update'.\n");
+			fputs("error: No repo files found. Please run `pkgfile --update'.\n", stderr);
 		}
 
 		ret = ret > 0 ? 0 : 1;
