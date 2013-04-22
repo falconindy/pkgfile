@@ -288,7 +288,7 @@ static int parse_one_file(const char *filename, char **section,
 					continue;
 				}
 				r = repo_add_server(active_repos[*repocount - 1], val);
-				if (r < 0) {
+				if(r < 0) {
 					break;
 				}
 			} else if(strcmp(key, include) == 0) {
@@ -328,7 +328,7 @@ static int endswith(const char *s, const char *postfix)
 	sl = strlen(s);
 	pl = strlen(postfix);
 
-	if (pl == 0 || sl < pl)
+	if(pl == 0 || sl < pl)
 		return 0;
 
 	return memcmp(s + sl - pl, postfix, pl) == 0;
