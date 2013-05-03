@@ -13,7 +13,7 @@ _pkgfile() {
     repos=$(sed '/^\[\(.*\)\]$/!d;s//\1/g;/options/d' /etc/pacman.conf)
     COMPREPLY=($(compgen -W "$repos" -- "$cur"))
   elif [[ $prev = @(-z|--compress) ]]; then
-    COMPREPLY=($(compgen -W "none gzip bzip2 lzma xz" -- "$cur"))
+    COMPREPLY=($(compgen -W "none gzip bzip2 lzma lzop xz" -- "$cur"))
   elif [[ -z $cur || $cur = -* ]]; then
     COMPREPLY=($(compgen -W "$opts" -- "$cur"))
   else
