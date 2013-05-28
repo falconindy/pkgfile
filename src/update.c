@@ -681,7 +681,7 @@ static int read_multi_msg(CURLM *multi, int remaining)
 		return -ENOENT;
 	}
 
-	curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, (void *)&repo);
+	curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &repo);
 	if(msg->msg == CURLMSG_DONE) {
 		long timecond, resp;
 
