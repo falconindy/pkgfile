@@ -61,7 +61,7 @@ Disable case sensitivity in matching.
 
 Enable regular expression matching. See B<pcre>(3).
 
-=item B<-R>, B<--repo>
+=item B<-R> I<REPO>, B<--repo=>I<REPO>
 
 Search only the specific repo.
 
