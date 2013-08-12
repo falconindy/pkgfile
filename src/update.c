@@ -433,7 +433,8 @@ static int archive_conv_open(struct archive_conv *conv,
 	r = archive_read_open_memory(conv->in, repo->data, repo->buflen);
 	if(r != ARCHIVE_OK) {
 		fprintf(stderr, "error: failed to create archive reader for %s: %s\n",
-				repo->name, archive_error_string(conv->in));
+				repo->name, strerror(archive_errno(conv->in)));
+		r = archive_errno(conv->in);
 		goto open_error;
 	}
 
@@ -445,7 +446,8 @@ static int archive_conv_open(struct archive_conv *conv,
 	r = archive_write_open_filename(conv->out, conv->tmpfile);
 	if(r != ARCHIVE_OK) {
 		fprintf(stderr, "error: failed to open file for writing: %s: %s\n",
-				conv->tmpfile, archive_error_string(conv->out));
+				conv->tmpfile, strerror(archive_errno(conv->out)));
+		r = archive_errno(conv->out);
 		goto open_error;
 	}
 
@@ -455,7 +457,7 @@ open_error:
 	archive_write_free(conv->out);
 	archive_read_free(conv->in);
 
-	return -errno;
+	return -r;
 }
 
 static int repack_repo_data(const struct repo_t *repo)
