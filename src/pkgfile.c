@@ -548,15 +548,16 @@ static int parse_opts(int argc, char **argv)
 
 static int search_single_repo(struct repo_t **repos, int repocount, char *searchstring)
 {
-	char *targetrepo;
 	int i;
 
-	targetrepo = config.targetrepo ? config.targetrepo : strsep(&searchstring, "/");
-	config.filter.glob.glob = searchstring;
-	config.filterby = FILTER_EXACT;
+	if(!config.targetrepo) {
+		config.targetrepo = strsep(&searchstring, "/");
+		config.filter.glob.glob = searchstring;
+		config.filterby = FILTER_EXACT;
+	}
 
 	for(i = 0; i < repocount; i++) {
-		if(strcmp(repos[i]->name, targetrepo) == 0) {
+		if(strcmp(repos[i]->name, config.targetrepo) == 0) {
 			struct result_t *result = load_repo(repos[i]);
 			result_print(result, config.raw ? 0 : result->max_prefixlen, config.eol);
 			result_free(result);
@@ -565,7 +566,7 @@ static int search_single_repo(struct repo_t **repos, int repocount, char *search
 	}
 
 	/* repo not found */
-	fprintf(stderr, "error: repo not available: %s\n", targetrepo);
+	fprintf(stderr, "error: repo not available: %s\n", config.targetrepo);
 
 	return 1;
 }
