@@ -159,11 +159,24 @@ static bool is_directory(const char *line, const size_t len)
 	return line[len - 1] == '/';
 }
 
+static int format_search_result(char **result, const char *repo,
+		struct pkg_t *pkg)
+{
+	if(config.verbose) {
+		return asprintf(result, "%s/%s %s", repo, pkg->name, pkg->version);
+	}
+
+	if(config.quiet) {
+		*result = strdup(pkg->name);
+		return *result == NULL ? -ENOMEM : 0;
+	}
+
+	return asprintf(result, "%s/%s", repo, pkg->name);
+}
+
 static int search_metafile(const char *repo, struct pkg_t *pkg,
 		struct archive *a, struct result_t *result, struct archive_read_buffer *buf)
 {
-	int found = 0;
-
 	while(archive_fgets(a, buf) == ARCHIVE_OK) {
 		const size_t len = buf->real_line_size;
 
@@ -179,24 +192,20 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 			continue;
 		}
 
-		if(!found && config.filterfunc(&config.filter, buf->line, (int)len, config.icase) == 0) {
+		if(config.filterfunc(&config.filter, buf->line, (int)len, config.icase) == 0) {
 			char *line;
-			if(config.verbose) {
-				int prefixlen = asprintf(&line, "%s/%s %s", repo, pkg->name, pkg->version);
-				if(prefixlen < 0) {
-					fputs("error: failed to allocate memory\n", stderr);
-					return -1;
-				}
-				result_add(result, line, buf->line, prefixlen);
-				free(line);
-			} else {
-				found = 1;
-				if(asprintf(&line, "%s/%s", repo, pkg->name) < 0) {
-					fputs("error: failed to allocate memory\n", stderr);
-					return -1;
-				}
-				result_add(result, line, NULL, 0);
-				free(line);
+			int prefixlen = format_search_result(&line, repo, pkg);
+			if(prefixlen < 0) {
+				fputs("error: failed to allocate memory for result\n", stderr);
+				return -1;
+			}
+			result_add(result, line,
+					config.verbose ? buf->line : NULL,
+					config.verbose ? prefixlen : 0);
+			free(line);
+
+			if(!config.verbose) {
+				return 0;
 			}
 		}
 	}
