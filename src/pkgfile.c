@@ -216,7 +216,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 static int list_metafile(const char *repo, struct pkg_t *pkg,
 		struct archive *a, struct result_t *result, struct archive_read_buffer *buf)
 {
-	if((config.icase ? strcasecmp : strcmp)(config.filter.glob.glob, pkg->name) != 0) {
+	if(match_exact(&config.filter, pkg->name, pkg->len, config.icase) != 0) {
 		return 0;
 	}
 
@@ -270,6 +270,7 @@ static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len)
 	/* ->name and ->version share the same memory */
 	pkg->name[dash - entryname] = pkg->name[slash - entryname] = '\0';
 	pkg->version = &pkg->name[dash - entryname + 1];
+	pkg->len = pkg->version - pkg->name - 1;
 
 	return 0;
 }

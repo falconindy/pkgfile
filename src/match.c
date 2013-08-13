@@ -75,7 +75,7 @@ int match_exact(const filterpattern_t *pattern, const char *line, int len,
 
 	return flags ?
 		strcasecmp(pattern->glob.glob, line) :
-		strcmp(pattern->glob.glob, line);
+		memcmp(pattern->glob.glob, line, len);
 }
 
 /* vim: set ts=2 sw=2 noet: */
