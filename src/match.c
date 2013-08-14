@@ -51,19 +51,14 @@ void free_regex(filterpattern_t *pattern)
 int match_exact_basename(const filterpattern_t *pattern, const char *line, int len,
 		int flags)
 {
-	const char *ptr = line, *match = pattern->glob.glob;
+	const char *ptr = line, *slash = memrchr(line, '/', len - 1);
 
-	/* match on basenames only */
-	const char *slash = memrchr(line, '/', len - 1);
-	if(slash != NULL) {
+	if(slash) {
 		ptr = slash + 1;
+		len -= ptr - line;
 	}
 
-	if(pattern->glob.globlen != len - (ptr - line)) {
-		return -1;
-	}
-
-	return flags ? strcasecmp(match, ptr) : strcmp(match, ptr);
+	return match_exact(pattern, ptr, len, flags);
 }
 
 int match_exact(const filterpattern_t *pattern, const char *line, int len,
