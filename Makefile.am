@@ -89,3 +89,8 @@ uninstall-local:
 
 DISTCHECK_CONFIGURE_FLAGS = \
 	--with-cachedir=$$dc_install_base$(CACHEPATH)
+
+# custom targets
+upload: all distcheck
+	gpg --detach-sign pkgfile-$(VERSION).tar.xz
+	scp pkgfile-$(VERSION).tar.xz pkgfile-$(VERSION).tar.xz.sig code.falconindy.com:archive/pkgfile/
