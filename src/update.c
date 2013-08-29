@@ -586,6 +586,8 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo)
 
 	if(repo->server_idx >= repo->servercount) {
 		fprintf(stderr, "error: failed to update repo: %s\n", repo->name);
+		curl_easy_cleanup(repo->curl);
+		repo->curl = NULL;
 		return -1;
 	}
 
@@ -833,11 +835,13 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 
 	/* remove handles, aggregate results */
 	for(i = 0; i < repocount; i++) {
-		curl_multi_remove_handle(cmulti, repos[i]->curl);
-		curl_easy_cleanup(repos[i]->curl);
+		if (repos[i]->curl != NULL) {
+			curl_multi_remove_handle(cmulti, repos[i]->curl);
+			curl_easy_cleanup(repos[i]->curl);
 
-		FREE(repos[i]->url);
-		FREE(repos[i]->data);
+			FREE(repos[i]->url);
+			FREE(repos[i]->data);
+		}
 
 		total_xfer += repos[i]->buflen;
 
