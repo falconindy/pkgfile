@@ -563,6 +563,7 @@ static int search_single_repo(struct repo_t **repos, int repocount, char *search
 	if(!config.targetrepo) {
 		config.targetrepo = strsep(&searchstring, "/");
 		config.filter.glob.glob = searchstring;
+		config.filter.glob.globlen = strlen(searchstring);
 		config.filterby = FILTER_EXACT;
 	}
 
