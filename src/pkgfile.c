@@ -647,7 +647,7 @@ int main(int argc, char *argv[])
 		return 2;
 	}
 
-	repos = find_active_repos(config.cfgfile);
+	repos = load_repos_from_file(config.cfgfile);
 	if(!repos || repos->size == 0) {
 		fprintf(stderr, "error: no repos found in %s\n", config.cfgfile);
 		return 1;

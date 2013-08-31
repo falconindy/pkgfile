@@ -77,6 +77,6 @@ struct repo_t *repo_new(const char *reponame);
 void repo_free(struct repo_t *repo);
 void repos_free(struct repovec_t* repos);
 int repo_add_server(struct repo_t *repo, const char *server);
-struct repovec_t *find_active_repos(const char *filename);
+struct repovec_t *load_repos_from_file(const char *filename);
 
 /* vim: set ts=2 sw=2 noet: */

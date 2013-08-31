@@ -261,7 +261,7 @@ static int parse_one_file(const char *filename, char **section, struct repovec_t
 	return r;
 }
 
-struct repovec_t *find_active_repos(const char *filename)
+struct repovec_t *load_repos_from_file(const char *filename)
 {
 	char *section = NULL;
 	struct repovec_t *repos = repos_new();
