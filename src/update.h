@@ -24,9 +24,9 @@
 
 #define PACMANCONFIG "/etc/pacman.conf"
 
-#include "repo.h"
+struct config_t;
+struct repo_t;
 
-struct repo_t **find_active_repos(const char *filename, int *repocount);
 int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config);
 
 /* vim: set ts=2 sw=2 noet: */

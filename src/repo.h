@@ -27,8 +27,6 @@
 
 #include <curl/curl.h>
 
-#include "pkgfile.h"
-
 struct repo_t {
 	char *name;
 	char **servers;
@@ -69,5 +67,6 @@ struct repo_t {
 struct repo_t *repo_new(const char *reponame);
 void repo_free(struct repo_t *repo);
 int repo_add_server(struct repo_t *repo, const char *server);
+struct repo_t **find_active_repos(const char *filename, int *repocount);
 
 /* vim: set ts=2 sw=2 noet: */

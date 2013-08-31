@@ -20,6 +20,9 @@
  * THE SOFTWARE.
  */
 
+#include <ctype.h>
+#include <errno.h>
+#include <glob.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,6 +74,159 @@ int repo_add_server(struct repo_t *repo, const char *server)
 	repo->servercount++;
 
 	return 0;
+}
+
+static size_t strtrim(char *str)
+{
+	char *left = str, *right;
+
+	if(!str || *str == '\0') {
+		return 0;
+	}
+
+	while(isspace((unsigned char)*left)) {
+		left++;
+	}
+	if(left != str) {
+		memmove(str, left, (strlen(left) + 1));
+	}
+
+	if(*str == '\0') {
+		return 0;
+	}
+
+	right = (char *)rawmemchr(str, '\0') - 1;
+	while(isspace((unsigned char)*right)) {
+		right--;
+	}
+	*++right = '\0';
+
+	return right - left;
+}
+
+static char *split_keyval(char *line, const char *sep)
+{
+	strsep(&line, sep);
+	return line;
+}
+
+static int parse_one_file(const char *, char **, struct repo_t ***, int *);
+
+static int parse_include(const char *include, char **section,
+		struct repo_t ***repos, int *repocount)
+{
+	glob_t globbuf;
+	size_t i;
+
+	if(glob(include, GLOB_NOCHECK, NULL, &globbuf) != 0) {
+		fprintf(stderr, "warning: globbing failed on '%s': out of memory\n",
+				include);
+		return -ENOMEM;
+	}
+
+	for(i = 0; i < globbuf.gl_pathc; i++) {
+		parse_one_file(globbuf.gl_pathv[i], section, repos, repocount);
+	}
+
+	globfree(&globbuf);
+
+	return 0;
+}
+
+static int parse_one_file(const char *filename, char **section,
+		struct repo_t ***repos, int *repocount)
+{
+	FILE *fp;
+	char *ptr;
+	char line[4096];
+	const char * const server = "Server";
+	const char * const include = "Include";
+	int in_options = 0, r = 0, lineno = 0;
+	struct repo_t **active_repos = *repos;
+
+	fp = fopen(filename, "r");
+	if(!fp) {
+		fprintf(stderr, "error: failed to open %s: %s\n", filename, strerror(errno));
+		return -errno;
+	}
+
+	while(fgets(line, sizeof(line), fp)) {
+		size_t len;
+		++lineno;
+
+		/* remove comments */
+		ptr = strchr(line, '#');
+		if(ptr) {
+			*ptr = '\0';
+		}
+
+		len = strtrim(line);
+		if(len == 0) {
+			continue;
+		}
+
+		/* found a section header */
+		if(line[0] == '[' && line[len - 1] == ']') {
+			free(*section);
+			*section = strndup(&line[1], len - 2);
+			if(len - 2 == 7 && memcmp(*section, "options", 7) == 0) {
+				in_options = 1;
+			} else {
+				in_options = 0;
+				active_repos = realloc(active_repos, sizeof(struct repo_t *) * (*repocount + 2));
+				active_repos[*repocount] = repo_new(*section);
+				(*repocount)++;
+			}
+		}
+
+		if(strchr(line, '=')) {
+			char *key = line, *val = split_keyval(line, "=");
+			strtrim(key);
+			strtrim(val);
+
+			if(strcmp(key, server) == 0) {
+				if(*section == NULL) {
+					fprintf(stderr, "error: failed to parse %s on line %d: found 'Server' directive "
+							"outside of a section\n", filename, lineno);
+					continue;
+				}
+				if(in_options) {
+					fprintf(stderr, "error: failed to parse %s on line %d: found 'Server' directive "
+							"in options section\n", filename, lineno);
+					continue;
+				}
+				r = repo_add_server(active_repos[*repocount - 1], val);
+				if(r < 0) {
+					break;
+				}
+			} else if(strcmp(key, include) == 0) {
+				parse_include(val, section, &active_repos, repocount);
+			}
+		}
+	}
+
+	fclose(fp);
+
+	*repos = active_repos;
+
+	return r;
+}
+
+struct repo_t **find_active_repos(const char *filename, int *repocount)
+{
+	struct repo_t **repos = NULL;
+	char *section = NULL;
+
+	*repocount = 0;
+
+	if(parse_one_file(filename, &section, &repos, repocount) < 0) {
+		/* TODO: free repos on fail? */
+		return NULL;
+	}
+
+	free(section);
+
+	return repos;
 }
 
 /* vim: set ts=2 sw=2 noet: */

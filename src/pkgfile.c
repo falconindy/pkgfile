@@ -33,6 +33,7 @@
 #include "pkgfile.h"
 #include "macro.h"
 #include "match.h"
+#include "repo.h"
 #include "result.h"
 #include "update.h"
 
