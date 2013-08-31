@@ -565,7 +565,7 @@ static int parse_opts(int argc, char **argv)
 
 static int search_single_repo(struct repovec_t *repos, char *searchstring)
 {
-	int i;
+	struct repo_t* repo;
 
 	if(!config.targetrepo) {
 		config.targetrepo = strsep(&searchstring, "/");
@@ -574,9 +574,9 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring)
 		config.filterby = FILTER_EXACT;
 	}
 
-	for(i = 0; i < repos->size; i++) {
-		if(strcmp(repos->repos[i]->name, config.targetrepo) == 0) {
-			struct result_t *result = load_repo(repos->repos[i]);
+	REPOVEC_FOREACH(repo, repos) {
+		if(strcmp(repo->name, config.targetrepo) == 0) {
+			struct result_t *result = load_repo(repo);
 			result_print(result, config.raw ? 0 : result->max_prefixlen, config.eol);
 			result_free(result);
 			return result->count == 0;
@@ -593,19 +593,19 @@ static struct result_t **search_all_repos(struct repovec_t *repos)
 {
 	struct result_t **results;
 	pthread_t *t = NULL;
-	int i;
+	struct repo_t *repo;
 
 	CALLOC(t, repos->size, sizeof(pthread_t), return NULL);
 	CALLOC(results, repos->size, sizeof(struct result_t *), return NULL);
 
 	/* load and process DBs */
-	for(i = 0; i < repos->size; i++) {
-		pthread_create(&t[i], NULL, load_repo, repos->repos[i]);
+	REPOVEC_FOREACH(repo, repos) {
+		pthread_create(&t[i_], NULL, load_repo, repo);
 	}
 
 	/* gather results */
-	for(i = 0; i < repos->size; i++) {
-		pthread_join(t[i], (void **)&results[i]);
+	REPOVEC_FOREACH(repo, repos) {
+		pthread_join(t[i_], (void **)&results[i_]);
 	}
 
 	free(t);
@@ -639,7 +639,7 @@ static int filter_setup(char *arg)
 
 int main(int argc, char *argv[])
 {
-	int i, reposfound = 0, ret = 1;
+	int reposfound = 0, ret = 1;
 	struct repovec_t *repos = NULL;
 	struct result_t **results = NULL;
 
@@ -679,13 +679,14 @@ int main(int argc, char *argv[])
 		ret = search_single_repo(repos, argv[optind]);
 	} else {
 		int prefixlen;
+		struct repo_t *repo;
 		results = search_all_repos(repos);
 
 		prefixlen = config.raw ? 0 : results_get_prefixlen(results, repos->size);
-		for(ret = i = 0; i < repos->size; i++) {
-			reposfound += repos->repos[i]->filefound;
-			ret += (int)result_print(results[i], prefixlen, config.eol);
-			result_free(results[i]);
+		REPOVEC_FOREACH(repo, repos) {
+			reposfound += repo->filefound;
+			ret += (int)result_print(results[i_], prefixlen, config.eol);
+			result_free(results[i_]);
 		}
 
 		if(!reposfound) {

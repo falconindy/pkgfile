@@ -63,14 +63,14 @@ void repo_free(struct repo_t *repo)
 
 void repos_free(struct repovec_t* repos)
 {
-	int i;
+	struct repo_t *repo;
 
 	if(repos == NULL) {
 		return;
 	}
 
-	for (i = 0; i < repos->size; i++) {
-		repo_free(repos->repos[i]);
+	REPOVEC_FOREACH(repo, repos) {
+		repo_free(repo);
 	}
 
 	free(repos->repos);

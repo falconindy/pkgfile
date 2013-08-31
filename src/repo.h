@@ -69,6 +69,9 @@ struct repovec_t {
 	int size;
 };
 
+#define REPOVEC_FOREACH(r, repos) \
+	for(int i_ = 0; i_ < repos->size && (r = repos->repos[i_]); i_++)
+
 struct repo_t *repo_new(const char *reponame);
 void repo_free(struct repo_t *repo);
 void repos_free(struct repovec_t* repos);

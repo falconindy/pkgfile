@@ -597,13 +597,14 @@ static void hit_multi_handle_until_candy_comes_out(CURLM *multi)
 
 static int reap_children(struct repovec_t *repos)
 {
-	int i, r = 0, running = 0;
+	int r = 0, running = 0;
+	struct repo_t *repo;
 
 	/* immediately reap zombies, but don't wait on still active children */
-	for(i = 0; i < repos->size; i++) {
+	REPOVEC_FOREACH(repo, repos) {
 		int stat_loc;
-		if(repos->repos[i]->worker > 0) {
-			if(wait4(repos->repos[i]->worker, &stat_loc, WNOHANG, NULL) == 0) {
+		if(repo->worker > 0) {
+			if(wait4(repo->worker, &stat_loc, WNOHANG, NULL) == 0) {
 				running++;
 			} else {
 				/* exited, grab the status */
@@ -632,7 +633,8 @@ static int reap_children(struct repovec_t *repos)
 
 int pkgfile_update(struct repovec_t *repos, struct config_t *config)
 {
-	int i, r, force, xfer_count = 0, ret = 0;
+	int r, force, xfer_count = 0, ret = 0;
+	struct repo_t *repo;
 	struct utsname un;
 	CURLM *cmulti;
 	struct timeval t_start;
@@ -662,11 +664,11 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config)
 	umask(0022);
 
 	/* prime the handle by adding a URL from each repo */
-	for(i = 0; i < repos->size; i++) {
-		repos->repos[i]->arch = un.machine;
-		repos->repos[i]->force = force;
-		repos->repos[i]->config = config;
-		r = add_repo_download(cmulti, repos->repos[i]);
+	REPOVEC_FOREACH(repo, repos) {
+		repo->arch = un.machine;
+		repo->force = force;
+		repo->config = config;
+		r = add_repo_download(cmulti, repo);
 		if(r != 0) {
 			ret = r;
 		}
@@ -677,16 +679,16 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config)
 	duration = timediff_since(&t_start);
 
 	/* remove handles, aggregate results */
-	for(i = 0; i < repos->size; i++) {
-		curl_multi_remove_handle(cmulti, repos->repos[i]->curl);
-		curl_easy_cleanup(repos->repos[i]->curl);
+	REPOVEC_FOREACH(repo, repos) {
+		curl_multi_remove_handle(cmulti, repo->curl);
+		curl_easy_cleanup(repo->curl);
 
-		FREE(repos->repos[i]->url);
-		FREE(repos->repos[i]->data);
+		FREE(repo->url);
+		FREE(repo->data);
 
-		total_xfer += repos->repos[i]->buflen;
+		total_xfer += repo->buflen;
 
-		switch(repos->repos[i]->err) {
+		switch(repo->err) {
 		case 0:
 			xfer_count++;
 			break;
