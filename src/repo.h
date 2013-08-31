@@ -67,6 +67,7 @@ struct repo_t {
 struct repovec_t {
 	struct repo_t **repos;
 	int size;
+	int capacity;
 };
 
 #define REPOVEC_FOREACH(r, repos) \

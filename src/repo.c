@@ -61,6 +61,46 @@ void repo_free(struct repo_t *repo)
 	free(repo);
 }
 
+static int repos_add_repo(struct repovec_t *repos, const char *name) {
+	if(repos->size == repos->capacity) {
+		int new_capacity = repos->size * 2.5;
+		struct repo_t **new_repos = realloc(
+				repos->repos, sizeof(struct repo_t *) * new_capacity);
+		if(new_repos == NULL) {
+			return -ENOMEM;
+		}
+
+		repos->repos = new_repos;
+		repos->capacity = new_capacity;
+	}
+
+	repos->repos[repos->size] = repo_new(name);
+	if(repos->repos[repos->size] == NULL) {
+		return -ENOMEM;
+	}
+
+	repos->size++;
+
+	return 0;
+}
+
+static struct repovec_t *repos_new(void) {
+	struct repovec_t *repos = calloc(1, sizeof(struct repovec_t));
+	if(repos == NULL) {
+		return NULL;
+	}
+
+	repos->repos = malloc(10 * sizeof(struct repo_t*));
+	if(repos->repos == NULL) {
+		free(repos);
+		return NULL;
+	}
+
+	repos->capacity = 10;
+
+	return repos;
+}
+
 void repos_free(struct repovec_t* repos)
 {
 	struct repo_t *repo;
@@ -186,9 +226,7 @@ static int parse_one_file(const char *filename, char **section, struct repovec_t
 				in_options = 1;
 			} else {
 				in_options = 0;
-				repos->repos = realloc(repos->repos, sizeof(struct repo_t *) * (repos->size + 2));
-				repos->repos[repos->size] = repo_new(*section);
-				repos->size++;
+				repos_add_repo(repos, *section);
 			}
 		}
 
@@ -225,10 +263,8 @@ static int parse_one_file(const char *filename, char **section, struct repovec_t
 
 struct repovec_t *find_active_repos(const char *filename)
 {
-	struct repovec_t *repos;
 	char *section = NULL;
-
-	CALLOC(repos, 1, sizeof(struct repovec_t), return NULL);
+	struct repovec_t *repos = repos_new();
 
 	if(parse_one_file(filename, &section, repos) < 0) {
 		/* TODO: free repos on fail? */
