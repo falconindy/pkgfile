@@ -64,9 +64,15 @@ struct repo_t {
 	pid_t worker;
 };
 
+struct repovec_t {
+	struct repo_t **repos;
+	int size;
+};
+
 struct repo_t *repo_new(const char *reponame);
 void repo_free(struct repo_t *repo);
+void repos_free(struct repovec_t* repos);
 int repo_add_server(struct repo_t *repo, const char *server);
-struct repo_t **find_active_repos(const char *filename, int *repocount);
+struct repovec_t *find_active_repos(const char *filename);
 
 /* vim: set ts=2 sw=2 noet: */

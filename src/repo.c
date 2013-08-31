@@ -61,6 +61,22 @@ void repo_free(struct repo_t *repo)
 	free(repo);
 }
 
+void repos_free(struct repovec_t* repos)
+{
+	int i;
+
+	if(repos == NULL) {
+		return;
+	}
+
+	for (i = 0; i < repos->size; i++) {
+		repo_free(repos->repos[i]);
+	}
+
+	free(repos->repos);
+	free(repos);
+}
+
 int repo_add_server(struct repo_t *repo, const char *server)
 {
 	if(!repo) {
@@ -110,10 +126,9 @@ static char *split_keyval(char *line, const char *sep)
 	return line;
 }
 
-static int parse_one_file(const char *, char **, struct repo_t ***, int *);
+static int parse_one_file(const char *, char **, struct repovec_t *);
 
-static int parse_include(const char *include, char **section,
-		struct repo_t ***repos, int *repocount)
+static int parse_include(const char *include, char **section, struct repovec_t *repos)
 {
 	glob_t globbuf;
 	size_t i;
@@ -125,7 +140,7 @@ static int parse_include(const char *include, char **section,
 	}
 
 	for(i = 0; i < globbuf.gl_pathc; i++) {
-		parse_one_file(globbuf.gl_pathv[i], section, repos, repocount);
+		parse_one_file(globbuf.gl_pathv[i], section, repos);
 	}
 
 	globfree(&globbuf);
@@ -133,8 +148,7 @@ static int parse_include(const char *include, char **section,
 	return 0;
 }
 
-static int parse_one_file(const char *filename, char **section,
-		struct repo_t ***repos, int *repocount)
+static int parse_one_file(const char *filename, char **section, struct repovec_t *repos)
 {
 	FILE *fp;
 	char *ptr;
@@ -142,7 +156,6 @@ static int parse_one_file(const char *filename, char **section,
 	const char * const server = "Server";
 	const char * const include = "Include";
 	int in_options = 0, r = 0, lineno = 0;
-	struct repo_t **active_repos = *repos;
 
 	fp = fopen(filename, "r");
 	if(!fp) {
@@ -173,9 +186,9 @@ static int parse_one_file(const char *filename, char **section,
 				in_options = 1;
 			} else {
 				in_options = 0;
-				active_repos = realloc(active_repos, sizeof(struct repo_t *) * (*repocount + 2));
-				active_repos[*repocount] = repo_new(*section);
-				(*repocount)++;
+				repos->repos = realloc(repos->repos, sizeof(struct repo_t *) * (repos->size + 2));
+				repos->repos[repos->size] = repo_new(*section);
+				repos->size++;
 			}
 		}
 
@@ -195,31 +208,29 @@ static int parse_one_file(const char *filename, char **section,
 							"in options section\n", filename, lineno);
 					continue;
 				}
-				r = repo_add_server(active_repos[*repocount - 1], val);
+				r = repo_add_server(repos->repos[repos->size - 1], val);
 				if(r < 0) {
 					break;
 				}
 			} else if(strcmp(key, include) == 0) {
-				parse_include(val, section, &active_repos, repocount);
+				parse_include(val, section, repos);
 			}
 		}
 	}
 
 	fclose(fp);
 
-	*repos = active_repos;
-
 	return r;
 }
 
-struct repo_t **find_active_repos(const char *filename, int *repocount)
+struct repovec_t *find_active_repos(const char *filename)
 {
-	struct repo_t **repos = NULL;
+	struct repovec_t *repos;
 	char *section = NULL;
 
-	*repocount = 0;
+	CALLOC(repos, 1, sizeof(struct repovec_t), return NULL);
 
-	if(parse_one_file(filename, &section, &repos, repocount) < 0) {
+	if(parse_one_file(filename, &section, repos) < 0) {
 		/* TODO: free repos on fail? */
 		return NULL;
 	}

@@ -595,15 +595,15 @@ static void hit_multi_handle_until_candy_comes_out(CURLM *multi)
 	} while(active_handles > 0);
 }
 
-static int reap_children(struct repo_t **repos, int repocount)
+static int reap_children(struct repovec_t *repos)
 {
 	int i, r = 0, running = 0;
 
 	/* immediately reap zombies, but don't wait on still active children */
-	for(i = 0; i < repocount; i++) {
+	for(i = 0; i < repos->size; i++) {
 		int stat_loc;
-		if(repos[i]->worker > 0) {
-			if(wait4(repos[i]->worker, &stat_loc, WNOHANG, NULL) == 0) {
+		if(repos->repos[i]->worker > 0) {
+			if(wait4(repos->repos[i]->worker, &stat_loc, WNOHANG, NULL) == 0) {
 				running++;
 			} else {
 				/* exited, grab the status */
@@ -630,7 +630,7 @@ static int reap_children(struct repo_t **repos, int repocount)
 	return r;
 }
 
-int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config)
+int pkgfile_update(struct repovec_t *repos, struct config_t *config)
 {
 	int i, r, force, xfer_count = 0, ret = 0;
 	struct utsname un;
@@ -645,7 +645,7 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 		return 1;
 	}
 
-	printf(":: Updating %d repos...\n", repocount);
+	printf(":: Updating %d repos...\n", repos->size);
 
 	curl_global_init(CURL_GLOBAL_ALL);
 	cmulti = curl_multi_init();
@@ -662,11 +662,11 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 	umask(0022);
 
 	/* prime the handle by adding a URL from each repo */
-	for(i = 0; i < repocount; i++) {
-		repos[i]->arch = un.machine;
-		repos[i]->force = force;
-		repos[i]->config = config;
-		r = add_repo_download(cmulti, repos[i]);
+	for(i = 0; i < repos->size; i++) {
+		repos->repos[i]->arch = un.machine;
+		repos->repos[i]->force = force;
+		repos->repos[i]->config = config;
+		r = add_repo_download(cmulti, repos->repos[i]);
 		if(r != 0) {
 			ret = r;
 		}
@@ -677,16 +677,16 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 	duration = timediff_since(&t_start);
 
 	/* remove handles, aggregate results */
-	for(i = 0; i < repocount; i++) {
-		curl_multi_remove_handle(cmulti, repos[i]->curl);
-		curl_easy_cleanup(repos[i]->curl);
+	for(i = 0; i < repos->size; i++) {
+		curl_multi_remove_handle(cmulti, repos->repos[i]->curl);
+		curl_easy_cleanup(repos->repos[i]->curl);
 
-		FREE(repos[i]->url);
-		FREE(repos[i]->data);
+		FREE(repos->repos[i]->url);
+		FREE(repos->repos[i]->data);
 
-		total_xfer += repos[i]->buflen;
+		total_xfer += repos->repos[i]->buflen;
 
-		switch(repos[i]->err) {
+		switch(repos->repos[i]->err) {
 		case 0:
 			xfer_count++;
 			break;
@@ -701,7 +701,7 @@ int pkgfile_update(struct repo_t **repos, int repocount, struct config_t *config
 		print_total_dl_stats(xfer_count, duration, total_xfer);
 	}
 
-	if(reap_children(repos, repocount) != 0) {
+	if(reap_children(repos) != 0) {
 		ret = 1;
 	}
 

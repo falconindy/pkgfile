@@ -563,7 +563,7 @@ static int parse_opts(int argc, char **argv)
 	return 0;
 }
 
-static int search_single_repo(struct repo_t **repos, int repocount, char *searchstring)
+static int search_single_repo(struct repovec_t *repos, char *searchstring)
 {
 	int i;
 
@@ -574,9 +574,9 @@ static int search_single_repo(struct repo_t **repos, int repocount, char *search
 		config.filterby = FILTER_EXACT;
 	}
 
-	for(i = 0; i < repocount; i++) {
-		if(strcmp(repos[i]->name, config.targetrepo) == 0) {
-			struct result_t *result = load_repo(repos[i]);
+	for(i = 0; i < repos->size; i++) {
+		if(strcmp(repos->repos[i]->name, config.targetrepo) == 0) {
+			struct result_t *result = load_repo(repos->repos[i]);
 			result_print(result, config.raw ? 0 : result->max_prefixlen, config.eol);
 			result_free(result);
 			return result->count == 0;
@@ -589,22 +589,22 @@ static int search_single_repo(struct repo_t **repos, int repocount, char *search
 	return 1;
 }
 
-static struct result_t **search_all_repos(struct repo_t **repos, int repocount)
+static struct result_t **search_all_repos(struct repovec_t *repos)
 {
 	struct result_t **results;
 	pthread_t *t = NULL;
 	int i;
 
-	CALLOC(t, repocount, sizeof(pthread_t), return NULL);
-	CALLOC(results, repocount, sizeof(struct result_t *), return NULL);
+	CALLOC(t, repos->size, sizeof(pthread_t), return NULL);
+	CALLOC(results, repos->size, sizeof(struct result_t *), return NULL);
 
 	/* load and process DBs */
-	for(i = 0; i < repocount; i++) {
-		pthread_create(&t[i], NULL, load_repo, repos[i]);
+	for(i = 0; i < repos->size; i++) {
+		pthread_create(&t[i], NULL, load_repo, repos->repos[i]);
 	}
 
 	/* gather results */
-	for(i = 0; i < repocount; i++) {
+	for(i = 0; i < repos->size; i++) {
 		pthread_join(t[i], (void **)&results[i]);
 	}
 
@@ -639,22 +639,22 @@ static int filter_setup(char *arg)
 
 int main(int argc, char *argv[])
 {
-	int i, repocount, reposfound = 0, ret = 1;
-	struct repo_t **repos = NULL;
+	int i, reposfound = 0, ret = 1;
+	struct repovec_t *repos = NULL;
 	struct result_t **results = NULL;
 
 	if(parse_opts(argc, argv) != 0) {
 		return 2;
 	}
 
-	repos = find_active_repos(config.cfgfile, &repocount);
-	if(!repocount) {
+	repos = find_active_repos(config.cfgfile);
+	if(!repos || repos->size == 0) {
 		fprintf(stderr, "error: no repos found in %s\n", config.cfgfile);
 		return 1;
 	}
 
 	if(config.doupdate) {
-		ret = !!pkgfile_update(repos, repocount, &config);
+		ret = !!pkgfile_update(repos, &config);
 		goto cleanup;
 	}
 
@@ -676,14 +676,14 @@ int main(int argc, char *argv[])
 	/* override behavior on $repo/$pkg syntax or --repo */
 	if((config.filefunc == list_metafile && strchr(argv[optind], '/')) ||
 			config.targetrepo) {
-		ret = search_single_repo(repos, repocount, argv[optind]);
+		ret = search_single_repo(repos, argv[optind]);
 	} else {
 		int prefixlen;
-		results = search_all_repos(repos, repocount);
+		results = search_all_repos(repos);
 
-		prefixlen = config.raw ? 0 : results_get_prefixlen(results, repocount);
-		for(ret = i = 0; i < repocount; i++) {
-			reposfound += repos[i]->filefound;
+		prefixlen = config.raw ? 0 : results_get_prefixlen(results, repos->size);
+		for(ret = i = 0; i < repos->size; i++) {
+			reposfound += repos->repos[i]->filefound;
 			ret += (int)result_print(results[i], prefixlen, config.eol);
 			result_free(results[i]);
 		}
@@ -700,10 +700,7 @@ int main(int argc, char *argv[])
 	}
 
 cleanup:
-	for(i = 0; i < repocount; i++) {
-		repo_free(repos[i]);
-	}
-	free(repos);
+	repos_free(repos);
 	free(results);
 
 	return ret;
