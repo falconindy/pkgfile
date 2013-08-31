@@ -107,6 +107,10 @@ will decrease performance, but may be desirable for disk space concerns.
 
 =over 4
 
+=item B<-C> I<FILE>, B<--config=>I<FILE>
+
+Use a config file other than the default of I</etc/pacman.conf>.
+
 =item B<-h>, B<--help>
 
 Print help and exit.

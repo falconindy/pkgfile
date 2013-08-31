@@ -422,7 +422,7 @@ static void usage(void)
 			"  -d, --directories       match directories in searches\n"
 			"  -g, --glob              enable matching with glob characters\n"
 			"  -i, --ignorecase        use case insensitive matching\n"
-			"  -R, --repo REPO         search a singular repo\n"
+			"  -R, --repo <repo>       search a singular repo\n"
 			"  -r, --regex             enable matching with regular expressions\n\n",
 			stdout);
 	fputs(
@@ -438,6 +438,7 @@ static void usage(void)
 			stdout);
 	fputs(
 			" General:\n"
+			"  -C, --config <file>     use an alternate config (default: /etc/pacman.conf)\n"
 			"  -h, --help              display this help and exit\n"
 			"  -V, --version           display the version and exit\n\n",
 			stdout);
@@ -455,6 +456,7 @@ static int parse_opts(int argc, char **argv)
 	static const struct option longopts[] = {
 		{"binaries",    no_argument,        0, 'b'},
 		{"compress",    optional_argument,  0, 'z'},
+		{"config",      required_argument,  0, 'C'},
 		{"directories", no_argument,        0, 'd'},
 		{"glob",        no_argument,        0, 'g'},
 		{"help",        no_argument,        0, 'h'},
@@ -475,6 +477,7 @@ static int parse_opts(int argc, char **argv)
 	/* defaults */
 	config.filefunc = search_metafile;
 	config.eol = '\n';
+	config.cfgfile = PACMANCONFIG;
 
 	for(;;) {
 		opt = getopt_long(argc, argv, shortopts, longopts, NULL);
@@ -487,6 +490,9 @@ static int parse_opts(int argc, char **argv)
 			break;
 		case 'b':
 			config.binaries = true;
+			break;
+		case 'C':
+			config.cfgfile = optarg;
 			break;
 		case 'd':
 			config.directories = true;
@@ -640,9 +646,9 @@ int main(int argc, char *argv[])
 		return 2;
 	}
 
-	repos = find_active_repos(PACMANCONFIG, &repocount);
+	repos = find_active_repos(config.cfgfile, &repocount);
 	if(!repocount) {
-		fputs("error: no repos found in " PACMANCONFIG "\n", stderr);
+		fprintf(stderr, "error: no repos found in %s\n", config.cfgfile);
 		return 1;
 	}
 

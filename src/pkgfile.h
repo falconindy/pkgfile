@@ -78,6 +78,7 @@ struct pkg_t {
 };
 
 struct config_t {
+	const char *cfgfile;
 	filterstyle_t filterby;
 	filterpattern_t filter;
 	int (*filefunc)(const char *repo, struct pkg_t *pkg, struct archive* a,
