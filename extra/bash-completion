@@ -83,7 +83,7 @@ _pkgfile() {
       done
       case $mode in
         l|list)
-          # complete based on AUR matches
+          # complete based on package matches
           COMPREPLY=($(compgen -W '$(command pacman -Ssq)' -- "$cur"))
           return 0
           ;;
