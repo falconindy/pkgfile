@@ -74,7 +74,7 @@ typedef union _filterpattern_t {
 struct pkg_t {
   char name[PATH_MAX];
   char *version;
-  int len;
+  int namelen;
 };
 
 struct config_t {
