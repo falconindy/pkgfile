@@ -92,7 +92,7 @@ static char *strreplace(const char *str, const char *needle, const char *replace
 	const char *p, *q;
 	char *newstr, *newp;
 	char *list[8];
-	int i, listsz = 0;
+	int listsz = 0;
 	size_t needlesz = strlen(needle), replacesz = strlen(replace);
 
 	if(!str) {
@@ -118,7 +118,7 @@ static char *strreplace(const char *str, const char *needle, const char *replace
 
 	p = str;
 	newp = newstr;
-	for(i = 0; i < listsz; i++) {
+	for(int i = 0; i < listsz; i++) {
 		q = list[i];
 		if(q > p) {
 			/* add chars between this occurence and last occurence, if any */
