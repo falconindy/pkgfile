@@ -212,20 +212,18 @@ static int parse_one_file(const char *filename, char **section,
     if (line[0] == '[' && line[len - 1] == ']') {
       free(*section);
       *section = strndup(&line[1], len - 2);
-      if (len - 2 == 7 && memcmp(*section, "options", 7) == 0) {
-        in_options = 1;
-      } else {
-        in_options = 0;
+      in_options = len - 2 == 7 && memcmp(*section, "options", 7) == 0;
+      if (!in_options) {
         repos_add_repo(repos, *section);
       }
     }
 
-    if (strchr(line, '=')) {
+    if (memchr(line, '=', len)) {
       char *key = line, *val = split_keyval(line, "=");
-      strtrim(key);
+      size_t keysz = strtrim(key);
       strtrim(val);
 
-      if (strcmp(key, server) == 0) {
+      if (keysz == strlen(server) && memcmp(key, server, keysz) == 0) {
         if (*section == NULL) {
           fprintf(
               stderr,
@@ -246,7 +244,7 @@ static int parse_one_file(const char *filename, char **section,
         if (r < 0) {
           break;
         }
-      } else if (strcmp(key, include) == 0) {
+      } else if (keysz == strlen(include) && memcmp(key, include, keysz) == 0) {
         parse_include(val, section, repos);
       }
     }
