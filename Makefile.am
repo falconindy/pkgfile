@@ -94,3 +94,6 @@ DISTCHECK_CONFIGURE_FLAGS = \
 upload: all distcheck
 	gpg --detach-sign pkgfile-$(VERSION).tar.xz
 	scp pkgfile-$(VERSION).tar.xz pkgfile-$(VERSION).tar.xz.sig code.falconindy.com:archive/pkgfile/
+
+fmt:
+	clang-format -i -style=Google $(pkgfile_SOURCES)

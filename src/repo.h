@@ -28,55 +28,55 @@
 #include <curl/curl.h>
 
 struct repo_t {
-	char *name;
-	char **servers;
-	int servercount;
-	int filefound;
-	char *arch;
+  char *name;
+  char **servers;
+  int servercount;
+  int filefound;
+  char *arch;
 
-	const struct config_t *config;
+  const struct config_t *config;
 
-	/* download stuff */
+  /* download stuff */
 
-	/* curl easy handle */
-	CURL *curl;
-	/* url being fetched */
-	char *url;
-	/* destination */
-	char diskfile[PATH_MAX];
-	/* index to currently in-use server */
-	int server_idx;
-	/* write buffer for downloaded data */
-	unsigned char *data;
-	/* max capacity of write buffer */
-	size_t capacity;
-	/* size of data written */
-	size_t buflen;
-	/* error buffer */
-	char errmsg[CURL_ERROR_SIZE];
-	/* numeric err for determining success */
-	int err;
-	/* force update repos */
-	short force;
-	/* start time for download */
-	struct timeval dl_time_start;
-	/* PID of repo_repack worker */
-	pid_t worker;
+  /* curl easy handle */
+  CURL *curl;
+  /* url being fetched */
+  char *url;
+  /* destination */
+  char diskfile[PATH_MAX];
+  /* index to currently in-use server */
+  int server_idx;
+  /* write buffer for downloaded data */
+  unsigned char *data;
+  /* max capacity of write buffer */
+  size_t capacity;
+  /* size of data written */
+  size_t buflen;
+  /* error buffer */
+  char errmsg[CURL_ERROR_SIZE];
+  /* numeric err for determining success */
+  int err;
+  /* force update repos */
+  short force;
+  /* start time for download */
+  struct timeval dl_time_start;
+  /* PID of repo_repack worker */
+  pid_t worker;
 };
 
 struct repovec_t {
-	struct repo_t **repos;
-	int size;
-	int capacity;
+  struct repo_t **repos;
+  int size;
+  int capacity;
 };
 
 #define REPOVEC_FOREACH(r, repos) \
-	for(int i_ = 0; i_ < repos->size && (r = repos->repos[i_]); i_++)
+  for (int i_ = 0; i_ < repos->size && (r = repos->repos[i_]); i_++)
 
 struct repo_t *repo_new(const char *reponame);
 void repo_free(struct repo_t *repo);
-void repos_free(struct repovec_t* repos);
+void repos_free(struct repovec_t *repos);
 int repo_add_server(struct repo_t *repo, const char *server);
 struct repovec_t *load_repos_from_file(const char *filename);
 
-/* vim: set ts=2 sw=2 noet: */
+/* vim: set ts=2 sw=2 et: */

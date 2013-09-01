@@ -23,16 +23,16 @@
 #pragma once
 
 struct line_t {
-	char *prefix;
-	char *entry;
+  char *prefix;
+  char *entry;
 };
 
 struct result_t {
-	size_t count;
-	size_t maxcount;
-	char *name;
-	struct line_t **lines;
-	int max_prefixlen;
+  size_t count;
+  size_t maxcount;
+  char *name;
+  struct line_t **lines;
+  int max_prefixlen;
 };
 
 struct result_t *result_new(char *name, size_t initial_size);
@@ -42,4 +42,4 @@ size_t result_print(struct result_t *result, int prefixlen, char eol);
 int result_cmp(const void *r1, const void *r2);
 int results_get_prefixlen(struct result_t **results, int count);
 
-/* vim: set ts=2 sw=2 noet: */
+/* vim: set ts=2 sw=2 et: */

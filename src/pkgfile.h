@@ -33,71 +33,71 @@
 #include "result.h"
 
 #ifndef BUFSIZ
-# define BUFSIZ 8192
+#define BUFSIZ 8192
 #endif
 
 /* allow compilation with pcre < 8.30 */
 #ifndef PCRE_STUDY_JIT_COMPILE
-# define PCRE_STUDY_JIT_COMPILE 0
+#define PCRE_STUDY_JIT_COMPILE 0
 #endif
 
 struct archive_read_buffer {
-	char *line;
-	char *line_offset;
-	size_t line_size;
-	size_t real_line_size;
+  char *line;
+  char *line_offset;
+  size_t line_size;
+  size_t real_line_size;
 
-	char *block;
-	char *block_offset;
-	size_t block_size;
+  char *block;
+  char *block_offset;
+  size_t block_size;
 
-	long ret;
+  long ret;
 };
 
 typedef enum _filterstyle_t {
-	FILTER_EXACT = 0,
-	FILTER_GLOB,
-	FILTER_REGEX
+  FILTER_EXACT = 0,
+  FILTER_GLOB,
+  FILTER_REGEX
 } filterstyle_t;
 
 typedef union _filterpattern_t {
-	struct pcre_data {
-		pcre *re;
-		pcre_extra *re_extra;
-	} re;
-	struct glob_data {
-		char *glob;
-		int globlen;
-	} glob;
+  struct pcre_data {
+    pcre *re;
+    pcre_extra *re_extra;
+  } re;
+  struct glob_data {
+    char *glob;
+    int globlen;
+  } glob;
 } filterpattern_t;
 
 struct pkg_t {
-	char name[PATH_MAX];
-	char *version;
-	int len;
+  char name[PATH_MAX];
+  char *version;
+  int len;
 };
 
 struct config_t {
-	const char *cfgfile;
-	filterstyle_t filterby;
-	filterpattern_t filter;
-	int (*filefunc)(const char *repo, struct pkg_t *pkg, struct archive* a,
-			struct result_t *result, struct archive_read_buffer *buf);
-	int (*filterfunc)(const filterpattern_t *filter, const char *line, int len,
-			int flags);
-	void (*filterfree)(filterpattern_t *filter);
-	int doupdate;
-	char *targetrepo;
-	bool binaries;
-	bool directories;
-	bool icase;
-	bool quiet;
-	bool verbose;
-	bool raw;
-	char eol;
-	int compress;
+  const char *cfgfile;
+  filterstyle_t filterby;
+  filterpattern_t filter;
+  int (*filefunc)(const char *repo, struct pkg_t *pkg, struct archive *a,
+                  struct result_t *result, struct archive_read_buffer *buf);
+  int (*filterfunc)(const filterpattern_t *filter, const char *line, int len,
+                    int flags);
+  void (*filterfree)(filterpattern_t *filter);
+  int doupdate;
+  char *targetrepo;
+  bool binaries;
+  bool directories;
+  bool icase;
+  bool quiet;
+  bool verbose;
+  bool raw;
+  char eol;
+  int compress;
 };
 
 int archive_fgets(struct archive *a, struct archive_read_buffer *b);
 
-/* vim: set ts=2 sw=2 noet: */
+/* vim: set ts=2 sw=2 et: */
