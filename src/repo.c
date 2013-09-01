@@ -262,7 +262,7 @@ struct repovec_t *load_repos_from_file(const char *filename) {
   struct repovec_t *repos = repos_new();
 
   if (parse_one_file(filename, &section, repos) < 0) {
-    /* TODO: free repos on fail? */
+    repos_free(repos);
     return NULL;
   }
 
