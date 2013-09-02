@@ -176,10 +176,10 @@ static int endswith(const char *s, const char *postfix) {
 
 static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
   off_t entry_size = archive_entry_size(conv->ae);
+  off_t bytes_w = 0, alloc_size = entry_size * 1.1;
   struct archive_read_buffer buf;
   char *entry_data, *s;
-  int rc = -1, bytes_w = 0;
-  size_t alloc_size = entry_size * 1.5;
+  int rc = -1;
 
   /* be generous */
   MALLOC(entry_data, alloc_size, return -1);
@@ -194,7 +194,8 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
          buf.real_line_size > 0) {
     /* ensure enough memory */
     if (bytes_w + buf.real_line_size + 1 > alloc_size) {
-      entry_data = realloc(entry_data, alloc_size * 1.5);
+      alloc_size *= 1.1;
+      entry_data = realloc(entry_data, alloc_size);
     }
 
     /* do the copy, with a slash prepended */
