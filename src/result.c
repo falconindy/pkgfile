@@ -60,13 +60,13 @@ static struct line_t *line_new(char *prefix, char *entry) {
 }
 
 static int result_grow(struct result_t *result) {
-  size_t newsz = result->maxcount * 3;
+  size_t newsz = result->capacity * 3;
   result->lines = realloc(result->lines, newsz * sizeof(struct line_t *));
   if (!result->lines) {
     return 1;
   }
 
-  result->maxcount = newsz;
+  result->capacity = newsz;
 
   return 0;
 }
@@ -83,7 +83,7 @@ struct result_t *result_new(char *name, size_t initial_size) {
   }
 
   result->name = strdup(name);
-  result->maxcount = initial_size;
+  result->capacity = initial_size;
 
   return result;
 }
@@ -94,7 +94,7 @@ int result_add(struct result_t *result, char *prefix, char *entry,
     return 1;
   }
 
-  if (result->count + 1 >= result->maxcount) {
+  if (result->size + 1 >= result->capacity) {
     if (result_grow(result) != 0) {
       return 1;
     }
@@ -104,8 +104,8 @@ int result_add(struct result_t *result, char *prefix, char *entry,
     result->max_prefixlen = prefixlen;
   }
 
-  result->lines[result->count] = line_new(prefix, entry);
-  result->count++;
+  result->lines[result->size] = line_new(prefix, entry);
+  result->size++;
 
   return 0;
 }
@@ -116,7 +116,7 @@ void result_free(struct result_t *result) {
   }
 
   if (result->lines) {
-    for (size_t i = 0; i < result->count; i++) {
+    for (size_t i = 0; i < result->size; i++) {
       line_free(result->lines[i]);
     }
     free(result->lines);
@@ -134,29 +134,29 @@ static int linecmp(const void *l1, const void *l2) {
 
 static void result_print_long(struct result_t *result, int prefixlen,
                               char eol) {
-  for (size_t i = 0; i < result->count; i++) {
+  for (size_t i = 0; i < result->size; i++) {
     printf("%-*s\t%s%c", prefixlen, result->lines[i]->prefix,
            result->lines[i]->entry, eol);
   }
 }
 
 static void result_print_short(struct result_t *result, char eol) {
-  for (size_t i = 0; i < result->count; i++) {
+  for (size_t i = 0; i < result->size; i++) {
     printf("%s%c", result->lines[i]->prefix, eol);
   }
 }
 
 size_t result_print(struct result_t *result, int prefixlen, char eol) {
-  if (!result->count) {
+  if (!result->size) {
     return 0;
   }
 
-  qsort(result->lines, result->count, sizeof(char *), linecmp);
+  qsort(result->lines, result->size, sizeof(char *), linecmp);
 
   prefixlen == 0 ? result_print_short(result, eol)
                  : result_print_long(result, prefixlen, eol);
 
-  return result->count;
+  return result->size;
 }
 
 int result_cmp(const void *r1, const void *r2) {

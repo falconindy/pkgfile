@@ -22,14 +22,16 @@
 
 #pragma once
 
+#include <sys/types.h>
+
 struct line_t {
   char *prefix;
   char *entry;
 };
 
 struct result_t {
-  size_t count;
-  size_t maxcount;
+  size_t size;
+  size_t capacity;
   char *name;
   struct line_t **lines;
   int max_prefixlen;

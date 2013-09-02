@@ -564,7 +564,7 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring) {
       struct result_t *result = load_repo(repo);
       result_print(result, config.raw ? 0 : result->max_prefixlen, config.eol);
       result_free(result);
-      return result->count == 0;
+      return result->size == 0;
     }
   }
 
