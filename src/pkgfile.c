@@ -254,10 +254,6 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
 static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
   const char *dash, *slash = &entryname[len];
 
-  if (!slash) {
-    return -EINVAL;
-  }
-
   dash = slash;
   while (dash > entryname && --dash && *dash != '-')
     ;
