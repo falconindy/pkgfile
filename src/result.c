@@ -36,27 +36,29 @@ static void line_free(struct line_t *line) {
 }
 
 static struct line_t *line_new(char *prefix, char *entry) {
-  struct line_t *line;
-
-  CALLOC(line, 1, sizeof(struct line_t), return NULL);
+  struct line_t *line = calloc(1, sizeof(struct line_t));
+  if (line == NULL) {
+    goto alloc_fail;
+  }
 
   line->prefix = strdup(prefix);
   if (line->prefix == NULL) {
-    fprintf(stderr, "error: failed to allocate memory\n");
-    line_free(line);
-    return NULL;
+    goto alloc_fail;
   }
 
   if (entry) {
     line->entry = strdup(entry);
     if (line->entry == NULL) {
-      fprintf(stderr, "error: failed to allocate memory\n");
-      line_free(line);
-      return NULL;
+      goto alloc_fail;
     }
   }
 
   return line;
+
+alloc_fail:
+  fputs("error: failed to allocate memory for result line\n", stderr);
+  line_free(line);
+  return NULL;
 }
 
 static int result_grow(struct result_t *result) {
@@ -72,20 +74,28 @@ static int result_grow(struct result_t *result) {
 }
 
 struct result_t *result_new(char *name, size_t initial_size) {
-  struct result_t *result;
-
-  CALLOC(result, 1, sizeof(struct result_t), return NULL);
+  struct result_t *result = calloc(1, sizeof(struct result_t));
+  if (result == NULL) {
+    goto alloc_fail;
+  }
 
   result->lines = calloc(initial_size, sizeof(struct line_t *));
   if (!result->lines) {
-    free(result);
-    return NULL;
+    goto alloc_fail;
   }
 
   result->name = strdup(name);
-  result->capacity = initial_size;
+  if (result->name == NULL) {
+    goto alloc_fail;
+  }
 
+  result->capacity = initial_size;
   return result;
+
+alloc_fail:
+  fputs("error: failed to allocate memory for result\n", stderr);
+  result_free(result);
+  return NULL;
 }
 
 int result_add(struct result_t *result, char *prefix, char *entry,
