@@ -177,12 +177,11 @@ static int endswith(const char *s, const char *postfix) {
 static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
   off_t entry_size = archive_entry_size(conv->ae);
   struct archive_read_buffer buf;
-  char *slash, *entry_data, *s;
-  int r, rc = -1, bytes_w = 0;
-  size_t alloc_size;
+  char *entry_data, *s;
+  int rc = -1, bytes_w = 0;
+  size_t alloc_size = entry_size * 1.5;
 
   /* be generous */
-  alloc_size = entry_size * 1.5;
   MALLOC(entry_data, alloc_size, return -1);
 
   memset(&buf, 0, sizeof(struct archive_read_buffer));
@@ -210,8 +209,7 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
 
   /* store the metadata as simply $pkgname-$pkgver-$pkgrel */
   s = strdup(entryname);
-  slash = strrchr(s, '/');
-  *slash = '\0';
+  *(strrchr(s, '/')) = '\0';
   archive_entry_update_pathname_utf8(conv->ae, s);
   free(s);
 
@@ -221,8 +219,7 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
     goto error;
   }
 
-  r = archive_write_data(conv->out, entry_data, bytes_w);
-  if (r != bytes_w) {
+  if (archive_write_data(conv->out, entry_data, bytes_w) != bytes_w) {
     fprintf(stderr, "error: failed to write entry: %s/%s: %s\n", conv->reponame,
             archive_entry_pathname(conv->ae), strerror(errno));
     goto error;
