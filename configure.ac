@@ -42,10 +42,10 @@ AC_ARG_WITH(tcmalloc,
 
 # Enable or disable use of git version in pkgfile version string
 AC_MSG_CHECKING(whether to use git version if available)
-if test "x$wantgitver" != "xno" ; then
+if test "$wantgitver" != "no" ; then
 	AC_CHECK_PROGS([GIT], [git])
 	AC_CHECK_FILE([.git/], hasgitdir=yes)
-	if test $GIT -a "x$hasgitdir" = "xyes"; then
+	if test "$GIT" && test "$hasgitdir" = "yes"; then
 		usegitver=yes
 		AC_DEFINE([USE_GIT_VERSION], , [Use GIT version in version string])
 	else
@@ -55,19 +55,19 @@ else
 	AC_MSG_RESULT([no, disabled by configure])
 	usegitver=no
 fi
-AM_CONDITIONAL(USE_GIT_VERSION, test "x$usegitver" = "xyes")
+AM_CONDITIONAL(USE_GIT_VERSION, test "$usegitver" = "yes")
 
 allocator=libc
 AC_MSG_CHECKING(whether to use tcmalloc)
-if test "x$wanttcmalloc" != "xno" ; then
+if test "$wanttcmalloc" != "no" ; then
 	PKG_CHECK_EXISTS([libtcmalloc], [havetcmalloc=yes], [havetcmalloc=no])
-	if test "x$havetcmalloc" = "xyes"; then
+	if test "$havetcmalloc" = "yes"; then
 		PKG_CHECK_MODULES(TCMALLOC, [libtcmalloc])
 		# upstream recommends these, but doesn't include them in the .pc file
 		TCMALLOC_CFLAGS="-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free"
 		allocator=tcmalloc
 	else
-		if test "x$wanttcmalloc" = "xyes"; then
+		if test "$wanttcmalloc" = "yes"; then
 			AC_MSG_ERROR([*** tcmalloc support requested but library not found])
 		fi
 	fi
