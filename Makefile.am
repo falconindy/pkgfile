@@ -42,8 +42,12 @@ AM_LDFLAGS = \
 
 AM_CPPFLAGS = \
 	-imacros $(top_builddir)/config.h \
-	-I${top_srcdir}/src \
+	-I${top_srcdir}/src
+
+if USE_GIT_VERSION
+AM_CPPFLAGS += \
 	-DGIT_VERSION=\"$(GIT_VERSION)\"
+endif
 
 pkgfile_SOURCES = \
 	src/match.c src/match.h \
