@@ -41,7 +41,6 @@ struct result_t *result_new(char *name, size_t initial_size);
 int result_add(struct result_t *result, char *repo, char *entry, int prefixlen);
 void result_free(struct result_t *result);
 size_t result_print(struct result_t *result, int prefixlen, char eol);
-int result_cmp(const void *r1, const void *r2);
 int results_get_prefixlen(struct result_t **results, int count);
 
 /* vim: set ts=2 sw=2 et: */

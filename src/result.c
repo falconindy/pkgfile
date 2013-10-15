@@ -169,13 +169,6 @@ size_t result_print(struct result_t *result, int prefixlen, char eol) {
   return result->size;
 }
 
-int result_cmp(const void *r1, const void *r2) {
-  struct result_t *result1 = *(struct result_t **)r1;
-  struct result_t *result2 = *(struct result_t **)r2;
-
-  return strcmp(result1->name, result2->name);
-}
-
 int results_get_prefixlen(struct result_t **results, int count) {
   int maxlen = 0;
 
