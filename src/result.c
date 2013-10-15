@@ -139,7 +139,11 @@ static int linecmp(const void *l1, const void *l2) {
   const struct line_t *line1 = *(struct line_t **)l1;
   const struct line_t *line2 = *(struct line_t **)l2;
 
-  return strcmp(line1->prefix, line2->prefix);
+  if (line1->entry && line2->entry) {
+    return strcmp(line1->entry, line2->entry);
+  } else {
+    return strcmp(line1->prefix, line2->prefix);
+  }
 }
 
 static void result_print_long(struct result_t *result, int prefixlen,
