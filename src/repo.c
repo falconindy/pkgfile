@@ -35,7 +35,8 @@ struct repo_t *repo_new(const char *reponame) {
 
   CALLOC(repo, 1, sizeof(struct repo_t), return NULL);
 
-  if (asprintf(&repo->name, "%s", reponame) == -1) {
+  repo->name = strdup(reponame);
+  if (repo->name == NULL) {
     fprintf(stderr, "error: failed to allocate memory\n");
     free(repo);
     return NULL;
