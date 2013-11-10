@@ -218,7 +218,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
                          struct result_t *result,
                          struct archive_read_buffer *buf) {
-  if (match_exact(&config.filter, pkg->name, pkg->namelen, config.icase) != 0) {
+  if (config.filterfunc(&config.filter, pkg->name, pkg->namelen, config.icase) != 0) {
     return 0;
   }
 
@@ -640,12 +640,6 @@ int main(int argc, char *argv[]) {
 
   if (optind == argc) {
     fputs("error: no target specified (use -h for help)\n", stderr);
-    goto cleanup;
-  }
-
-  /* sanity check */
-  if (config.filefunc == list_metafile && config.filterby != FILTER_EXACT) {
-    fputs("error: --regex and --glob cannot be used with --list\n", stderr);
     goto cleanup;
   }
 
