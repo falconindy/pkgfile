@@ -194,8 +194,8 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
       continue;
     }
 
-    if (config.filterfunc(&config.filter, buf->line, (int) len, config.icase) ==
-        0) {
+    if (!config.filterfunc ||
+        config.filterfunc(&config.filter, buf->line, (int) len, config.icase) == 0) {
       char *line;
       int prefixlen = format_search_result(&line, repo, pkg);
       if (prefixlen < 0) {
@@ -218,7 +218,8 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
                          struct result_t *result,
                          struct archive_read_buffer *buf) {
-  if (match_exact(&config.filter, pkg->name, pkg->namelen, config.icase) != 0) {
+  if (config.filterfunc &&
+      config.filterfunc(&config.filter, pkg->name, pkg->namelen, config.icase) != 0) {
     return 0;
   }
 
@@ -248,7 +249,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
     free(line);
   }
 
-  return -1;
+  return 0;
 }
 
 static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
@@ -462,6 +463,7 @@ static int parse_opts(int argc, char **argv) {
   };
 
   /* defaults */
+  config.filterfunc = NULL;
   config.filefunc = search_metafile;
   config.eol = '\n';
   config.cfgfile = PACMANCONFIG;
@@ -622,6 +624,7 @@ int main(int argc, char *argv[]) {
   int reposfound = 0, ret = 1;
   struct repovec_t *repos = NULL;
   struct result_t **results = NULL;
+  char *filter;
 
   if (parse_opts(argc, argv) != 0) {
     return 2;
@@ -638,23 +641,13 @@ int main(int argc, char *argv[]) {
     goto cleanup;
   }
 
-  if (optind == argc) {
-    fputs("error: no target specified (use -h for help)\n", stderr);
-    goto cleanup;
-  }
-
-  /* sanity check */
-  if (config.filefunc == list_metafile && config.filterby != FILTER_EXACT) {
-    fputs("error: --regex and --glob cannot be used with --list\n", stderr);
-    goto cleanup;
-  }
-
-  if (filter_setup(argv[optind]) != 0) {
+  filter = argc == optind ? NULL : argv[optind];
+  if (filter && filter_setup(filter) != 0) {
     goto cleanup;
   }
 
   /* override behavior on $repo/$pkg syntax or --repo */
-  if ((config.filefunc == list_metafile && strchr(argv[optind], '/')) ||
+  if ((config.filefunc == list_metafile && filter && strchr(filter, '/')) ||
       config.targetrepo) {
     ret = search_single_repo(repos, argv[optind]);
   } else {
