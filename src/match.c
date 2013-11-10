@@ -42,7 +42,7 @@ int match_regex(const filterpattern_t *pattern, const char *line, int len,
 
 void free_regex(filterpattern_t *pattern) {
   pcre_free(pattern->re.re);
-  pcre_free(pattern->re.re_extra);
+  pcre_free_study(pattern->re.re_extra);
 }
 
 int match_exact_basename(const filterpattern_t *pattern, const char *line,
