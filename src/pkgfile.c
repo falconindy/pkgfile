@@ -218,7 +218,8 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
                          struct result_t *result,
                          struct archive_read_buffer *buf) {
-  if (config.filterfunc(&config.filter, pkg->name, pkg->namelen, config.icase) != 0) {
+  if (config.filterfunc(&config.filter, pkg->name, pkg->namelen,
+                        config.icase) != 0) {
     return 0;
   }
 
