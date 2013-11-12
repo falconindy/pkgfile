@@ -138,11 +138,17 @@ void result_free(struct result_t *result) {
 static int linecmp(const void *l1, const void *l2) {
   const struct line_t *line1 = *(struct line_t **)l1;
   const struct line_t *line2 = *(struct line_t **)l2;
+  int ret = 0;
+
+  ret = strcmp(line1->prefix, line2->prefix);
+  if (ret != 0) {
+    return ret;
+  }
 
   if (line1->entry && line2->entry) {
     return strcmp(line1->entry, line2->entry);
   } else {
-    return strcmp(line1->prefix, line2->prefix);
+    return ret;
   }
 }
 

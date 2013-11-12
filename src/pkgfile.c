@@ -248,7 +248,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
     free(line);
   }
 
-  return -1;
+  return config.filterby == FILTER_EXACT ? -1 : 0;
 }
 
 static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
