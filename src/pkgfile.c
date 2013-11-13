@@ -249,7 +249,10 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
     free(line);
   }
 
-  return -1;
+  /* When we encounter a match with fixed string matching, we know we're done.
+   * However, for other filter methods, we can't be sure that our pattern won't
+   * produce further matches, so we signal our caller to continue. */
+  return config.filterby == FILTER_EXACT ? -1 : 0;
 }
 
 static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
@@ -649,8 +652,8 @@ int main(int argc, char *argv[]) {
   }
 
   /* override behavior on $repo/$pkg syntax or --repo */
-  if ((config.filefunc == list_metafile && strchr(argv[optind], '/')) ||
-      config.targetrepo) {
+  if ((config.filefunc == list_metafile && config.filterby == FILTER_EXACT &&
+       strchr(argv[optind], '/')) || config.targetrepo) {
     ret = search_single_repo(repos, argv[optind]);
   } else {
     int prefixlen;
