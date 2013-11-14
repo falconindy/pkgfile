@@ -177,14 +177,12 @@ static int endswith(const char *s, const char *postfix) {
 static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
   off_t entry_size = archive_entry_size(conv->ae);
   off_t bytes_w = 0, alloc_size = entry_size * 1.1;
-  struct archive_read_buffer buf;
+  struct archive_read_buffer buf = {};
   char *entry_data, *s;
   int rc = -1;
 
   /* be generous */
   MALLOC(entry_data, alloc_size, return -1);
-
-  memset(&buf, 0, sizeof(struct archive_read_buffer));
   MALLOC(buf.line, MAX_LINE_SIZE, return -1);
 
   /* discard the first line */

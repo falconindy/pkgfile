@@ -289,7 +289,7 @@ static void *load_repo(void *repo_obj) {
   struct result_t *result;
   struct stat st;
   void *repodata = MAP_FAILED;
-  struct archive_read_buffer read_buffer;
+  struct archive_read_buffer read_buffer = {};
 
   repo = repo_obj;
   snprintf(repofile, sizeof(repofile), CACHEPATH "/%s.files", repo->name);
@@ -299,7 +299,6 @@ static void *load_repo(void *repo_obj) {
   archive_read_support_format_all(a);
   archive_read_support_filter_all(a);
 
-  memset(&read_buffer, 0, sizeof(struct archive_read_buffer));
   MALLOC(line, MAX_LINE_SIZE, return NULL);
 
   fd = open(repofile, O_RDONLY);
