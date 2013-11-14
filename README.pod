@@ -22,7 +22,8 @@ I</etc/pacman.conf>.
 
 The target is considered to be a package name rather than a filename, and the
 contents of the named package are returned. This allows for repo/package style
-syntax to limit the depth of the search.
+syntax (such as "core/pacman") to limit the breadth of the search, but only when
+B<--list> is used without the B<--glob> or B<--regex> options.
 
 =item B<-s>, B<--search>
 
@@ -32,8 +33,9 @@ operation.
 =item B<-u>, B<--update>
 
 Update the stored metadata files. It is recommended to create a daily cron job
-with this command to ensure accurate results. By default, only modified repos
-will be downloaded. Pass this option twice to force update repo databases.
+with this command to ensure accurate results. By default, only repos which are
+found to be newer on the mirror will be downloaded. Pass this option twice to
+force all repos to be downloaded.
 
 =back
 
