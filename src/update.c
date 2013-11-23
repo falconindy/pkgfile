@@ -46,6 +46,22 @@ struct archive_conv {
   char diskfile[PATH_MAX];
 };
 
+#if defined(CLOCK_MONOTONIC) && !defined(CLOCK_MONOTONIC_COARSE)
+#define CLOCK_MONOTONIC_COARSE CLOCK_MONOTONIC
+#endif
+
+static double now(void) {
+#if defined(HAVE_CLOCK_GETTIME) && defined(CLOCK_MONOTONIC_COARSE)
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+  return ts.tv_sec + ts.tv_nsec / 1e9;
+#else
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec + tv.tv_usec / 1e6;
+#endif
+}
+
 static double simple_pow(int base, int exp) {
   double result = 1.0;
   for (; exp > 0; exp--) {
@@ -436,22 +452,10 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo) {
                      CURL_TIMECOND_IFMODSINCE);
   }
 
-  gettimeofday(&repo->dl_time_start, NULL);
+  repo->dl_time_start = now();
   curl_multi_add_handle(multi, repo->curl);
 
   return 0;
-}
-
-static double timediff(const struct timeval *start, const struct timeval *end) {
-  const double s_sec = start->tv_sec + (start->tv_usec / 1000000.0);
-  const double e_sec = end->tv_sec + (end->tv_usec / 1000000.0);
-  return e_sec - s_sec;
-}
-
-static double timediff_since(const struct timeval *since) {
-  struct timeval now;
-  gettimeofday(&now, NULL);
-  return timediff(since, &now);
 }
 
 static int print_rate(double xfer, const char *xfer_label, double rate,
@@ -471,7 +475,7 @@ static void print_download_success(struct repo_t *repo, int remaining) {
   double rate, xfered_human;
   int width;
 
-  rate = repo->buflen / timediff_since(&repo->dl_time_start);
+  rate = repo->buflen / (now() - repo->dl_time_start);
   xfered_human = humanize_size(repo->buflen, '\0', -1, &xfered_label);
 
   printf("  download complete: %-20s [", repo->name);
@@ -615,9 +619,8 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   struct repo_t *repo;
   struct utsname un;
   CURLM *cmulti;
-  struct timeval t_start;
   off_t total_xfer = 0;
-  double duration;
+  double t_start, duration;
 
   if (access(CACHEPATH, W_OK)) {
     fprintf(stderr, "error: unable to write to " CACHEPATH ": %s\n",
@@ -652,9 +655,9 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     }
   }
 
-  gettimeofday(&t_start, NULL);
+  t_start = now();
   hit_multi_handle_until_candy_comes_out(cmulti);
-  duration = timediff_since(&t_start);
+  duration = now() - t_start;
 
   /* remove handles, aggregate results */
   REPOVEC_FOREACH(repo, repos) {

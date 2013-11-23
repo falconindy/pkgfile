@@ -59,7 +59,7 @@ struct repo_t {
   /* force update repos */
   short force;
   /* start time for download */
-  struct timeval dl_time_start;
+  double dl_time_start;
   /* PID of repo_repack worker */
   pid_t worker;
 };
