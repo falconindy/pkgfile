@@ -6,7 +6,7 @@ compilation_database_folder = ''
 
 flags = [
 '-include',
-'./config.h',
+'config.h',
 '-Wall',
 '-Wextra',
 '-Werror',
