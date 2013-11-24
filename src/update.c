@@ -64,7 +64,7 @@ static double now(void) {
 
 static double simple_pow(int base, int exp) {
   double result = 1.0;
-  for (; exp > 0; exp--) {
+  for (; exp > 0; --exp) {
     result *= base;
   }
   return result;
@@ -79,7 +79,7 @@ static double humanize_size(off_t bytes, const char target_unit, int precision,
   double val = (double) bytes;
   int index;
 
-  for (index = 0; index < unitcount - 1; index++) {
+  for (index = 0; index < unitcount - 1; ++index) {
     if (target_unit != '\0' && labels[index][0] == target_unit) {
       break;
     } else if (target_unit == '\0' && val <= 2048.0 && val >= -2048.0) {
@@ -131,7 +131,7 @@ static char *strreplace(const char *str, const char *needle,
 
   p = str;
   newp = newstr;
-  for (int i = 0; i < listsz; i++) {
+  for (int i = 0; i < listsz; ++i) {
     q = list[i];
     if (q > p) {
       /* add chars between this occurence and last occurence, if any */

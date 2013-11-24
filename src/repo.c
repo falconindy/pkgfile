@@ -50,7 +50,7 @@ struct repo_t *repo_new(const char *reponame) {
 
 void repo_free(struct repo_t *repo) {
   free(repo->name);
-  for (int i = 0; i < repo->servercount; i++) {
+  for (int i = 0; i < repo->servercount; ++i) {
     free(repo->servers[i]);
   }
   free(repo->servers);
@@ -169,7 +169,7 @@ static int parse_include(const char *include, char **section,
     return -ENOMEM;
   }
 
-  for (size_t i = 0; i < globbuf.gl_pathc; i++) {
+  for (size_t i = 0; i < globbuf.gl_pathc; ++i) {
     parse_one_file(globbuf.gl_pathv[i], section, repos);
   }
 

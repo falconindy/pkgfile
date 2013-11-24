@@ -126,7 +126,7 @@ void result_free(struct result_t *result) {
   }
 
   if (result->lines) {
-    for (size_t i = 0; i < result->size; i++) {
+    for (size_t i = 0; i < result->size; ++i) {
       line_free(result->lines[i]);
     }
     free(result->lines);
@@ -149,14 +149,14 @@ static int linecmp(const void *l1, const void *l2) {
 
 static void result_print_long(struct result_t *result, int prefixlen,
                               char eol) {
-  for (size_t i = 0; i < result->size; i++) {
+  for (size_t i = 0; i < result->size; ++i) {
     printf("%-*s\t%s%c", prefixlen, result->lines[i]->prefix,
            result->lines[i]->entry, eol);
   }
 }
 
 static void result_print_short(struct result_t *result, char eol) {
-  for (size_t i = 0; i < result->size; i++) {
+  for (size_t i = 0; i < result->size; ++i) {
     printf("%s%c", result->lines[i]->prefix, eol);
   }
 }
@@ -177,7 +177,7 @@ size_t result_print(struct result_t *result, int prefixlen, char eol) {
 int results_get_prefixlen(struct result_t **results, int count) {
   int maxlen = 0;
 
-  for (int i = 0; i < count; i++) {
+  for (int i = 0; i < count; ++i) {
     maxlen = MAX(maxlen, results[i]->max_prefixlen);
   }
 

@@ -65,7 +65,7 @@ _pkgfile() {
     *)
       # completion based on mode -- always take the last specified
       local i j w mode
-      for (( i = 1; i < ${#COMP_WORDS[*]}; i++ )); do
+      for (( i = 1; i < ${#COMP_WORDS[*]}; ++i )); do
         w=${COMP_WORDS[i]}
         if (( i == 1 )) || [[ ${COMP_WORDS[i-1]} != -* ]]; then
           case $w in
