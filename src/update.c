@@ -503,15 +503,14 @@ static void print_total_dl_stats(int count, double duration, off_t total_xfer) {
   printf(" %2d files    >\n", count);
 }
 
-static int read_multi_msg(CURLM *multi, int remaining) {
+static int handle_download_complete(CURLM *multi, int remaining) {
   struct repo_t *repo;
   int msgs_left;
   CURLMsg *msg;
 
   msg = curl_multi_info_read(multi, &msgs_left);
   if (msg == NULL) {
-    /* signal to the caller that we're out of messages */
-    return -ENOENT;
+    return -1;
   }
 
   curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, (char **)&repo);
@@ -538,7 +537,7 @@ static int read_multi_msg(CURLM *multi, int remaining) {
       }
 
       add_repo_download(multi, repo);
-      return -EAGAIN;
+      return 0;
     }
 
     print_download_success(repo, remaining);
@@ -552,30 +551,21 @@ static int read_multi_msg(CURLM *multi, int remaining) {
 static void hit_multi_handle_until_candy_comes_out(CURLM *multi) {
   int active_handles;
 
-  curl_multi_perform(multi, &active_handles);
   do {
-    int rc = curl_multi_wait(multi, NULL, 0, -1, NULL);
-    if (rc != CURLM_OK) {
-      fprintf(stderr, "error: curl_multi_wait failed (%d)\n", rc);
-      break;
-    }
-
-    rc = curl_multi_perform(multi, &active_handles);
+    int rc = curl_multi_perform(multi, &active_handles);
     if (rc != CURLM_OK) {
       fprintf(stderr, "error: curl_multi_perform failed (%d)\n", rc);
       break;
     }
 
-    /* read any pending messages */
-    for (;;) {
-      int r = read_multi_msg(multi, active_handles);
-      if (r == -EAGAIN) {
-        continue;
-      } else if (r == -ENOENT) {
-        /* we're out of messages */
-        break;
-      }
+    rc = curl_multi_wait(multi, NULL, 0, -1, NULL);
+    if (rc != CURLM_OK) {
+      fprintf(stderr, "error: curl_multi_wait failed (%d)\n", rc);
+      break;
     }
+
+    while (handle_download_complete(multi, active_handles) == 0)
+      ;
   } while (active_handles > 0);
 }
 
