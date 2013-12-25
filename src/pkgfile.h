@@ -41,14 +41,15 @@
 #define PCRE_STUDY_JIT_COMPILE 0
 #endif
 
-struct archive_read_buffer {
-  char *line;
-  char *line_offset;
-  off_t line_size;
+struct memblock_t {
+  char *base;
+  char *offset;
+  size_t size;
+};
 
-  char *block;
-  char *block_offset;
-  size_t block_size;
+struct archive_read_buffer {
+  struct memblock_t line;
+  struct memblock_t block;
 
   long ret;
 };

@@ -192,29 +192,30 @@ static int endswith(const char *s, const char *postfix) {
 
 static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
   off_t entry_size = archive_entry_size(conv->ae);
-  off_t bytes_w = 0, alloc_size = entry_size * 1.1;
+  off_t bytes_w = 0;
+  size_t alloc_size = entry_size * 1.1;
   struct archive_read_buffer buf = {};
   char *entry_data, *s;
   int rc = -1;
 
   /* be generous */
   MALLOC(entry_data, alloc_size, return -1);
-  MALLOC(buf.line, MAX_LINE_SIZE, return -1);
+  MALLOC(buf.line.base, MAX_LINE_SIZE, return -1);
 
   /* discard the first line */
   archive_fgets(conv->in, &buf);
 
-  while (archive_fgets(conv->in, &buf) == ARCHIVE_OK && buf.line_size > 0) {
+  while (archive_fgets(conv->in, &buf) == ARCHIVE_OK && buf.line.size > 0) {
     /* ensure enough memory */
-    if (bytes_w + buf.line_size + 1 > alloc_size) {
+    if (bytes_w + buf.line.size + 1 > alloc_size) {
       alloc_size *= 1.1;
       entry_data = realloc(entry_data, alloc_size);
     }
 
     /* do the copy, with a slash prepended */
     entry_data[bytes_w++] = '/';
-    memcpy(&entry_data[bytes_w], buf.line, buf.line_size);
-    bytes_w += buf.line_size;
+    memcpy(&entry_data[bytes_w], buf.line.base, buf.line.size);
+    bytes_w += buf.line.size;
     entry_data[bytes_w++] = '\n';
   }
 
@@ -243,7 +244,7 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
 
 error:
   free(entry_data);
-  free(buf.line);
+  free(buf.line.base);
 
   return rc;
 }

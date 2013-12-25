@@ -49,14 +49,14 @@ static const char *filtermethods[] = {[FILTER_GLOB] = "glob",
 
 int archive_fgets(struct archive *a, struct archive_read_buffer *b) {
   /* ensure we start populating our line buffer at the beginning */
-  b->line_offset = b->line;
+  b->line.offset = b->line.base;
 
   for (;;) {
     size_t new, block_remaining;
     char *eol;
 
     /* have we processed this entire block? */
-    if (b->block + b->block_size == b->block_offset) {
+    if (b->block.base + b->block.size == b->block.offset) {
       int64_t offset;
       if (b->ret == ARCHIVE_EOF) {
         /* reached end of archive on the last read, now we are out of data */
@@ -64,50 +64,50 @@ int archive_fgets(struct archive *a, struct archive_read_buffer *b) {
       }
 
       /* zero-copy - this is the entire next block of data. */
-      b->ret = archive_read_data_block(a, (void *)&b->block, &b->block_size,
+      b->ret = archive_read_data_block(a, (void *)&b->block, &b->block.size,
                                        &offset);
-      b->block_offset = b->block;
-      block_remaining = b->block_size;
+      b->block.offset = b->block.base;
+      block_remaining = b->block.size;
 
       /* error, cleanup */
       if (b->ret < ARCHIVE_OK) {
         return b->ret;
       }
     } else {
-      block_remaining = b->block + b->block_size - b->block_offset;
+      block_remaining = b->block.base + b->block.size - b->block.offset;
     }
 
     /* look through the block looking for EOL characters */
-    eol = memchr(b->block_offset, '\n', block_remaining);
+    eol = memchr(b->block.offset, '\n', block_remaining);
     if (!eol) {
-      eol = memchr(b->block_offset, '\0', block_remaining);
+      eol = memchr(b->block.offset, '\0', block_remaining);
     }
 
-    /* note: we know eol > b->block_offset and b->line_offset > b->line,
+    /* note: we know eol > b->block.offset and b->line.offset > b->line,
      * so we know the result is unsigned and can fit in size_t */
-    new = eol ? (size_t)(eol - b->block_offset) : block_remaining;
-    if ((b->line_offset - b->line + new + 1) > MAX_LINE_SIZE) {
+    new = eol ? (size_t)(eol - b->block.offset) : block_remaining;
+    if ((b->line.offset - b->line.base + new + 1) > MAX_LINE_SIZE) {
       return -ERANGE;
     }
 
     if (eol) {
-      size_t len = (size_t)(eol - b->block_offset);
-      memcpy(b->line_offset, b->block_offset, len);
-      b->line_offset[len] = '\0';
-      b->block_offset = eol + 1;
-      b->line_size = b->line_offset + len - b->line;
+      size_t len = (size_t)(eol - b->block.offset);
+      memcpy(b->line.offset, b->block.offset, len);
+      b->line.offset[len] = '\0';
+      b->block.offset = eol + 1;
+      b->line.size = b->line.offset + len - b->line.base;
       /* this is the main return point; from here you can read b->line */
       return ARCHIVE_OK;
     } else {
       /* we've looked through the whole block but no newline, copy it */
-      size_t len = (size_t)(b->block + b->block_size - b->block_offset);
-      b->line_offset = mempcpy(b->line_offset, b->block_offset, len);
-      b->block_offset = b->block + b->block_size;
+      size_t len = (size_t)(b->block.base + b->block.size - b->block.offset);
+      b->line.offset = mempcpy(b->line.offset, b->block.offset, len);
+      b->block.offset = b->block.base + b->block.size;
       /* there was no new data, return what is left; saved ARCHIVE_EOF will be
        * returned on next call */
       if (len == 0) {
-        b->line_offset[0] = '\0';
-        b->line_size = b->line_offset - b->line;
+        b->line.offset[0] = '\0';
+        b->line.size = b->line.offset - b->line.base;
         return ARCHIVE_OK;
       }
     }
@@ -180,29 +180,29 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
                            struct archive *a, struct result_t *result,
                            struct archive_read_buffer *buf) {
   while (archive_fgets(a, buf) == ARCHIVE_OK) {
-    const size_t len = buf->line_size;
+    const size_t len = buf->line.size;
 
     if (len == 0) {
       continue;
     }
 
-    if (!config.directories && is_directory(buf->line, len)) {
+    if (!config.directories && is_directory(buf->line.base, len)) {
       continue;
     }
 
-    if (config.binaries && !is_binary(buf->line, len)) {
+    if (config.binaries && !is_binary(buf->line.base, len)) {
       continue;
     }
 
-    if (config.filterfunc(&config.filter, buf->line, (int) len, config.icase) ==
-        0) {
+    if (config.filterfunc(&config.filter, buf->line.base, (int) len,
+                          config.icase) == 0) {
       char *line;
       int prefixlen = format_search_result(&line, repo, pkg);
       if (prefixlen < 0) {
         fputs("error: failed to allocate memory for result\n", stderr);
         return -1;
       }
-      result_add(result, line, config.verbose ? buf->line : NULL,
+      result_add(result, line, config.verbose ? buf->line.base : NULL,
                  config.verbose ? prefixlen : 0);
       free(line);
 
@@ -224,16 +224,16 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
   }
 
   while (archive_fgets(a, buf) == ARCHIVE_OK) {
-    const size_t len = buf->line_size;
+    const size_t len = buf->line.size;
     int prefixlen = 0;
     char *line;
 
-    if (len == 0 || (config.binaries && !is_binary(buf->line, len))) {
+    if (len == 0 || (config.binaries && !is_binary(buf->line.base, len))) {
       continue;
     }
 
     if (config.quiet) {
-      line = strdup(buf->line);
+      line = strdup(buf->line.base);
       if (line == NULL) {
         fputs("error: failed to allocate memory\n", stderr);
         return 0;
@@ -245,7 +245,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
         return 0;
       }
     }
-    result_add(result, line, config.quiet ? NULL : buf->line, prefixlen);
+    result_add(result, line, config.quiet ? NULL : buf->line.base, prefixlen);
     free(line);
   }
 
@@ -346,7 +346,7 @@ static void *load_repo(void *repo_obj) {
     }
 
     memset(&read_buffer, 0, sizeof(struct archive_read_buffer));
-    read_buffer.line = line;
+    read_buffer.line.base = line;
     r = config.filefunc(repo->name, &pkg, a, result, &read_buffer);
     if (r < 0) {
       break;
