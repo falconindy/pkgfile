@@ -47,37 +47,37 @@ static struct config_t config;
 static const char *filtermethods[] = {[FILTER_GLOB] = "glob",
                                       [FILTER_REGEX] = "regex" };
 
-static int reader_block_consume(struct archive_line_reader *b,
+static int reader_block_consume(struct archive_line_reader *reader,
                                 struct archive *a) {
   int64_t offset;
 
   /* end of the archive */
-  if (b->ret == ARCHIVE_EOF) {
+  if (reader->ret == ARCHIVE_EOF) {
     return ARCHIVE_EOF;
   }
 
   /* there's still more that reader_line_consume can use */
-  if (b->block.base + b->block.size != b->block.offset) {
+  if (reader->block.base + reader->block.size != reader->block.offset) {
     return ARCHIVE_OK;
   }
 
   /* grab a new block of data from the archive */
-  b->ret = archive_read_data_block(a, (void *)&b->block.base, &b->block.size,
-                                   &offset);
-  b->block.offset = b->block.base;
+  reader->ret = archive_read_data_block(a, (void *)&reader->block.base,
+                                        &reader->block.size, &offset);
+  reader->block.offset = reader->block.base;
 
-  return b->ret;
+  return reader->ret;
 }
 
-static void *reader_block_find_end(struct archive_line_reader *b) {
+static void *reader_block_find_eol(struct archive_line_reader *reader) {
   void *endp;
-  size_t n = b->block.base + b->block.size - b->block.offset;
+  size_t n = reader->block.base + reader->block.size - reader->block.offset;
 
   /* Find the end of the copy-worthy region. This might be a newline
    * or simply the end of the data block read from the archive. */
-  endp = memchr(b->block.offset, '\n', n);
+  endp = memchr(reader->block.offset, '\n', n);
   if (endp == NULL) {
-    endp = b->block.base + b->block.size - 1;
+    endp = reader->block.base + reader->block.size - 1;
   }
 
   return endp;
@@ -88,38 +88,39 @@ static bool reader_line_would_overflow(struct archive_line_reader *b,
   return append >= MAX_LINE_SIZE - (b->line.offset - b->line.base);
 }
 
-static int reader_line_consume(struct archive_line_reader *b) {
-  char *endp = reader_block_find_end(b);
-  size_t copylen = endp - b->block.offset;
+static int reader_line_consume(struct archive_line_reader *reader) {
+  char *endp = reader_block_find_eol(reader);
+  size_t copylen = endp - reader->block.offset;
 
-  if (reader_line_would_overflow(b, copylen)) {
+  if (reader_line_would_overflow(reader, copylen)) {
     return ENOBUFS;
   }
 
   /* do a real copy from the block to the line buffer */
-  b->line.offset = mempcpy(b->line.offset, b->block.offset, copylen);
-  *b->line.offset = '\0';
-  b->line.size += copylen;
-  b->block.offset += copylen + 1;
+  reader->line.offset =
+      mempcpy(reader->line.offset, reader->block.offset, copylen);
+  *reader->line.offset = '\0';
+  reader->line.size += copylen;
+  reader->block.offset += copylen + 1;
 
   /* return EAGAIN if we don't yet have a full line */
   return *endp == '\n' ? 0 : EAGAIN;
 }
 
-int archive_fgets(struct archive *a, struct archive_line_reader *b) {
+int reader_getline(struct archive_line_reader *reader, struct archive *a) {
   /* Reset the line */
-  b->line.offset = b->line.base;
-  b->line.size = 0;
+  reader->line.offset = reader->line.base;
+  reader->line.size = 0;
 
   for (;;) {
     int r;
 
-    r = reader_block_consume(b, a);
+    r = reader_block_consume(reader, a);
     if (r != ARCHIVE_OK) {
       return r;
     }
 
-    r = reader_line_consume(b);
+    r = reader_line_consume(reader);
     if (r != EAGAIN) {
       return r;
     }
@@ -189,7 +190,7 @@ static int format_search_result(char **result, const char *repo,
 static int search_metafile(const char *repo, struct pkg_t *pkg,
                            struct archive *a, struct result_t *result,
                            struct archive_line_reader *buf) {
-  while (archive_fgets(a, buf) == ARCHIVE_OK) {
+  while (reader_getline(buf, a) == ARCHIVE_OK) {
     const size_t len = buf->line.size;
 
     if (len == 0) {
@@ -206,7 +207,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 
     if (config.filterfunc(&config.filter, buf->line.base, (int) len,
                           config.icase) == 0) {
-      char *line;
+      _cleanup_free_ char *line = NULL;
       int prefixlen = format_search_result(&line, repo, pkg);
       if (prefixlen < 0) {
         fputs("error: failed to allocate memory for result\n", stderr);
@@ -214,7 +215,6 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
       }
       result_add(result, line, config.verbose ? buf->line.base : NULL,
                  config.verbose ? prefixlen : 0);
-      free(line);
 
       if (!config.verbose) {
         return 0;
@@ -233,10 +233,10 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
     return 0;
   }
 
-  while (archive_fgets(a, buf) == ARCHIVE_OK) {
+  while (reader_getline(buf, a) == ARCHIVE_OK) {
     const size_t len = buf->line.size;
     int prefixlen = 0;
-    char *line;
+    _cleanup_free_ char *line = NULL;
 
     if (len == 0 || (config.binaries && !is_binary(buf->line.base, len))) {
       continue;
@@ -256,7 +256,6 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
       }
     }
     result_add(result, line, config.quiet ? NULL : buf->line.base, prefixlen);
-    free(line);
   }
 
   /* When we encounter a match with fixed string matching, we know we're done.
@@ -289,9 +288,8 @@ static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
 }
 
 static void *load_repo(void *repo_obj) {
-  int fd = -1;
   char repofile[FILENAME_MAX];
-  char *line;
+  _cleanup_free_ char *line = NULL;
   struct archive *a;
   struct archive_entry *e;
   struct pkg_t pkg;
@@ -311,8 +309,8 @@ static void *load_repo(void *repo_obj) {
 
   MALLOC(line, MAX_LINE_SIZE, return NULL);
 
-  fd = open(repofile, O_RDONLY);
-  if (fd < 0) {
+  repo->fd = open(repofile, O_RDONLY);
+  if (repo->fd < 0) {
     /* fail silently if the file doesn't exist */
     if (errno != ENOENT) {
       fprintf(stderr, "error: failed to open repo: %s: %s\n", repofile,
@@ -321,10 +319,9 @@ static void *load_repo(void *repo_obj) {
     goto cleanup;
   }
 
-  repo->filefound = 1;
-
-  fstat(fd, &st);
-  repodata = mmap(0, st.st_size, PROT_READ, MAP_SHARED | MAP_POPULATE, fd, 0);
+  fstat(repo->fd, &st);
+  repodata =
+      mmap(0, st.st_size, PROT_READ, MAP_SHARED | MAP_POPULATE, repo->fd, 0);
   if (repodata == MAP_FAILED) {
     fprintf(stderr, "error: failed to map pages for %s: %s\n", repofile,
             strerror(errno));
@@ -366,10 +363,9 @@ static void *load_repo(void *repo_obj) {
   archive_read_close(a);
 
 cleanup:
-  free(line);
   archive_read_free(a);
-  if (fd >= 0) {
-    close(fd);
+  if (repo->fd >= 0) {
+    close(repo->fd);
   }
   if (repodata != MAP_FAILED) {
     munmap(repodata, st.st_size);
@@ -589,10 +585,10 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring) {
 
 static struct result_t **search_all_repos(struct repovec_t *repos) {
   struct result_t **results;
-  pthread_t *t = NULL;
+  pthread_t *t;
   struct repo_t *repo;
 
-  CALLOC(t, repos->size, sizeof(pthread_t), return NULL);
+  t = alloca(repos->size * sizeof(pthread_t));
   CALLOC(results, repos->size, sizeof(struct result_t *), return NULL);
 
   /* load and process DBs */
@@ -602,8 +598,6 @@ static struct result_t **search_all_repos(struct repovec_t *repos) {
 
   /* gather results */
   REPOVEC_FOREACH(repo, repos) { pthread_join(t[i_], (void **)&results[i_]); }
-
-  free(t);
 
   return results;
 }
@@ -634,7 +628,7 @@ static int filter_setup(char *arg) {
 int main(int argc, char *argv[]) {
   int reposfound = 0, ret = 1;
   struct repovec_t *repos = NULL;
-  struct result_t **results = NULL;
+  _cleanup_free_ struct result_t **results = NULL;
 
   if (parse_opts(argc, argv) != 0) {
     return 2;
@@ -671,7 +665,7 @@ int main(int argc, char *argv[]) {
 
     prefixlen = config.raw ? 0 : results_get_prefixlen(results, repos->size);
     REPOVEC_FOREACH(repo, repos) {
-      reposfound += repo->filefound;
+      reposfound += repo->fd >= 0;
       ret += (int) result_print(results[i_], prefixlen, config.eol);
       result_free(results[i_]);
     }
@@ -690,7 +684,6 @@ int main(int argc, char *argv[]) {
 
 cleanup:
   repos_free(repos);
-  free(results);
 
   return ret;
 }

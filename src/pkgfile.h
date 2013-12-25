@@ -98,6 +98,6 @@ struct config_t {
   int compress;
 };
 
-int archive_fgets(struct archive *a, struct archive_line_reader *b);
+int reader_getline(struct archive_line_reader *b, struct archive *a);
 
 /* vim: set ts=2 sw=2 et: */

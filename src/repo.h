@@ -31,7 +31,7 @@ struct repo_t {
   char *name;
   char **servers;
   int servercount;
-  int filefound;
+  int fd;
   char *arch;
 
   const struct config_t *config;
@@ -40,8 +40,6 @@ struct repo_t {
 
   /* curl easy handle */
   CURL *curl;
-  /* url being fetched */
-  char *url;
   /* destination */
   char diskfile[PATH_MAX];
   /* index to currently in-use server */

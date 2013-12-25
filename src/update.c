@@ -43,7 +43,6 @@ struct archive_conv {
   struct archive_entry *ae;
   const char *reponame;
   char tmpfile[PATH_MAX];
-  char diskfile[PATH_MAX];
 };
 
 #if defined(CLOCK_MONOTONIC) && !defined(CLOCK_MONOTONIC_COARSE)
@@ -152,7 +151,8 @@ static char *strreplace(const char *str, const char *needle,
 }
 
 static char *prepare_url(const char *url, const char *repo, const char *arch) {
-  char *string, *temp = NULL;
+  _cleanup_free_ char *string = NULL;
+  char *temp = NULL;
   const char *const archvar = "$arch";
   const char *const repovar = "$repo";
 
@@ -174,8 +174,6 @@ static char *prepare_url(const char *url, const char *repo, const char *arch) {
     fputs("error: failed to allocate memory\n", stderr);
   }
 
-  free(string);
-
   return temp;
 }
 
@@ -194,28 +192,29 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
   off_t entry_size = archive_entry_size(conv->ae);
   off_t bytes_w = 0;
   size_t alloc_size = entry_size * 1.1;
-  struct archive_line_reader buf = {};
-  char *entry_data, *s;
-  int rc = -1;
+  struct archive_line_reader reader = {};
+  _cleanup_free_ char *entry_data = NULL, *s = NULL, *line = NULL;
 
   /* be generous */
   MALLOC(entry_data, alloc_size, return -1);
-  MALLOC(buf.line.base, MAX_LINE_SIZE, return -1);
+  MALLOC(line, MAX_LINE_SIZE, return -1);
+
+  reader.line.base = line;
 
   /* discard the first line */
-  archive_fgets(conv->in, &buf);
+  reader_getline(&reader, conv->in);
 
-  while (archive_fgets(conv->in, &buf) == ARCHIVE_OK) {
+  while (reader_getline(&reader, conv->in) == ARCHIVE_OK) {
     /* ensure enough memory */
-    if (bytes_w + buf.line.size + 1 > alloc_size) {
+    if (bytes_w + reader.line.size + 1 > alloc_size) {
       alloc_size *= 1.1;
       entry_data = realloc(entry_data, alloc_size);
     }
 
     /* do the copy, with a slash prepended */
     entry_data[bytes_w++] = '/';
-    memcpy(&entry_data[bytes_w], buf.line.base, buf.line.size);
-    bytes_w += buf.line.size;
+    memcpy(&entry_data[bytes_w], reader.line.base, reader.line.size);
+    bytes_w += reader.line.size;
     entry_data[bytes_w++] = '\n';
   }
 
@@ -226,27 +225,20 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
   s = strdup(entryname);
   *(strrchr(s, '/')) = '\0';
   archive_entry_update_pathname_utf8(conv->ae, s);
-  free(s);
 
   if (archive_write_header(conv->out, conv->ae) != ARCHIVE_OK) {
     fprintf(stderr, "error: failed to write entry header: %s/%s: %s\n",
             conv->reponame, archive_entry_pathname(conv->ae), strerror(errno));
-    goto error;
+    return -errno;
   }
 
   if (archive_write_data(conv->out, entry_data, bytes_w) != bytes_w) {
     fprintf(stderr, "error: failed to write entry: %s/%s: %s\n", conv->reponame,
             archive_entry_pathname(conv->ae), strerror(errno));
-    goto error;
+    return -errno;
   }
 
-  rc = 0;
-
-error:
-  free(entry_data);
-  free(buf.line.base);
-
-  return rc;
+  return 0;
 }
 
 static void archive_conv_close(struct archive_conv *conv) {
@@ -266,9 +258,7 @@ static int archive_conv_open(struct archive_conv *conv,
    * which is marginally faster given our staunch sequential access. */
 
   conv->reponame = repo->name;
-  r = snprintf(conv->tmpfile, PATH_MAX, CACHEPATH "/%s.files~", repo->name);
-  memcpy(conv->diskfile, conv->tmpfile, r);
-  conv->diskfile[r - 1] = '\0';
+  stpcpy(stpcpy(conv->tmpfile, repo->diskfile), "~");
 
   conv->in = archive_read_new();
   conv->out = archive_write_new();
@@ -308,8 +298,8 @@ open_error:
 }
 
 static int repack_repo_data(const struct repo_t *repo) {
-  struct archive_conv conv;
-  int ret;
+  struct archive_conv conv = {};
+  int r;
 
   if (archive_conv_open(&conv, repo) < 0) {
     return -1;
@@ -320,8 +310,8 @@ static int repack_repo_data(const struct repo_t *repo) {
 
     /* ignore everything but the /files metadata */
     if (endswith(entryname, "/files")) {
-      ret = write_cpio_entry(&conv, entryname);
-      if (ret < 0) {
+      r = write_cpio_entry(&conv, entryname);
+      if (r < 0) {
         break;
       }
     }
@@ -329,7 +319,7 @@ static int repack_repo_data(const struct repo_t *repo) {
 
   archive_conv_close(&conv);
 
-  if (ret < 0) {
+  if (r < 0) {
     /* oh noes! */
     if (unlink(conv.tmpfile) < 0 && errno != ENOENT) {
       fprintf(stderr, "error: failed to unlink temporary file: %s: %s\n",
@@ -338,7 +328,7 @@ static int repack_repo_data(const struct repo_t *repo) {
     return -1;
   }
 
-  if (rename(conv.tmpfile, conv.diskfile) != 0) {
+  if (rename(conv.tmpfile, repo->diskfile) != 0) {
     fprintf(stderr, "error: failed to rotate new repo for %s into place: %s\n",
             repo->name, strerror(errno));
     return -1;
@@ -405,6 +395,7 @@ static size_t write_response(void *ptr, size_t size, size_t nmemb, void *data) {
 
 static int add_repo_download(CURLM *multi, struct repo_t *repo) {
   struct stat st;
+  _cleanup_free_ char *url = NULL;
 
   if (repo->curl == NULL) {
     /* it's my first time, be gentle */
@@ -420,9 +411,9 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo) {
     curl_easy_setopt(repo->curl, CURLOPT_WRITEDATA, repo);
     curl_easy_setopt(repo->curl, CURLOPT_PRIVATE, repo);
     curl_easy_setopt(repo->curl, CURLOPT_ERRORBUFFER, repo->errmsg);
+    curl_easy_setopt(repo->curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
   } else {
     curl_multi_remove_handle(multi, repo->curl);
-    FREE(repo->url);
     FREE(repo->data);
     repo->buflen = 0;
     repo->capacity = 0;
@@ -434,14 +425,13 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo) {
     return -1;
   }
 
-  repo->url =
-      prepare_url(repo->servers[repo->server_idx], repo->name, repo->arch);
-  if (repo->url == NULL) {
+  url = prepare_url(repo->servers[repo->server_idx], repo->name, repo->arch);
+  if (url == NULL) {
     fputs("error: failed to allocate URL for download\n", stderr);
     return -1;
   }
 
-  curl_easy_setopt(repo->curl, CURLOPT_URL, repo->url);
+  curl_easy_setopt(repo->curl, CURLOPT_URL, url);
 
   if (repo->force == 0 && stat(repo->diskfile, &st) == 0) {
     curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long) st.st_mtime);
@@ -512,12 +502,14 @@ static int handle_download_complete(CURLM *multi, int remaining) {
 
   curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, (char **)&repo);
   if (msg->msg == CURLMSG_DONE) {
-    long timecond, resp;
+    long uptodate, resp;
+    char *effective_url;
 
-    curl_easy_getinfo(msg->easy_handle, CURLINFO_CONDITION_UNMET, &timecond);
+    curl_easy_getinfo(msg->easy_handle, CURLINFO_CONDITION_UNMET, &uptodate);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &resp);
+    curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL, &effective_url);
 
-    if (timecond == 1) {
+    if (uptodate) {
       printf("  %s is up to date\n", repo->name);
       repo->err = 1;
       return 0;
@@ -526,11 +518,11 @@ static int handle_download_complete(CURLM *multi, int remaining) {
     /* was it a success? */
     if (msg->data.result != CURLE_OK || resp >= 400) {
       if (*repo->errmsg) {
-        fprintf(stderr, "warning: download failed: %s: %s\n", repo->url,
+        fprintf(stderr, "warning: download failed: %s: %s\n", effective_url,
                 repo->errmsg);
       } else {
-        fprintf(stderr, "warning: download failed: %s [HTTP %ld]\n", repo->url,
-                resp);
+        fprintf(stderr, "warning: download failed: %s [HTTP %ld]\n",
+                effective_url, resp);
       }
 
       add_repo_download(multi, repo);
@@ -602,7 +594,7 @@ static int reap_children(struct repovec_t *repos) {
 }
 
 int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
-  int r, force, xfer_count = 0, ret = 0;
+  int r, xfer_count = 0, ret = 0;
   struct repo_t *repo;
   struct utsname un;
   CURLM *cmulti;
@@ -626,7 +618,6 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   }
 
   uname(&un);
-  force = (config->doupdate > 1);
 
   /* ensure all our DBs are 0644 */
   umask(0022);
@@ -634,7 +625,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   /* prime the handle by adding a URL from each repo */
   REPOVEC_FOREACH(repo, repos) {
     repo->arch = un.machine;
-    repo->force = force;
+    repo->force = config->doupdate > 1;
     repo->config = config;
     r = add_repo_download(cmulti, repo);
     if (r != 0) {
@@ -651,7 +642,6 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     curl_multi_remove_handle(cmulti, repo->curl);
     curl_easy_cleanup(repo->curl);
 
-    FREE(repo->url);
     FREE(repo->data);
 
     total_xfer += repo->buflen;
