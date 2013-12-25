@@ -57,7 +57,7 @@ static int reader_block_consume(struct archive_line_reader *b,
   }
 
   /* there's still more that reader_line_consume can use */
-  if (b->block.base + b->block.size == b->block.offset) {
+  if (b->block.base + b->block.size != b->block.offset) {
     return ARCHIVE_OK;
   }
 
