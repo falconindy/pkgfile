@@ -47,73 +47,83 @@ static struct config_t config;
 static const char *filtermethods[] = {[FILTER_GLOB] = "glob",
                                       [FILTER_REGEX] = "regex" };
 
-int archive_fgets(struct archive *a, struct archive_read_buffer *b) {
-  /* ensure we start populating our line buffer at the beginning */
-  b->line.offset = b->line.base;
+static int reader_block_consume(struct archive_line_reader *b,
+                                struct archive *a) {
+  int64_t offset;
 
-  for (;;) {
-    size_t new, block_remaining;
-    char *eol;
-
-    /* have we processed this entire block? */
-    if (b->block.base + b->block.size == b->block.offset) {
-      int64_t offset;
-      if (b->ret == ARCHIVE_EOF) {
-        /* reached end of archive on the last read, now we are out of data */
-        return b->ret;
-      }
-
-      /* zero-copy - this is the entire next block of data. */
-      b->ret = archive_read_data_block(a, (void *)&b->block, &b->block.size,
-                                       &offset);
-      b->block.offset = b->block.base;
-      block_remaining = b->block.size;
-
-      /* error, cleanup */
-      if (b->ret < ARCHIVE_OK) {
-        return b->ret;
-      }
-    } else {
-      block_remaining = b->block.base + b->block.size - b->block.offset;
-    }
-
-    /* look through the block looking for EOL characters */
-    eol = memchr(b->block.offset, '\n', block_remaining);
-    if (!eol) {
-      eol = memchr(b->block.offset, '\0', block_remaining);
-    }
-
-    /* note: we know eol > b->block.offset and b->line.offset > b->line,
-     * so we know the result is unsigned and can fit in size_t */
-    new = eol ? (size_t)(eol - b->block.offset) : block_remaining;
-    if ((b->line.offset - b->line.base + new + 1) > MAX_LINE_SIZE) {
-      return -ERANGE;
-    }
-
-    if (eol) {
-      size_t len = (size_t)(eol - b->block.offset);
-      memcpy(b->line.offset, b->block.offset, len);
-      b->line.offset[len] = '\0';
-      b->block.offset = eol + 1;
-      b->line.size = b->line.offset + len - b->line.base;
-      /* this is the main return point; from here you can read b->line */
-      return ARCHIVE_OK;
-    } else {
-      /* we've looked through the whole block but no newline, copy it */
-      size_t len = (size_t)(b->block.base + b->block.size - b->block.offset);
-      b->line.offset = mempcpy(b->line.offset, b->block.offset, len);
-      b->block.offset = b->block.base + b->block.size;
-      /* there was no new data, return what is left; saved ARCHIVE_EOF will be
-       * returned on next call */
-      if (len == 0) {
-        b->line.offset[0] = '\0';
-        b->line.size = b->line.offset - b->line.base;
-        return ARCHIVE_OK;
-      }
-    }
+  /* end of the archive */
+  if (b->ret == ARCHIVE_EOF) {
+    return ARCHIVE_EOF;
   }
 
+  /* there's still more that reader_line_consume can use */
+  if (b->block.base + b->block.size == b->block.offset) {
+    return ARCHIVE_OK;
+  }
+
+  /* grab a new block of data from the archive */
+  b->ret = archive_read_data_block(a, (void *)&b->block.base, &b->block.size,
+                                   &offset);
+  b->block.offset = b->block.base;
+
   return b->ret;
+}
+
+static void *reader_block_find_end(struct archive_line_reader *b) {
+  void *endp;
+  size_t n = b->block.base + b->block.size - b->block.offset;
+
+  /* Find the end of the copy-worthy region. This might be a newline
+   * or simply the end of the data block read from the archive. */
+  endp = memchr(b->block.offset, '\n', n);
+  if (endp == NULL) {
+    endp = b->block.base + b->block.size - 1;
+  }
+
+  return endp;
+}
+
+static bool reader_line_would_overflow(struct archive_line_reader *b,
+                                       size_t append) {
+  return append >= MAX_LINE_SIZE - (b->line.offset - b->line.base);
+}
+
+static int reader_line_consume(struct archive_line_reader *b) {
+  char *endp = reader_block_find_end(b);
+  size_t copylen = endp - b->block.offset;
+
+  if (reader_line_would_overflow(b, copylen)) {
+    return ENOBUFS;
+  }
+
+  /* do a real copy from the block to the line buffer */
+  b->line.offset = mempcpy(b->line.offset, b->block.offset, copylen);
+  *b->line.offset = '\0';
+  b->line.size += copylen;
+  b->block.offset += copylen + 1;
+
+  /* return EAGAIN if we don't yet have a full line */
+  return *endp == '\n' ? 0 : EAGAIN;
+}
+
+int archive_fgets(struct archive *a, struct archive_line_reader *b) {
+  /* Reset the line */
+  b->line.offset = b->line.base;
+  b->line.size = 0;
+
+  for (;;) {
+    int r;
+
+    r = reader_block_consume(b, a);
+    if (r != ARCHIVE_OK) {
+      return r;
+    }
+
+    r = reader_line_consume(b);
+    if (r != EAGAIN) {
+      return r;
+    }
+  }
 }
 
 static bool is_binary(const char *line, const size_t len) {
@@ -178,7 +188,7 @@ static int format_search_result(char **result, const char *repo,
 
 static int search_metafile(const char *repo, struct pkg_t *pkg,
                            struct archive *a, struct result_t *result,
-                           struct archive_read_buffer *buf) {
+                           struct archive_line_reader *buf) {
   while (archive_fgets(a, buf) == ARCHIVE_OK) {
     const size_t len = buf->line.size;
 
@@ -217,7 +227,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 
 static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
                          struct result_t *result,
-                         struct archive_read_buffer *buf) {
+                         struct archive_line_reader *buf) {
   if (config.filterfunc(&config.filter, pkg->name, pkg->namelen,
                         config.icase) != 0) {
     return 0;
@@ -289,7 +299,7 @@ static void *load_repo(void *repo_obj) {
   struct result_t *result;
   struct stat st;
   void *repodata = MAP_FAILED;
-  struct archive_read_buffer read_buffer = {};
+  struct archive_line_reader read_buffer = {};
 
   repo = repo_obj;
   snprintf(repofile, sizeof(repofile), CACHEPATH "/%s.files", repo->name);
@@ -345,7 +355,7 @@ static void *load_repo(void *repo_obj) {
       continue;
     }
 
-    memset(&read_buffer, 0, sizeof(struct archive_read_buffer));
+    memset(&read_buffer, 0, sizeof(struct archive_line_reader));
     read_buffer.line.base = line;
     r = config.filefunc(repo->name, &pkg, a, result, &read_buffer);
     if (r < 0) {

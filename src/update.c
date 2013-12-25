@@ -194,7 +194,7 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
   off_t entry_size = archive_entry_size(conv->ae);
   off_t bytes_w = 0;
   size_t alloc_size = entry_size * 1.1;
-  struct archive_read_buffer buf = {};
+  struct archive_line_reader buf = {};
   char *entry_data, *s;
   int rc = -1;
 
@@ -205,7 +205,7 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
   /* discard the first line */
   archive_fgets(conv->in, &buf);
 
-  while (archive_fgets(conv->in, &buf) == ARCHIVE_OK && buf.line.size > 0) {
+  while (archive_fgets(conv->in, &buf) == ARCHIVE_OK) {
     /* ensure enough memory */
     if (bytes_w + buf.line.size + 1 > alloc_size) {
       alloc_size *= 1.1;

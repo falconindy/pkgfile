@@ -47,7 +47,7 @@ struct memblock_t {
   size_t size;
 };
 
-struct archive_read_buffer {
+struct archive_line_reader {
   struct memblock_t line;
   struct memblock_t block;
 
@@ -82,7 +82,7 @@ struct config_t {
   filterstyle_t filterby;
   filterpattern_t filter;
   int (*filefunc)(const char *repo, struct pkg_t *pkg, struct archive *a,
-                  struct result_t *result, struct archive_read_buffer *buf);
+                  struct result_t *result, struct archive_line_reader *buf);
   int (*filterfunc)(const filterpattern_t *filter, const char *line, int len,
                     int flags);
   void (*filterfree)(filterpattern_t *filter);
@@ -98,6 +98,6 @@ struct config_t {
   int compress;
 };
 
-int archive_fgets(struct archive *a, struct archive_read_buffer *b);
+int archive_fgets(struct archive *a, struct archive_line_reader *b);
 
 /* vim: set ts=2 sw=2 et: */
