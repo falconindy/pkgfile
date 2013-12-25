@@ -204,18 +204,17 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
   /* discard the first line */
   archive_fgets(conv->in, &buf);
 
-  while (archive_fgets(conv->in, &buf) == ARCHIVE_OK &&
-         buf.real_line_size > 0) {
+  while (archive_fgets(conv->in, &buf) == ARCHIVE_OK && buf.line_size > 0) {
     /* ensure enough memory */
-    if (bytes_w + buf.real_line_size + 1 > alloc_size) {
+    if (bytes_w + buf.line_size + 1 > alloc_size) {
       alloc_size *= 1.1;
       entry_data = realloc(entry_data, alloc_size);
     }
 
     /* do the copy, with a slash prepended */
     entry_data[bytes_w++] = '/';
-    memcpy(&entry_data[bytes_w], buf.line, buf.real_line_size);
-    bytes_w += buf.real_line_size;
+    memcpy(&entry_data[bytes_w], buf.line, buf.line_size);
+    bytes_w += buf.line_size;
     entry_data[bytes_w++] = '\n';
   }
 

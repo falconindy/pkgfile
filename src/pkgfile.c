@@ -95,7 +95,7 @@ int archive_fgets(struct archive *a, struct archive_read_buffer *b) {
       memcpy(b->line_offset, b->block_offset, len);
       b->line_offset[len] = '\0';
       b->block_offset = eol + 1;
-      b->real_line_size = b->line_offset + len - b->line;
+      b->line_size = b->line_offset + len - b->line;
       /* this is the main return point; from here you can read b->line */
       return ARCHIVE_OK;
     } else {
@@ -107,7 +107,7 @@ int archive_fgets(struct archive *a, struct archive_read_buffer *b) {
        * returned on next call */
       if (len == 0) {
         b->line_offset[0] = '\0';
-        b->real_line_size = b->line_offset - b->line;
+        b->line_size = b->line_offset - b->line;
         return ARCHIVE_OK;
       }
     }
@@ -180,7 +180,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
                            struct archive *a, struct result_t *result,
                            struct archive_read_buffer *buf) {
   while (archive_fgets(a, buf) == ARCHIVE_OK) {
-    const size_t len = buf->real_line_size;
+    const size_t len = buf->line_size;
 
     if (len == 0) {
       continue;
@@ -224,7 +224,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
   }
 
   while (archive_fgets(a, buf) == ARCHIVE_OK) {
-    const size_t len = buf->real_line_size;
+    const size_t len = buf->line_size;
     int prefixlen = 0;
     char *line;
 

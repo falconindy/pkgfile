@@ -45,7 +45,6 @@ struct archive_read_buffer {
   char *line;
   char *line_offset;
   off_t line_size;
-  off_t real_line_size;
 
   char *block;
   char *block_offset;
