@@ -525,8 +525,7 @@ static int handle_download_complete(CURLM *multi, int remaining) {
                 effective_url, resp);
       }
 
-      add_repo_download(multi, repo);
-      return 0;
+      return add_repo_download(multi, repo);
     }
 
     print_download_success(repo, remaining);
