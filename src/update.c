@@ -355,7 +355,6 @@ static int repack_repo_data_async(struct repo_t *repo) {
 }
 
 static size_t write_response(void *ptr, size_t size, size_t nmemb, void *data) {
-  void *writebuf;
   const size_t realsize = size * nmemb;
   size_t grow = 0;
   struct repo_t *repo = data;
@@ -377,7 +376,7 @@ static size_t write_response(void *ptr, size_t size, size_t nmemb, void *data) {
   /* hey, i just alloc'd you and this is crazy, but I need to
    * write more, so realloc maybe? */
   if (grow > 0) {
-    writebuf = realloc(repo->data, grow + 1);
+    void *writebuf = realloc(repo->data, grow + 1);
     if (!writebuf) {
       fprintf(stderr, "error: failed to reallocate %zd bytes\n", grow + 1);
       return 0;
@@ -491,7 +490,6 @@ static void print_total_dl_stats(int count, double duration, off_t total_xfer) {
 }
 
 static int handle_download_complete(CURLM *multi, int remaining) {
-  struct repo_t *repo;
   int msgs_left;
   CURLMsg *msg;
 
@@ -500,11 +498,12 @@ static int handle_download_complete(CURLM *multi, int remaining) {
     return -1;
   }
 
-  curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, (char **)&repo);
   if (msg->msg == CURLMSG_DONE) {
     long uptodate, resp;
     char *effective_url;
+    struct repo_t *repo;
 
+    curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, (char **)&repo);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_CONDITION_UNMET, &uptodate);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &resp);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL, &effective_url);
