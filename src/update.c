@@ -487,7 +487,7 @@ static void print_total_dl_stats(int count, double duration, off_t total_xfer) {
   width = printf(":: download complete in %.2fs", duration);
   printf("%*s<", 42 - width, "");
   print_rate(xfered_human, xfered_label, rate_human, rate_label[0]);
-  printf(" %2d files    >\n", count);
+  printf(" %2d file%c    >\n", count, count == 1 ? ' ' : 's');
 }
 
 static int handle_download_complete(CURLM *multi, int remaining) {
@@ -657,7 +657,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   }
 
   /* print transfer stats if we downloaded more than 1 file */
-  if (xfer_count > 1) {
+  if (xfer_count > 0) {
     print_total_dl_stats(xfer_count, duration, total_xfer);
   }
 
