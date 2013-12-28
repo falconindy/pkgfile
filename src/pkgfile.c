@@ -127,11 +127,14 @@ int reader_getline(struct archive_line_reader *reader, struct archive *a) {
   }
 }
 
+static bool is_directory(const char *line, const size_t len) {
+  return line[len - 1] == '/';
+}
+
 static bool is_binary(const char *line, const size_t len) {
   const char *ptr;
 
-  /* directories aren't binaries */
-  if (line[len - 1] == '/') {
+  if (is_directory(line, len)) {
     return false;
   }
 
@@ -167,10 +170,6 @@ static bool is_binary(const char *line, const size_t len) {
 found_match_candidate:
   /* ensure that we only match /bin/bar and not /bin/foo/bar */
   return memchr(ptr + 4, '/', (line + len) - (ptr + 4)) == NULL;
-}
-
-static bool is_directory(const char *line, const size_t len) {
-  return line[len - 1] == '/';
 }
 
 static int format_search_result(char **result, const char *repo,
