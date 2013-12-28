@@ -10,7 +10,7 @@ command_not_found_handle () {
     printf '  %s\n' "${pkgs[@]}"
     return 0
   else
-    printf "bash: $(gettext bash "%s: command not found")\n" "$cmd" >&2
+    printf "bash: %s: command not found\n" "$cmd" >&2
     return 127
   fi
 }
