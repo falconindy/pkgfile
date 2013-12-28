@@ -150,31 +150,27 @@ static char *strreplace(const char *str, const char *needle,
   return newstr;
 }
 
-static char *prepare_url(const char *url, const char *repo, const char *arch) {
-  _cleanup_free_ char *string = NULL;
-  char *temp = NULL;
-  const char *const archvar = "$arch";
-  const char *const repovar = "$repo";
+static char *prepare_url(const char *url_template, const char *repo,
+                         const char *arch) {
+  _cleanup_free_ char *save = NULL, *prepared = NULL;
+  char *url;
 
-  string = strdup(url);
-  temp = string;
-  if (strstr(temp, archvar)) {
-    string = strreplace(temp, archvar, arch);
-    free(temp);
-    temp = string;
+  prepared = save = strreplace(url_template, "$arch", arch);
+  if (prepared == NULL) {
+    return NULL;
   }
 
-  if (strstr(temp, repovar)) {
-    string = strreplace(temp, repovar, repo);
-    free(temp);
-    temp = string;
+  prepared = strreplace(save, "$repo", repo);
+  if (prepared == NULL) {
+    return NULL;
   }
 
-  if (asprintf(&temp, "%s/%s.files", string, repo) == -1) {
+  if (asprintf(&url, "%s/%s.files", prepared, repo) == -1) {
     fputs("error: failed to allocate memory\n", stderr);
+    url = NULL;
   }
 
-  return temp;
+  return url;
 }
 
 static int endswith(const char *s, const char *postfix) {
