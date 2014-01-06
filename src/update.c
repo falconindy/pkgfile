@@ -350,40 +350,33 @@ static int repack_repo_data_async(struct repo_t *repo) {
   return 0;
 }
 
-static size_t write_response(void *ptr, size_t size, size_t nmemb, void *data) {
+static size_t write_handler(void *ptr, size_t size, size_t nmemb, void *data) {
   const size_t realsize = size * nmemb;
-  size_t grow = 0;
   struct repo_t *repo = data;
 
   if (repo->buflen + realsize > repo->capacity) {
     double contentlen = 0;
+    size_t grow;
 
-    /* alloc at once */
+    /* try to alloc at once based on Content-Length; falling back on
+     * incremental growth if the server is a bucket of fail. */
     curl_easy_getinfo(repo->curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
                       &contentlen);
-    if (contentlen >= 0) {
-      grow = contentlen;
-    } else {
-      /* crappy mirror, fallback on an incremental growth */
-      grow = repo->buflen + realsize;
-    }
-  }
 
-  /* hey, i just alloc'd you and this is crazy, but I need to
-   * write more, so realloc maybe? */
-  if (grow > 0) {
-    void *writebuf = realloc(repo->data, grow + 1);
-    if (!writebuf) {
-      fprintf(stderr, "error: failed to reallocate %zd bytes\n", grow + 1);
-      return 0;
+    grow = contentlen > 0 ? (size_t) contentlen : repo->buflen + realsize;
+    if (grow > 0) {
+      void *writebuf = realloc(repo->data, grow);
+      if (!writebuf) {
+        fprintf(stderr, "error: failed to reallocate %zd bytes\n", grow);
+        return 0;
+      }
+      repo->data = writebuf;
+      repo->capacity = grow;
     }
-    repo->data = writebuf;
   }
 
   memcpy(&(repo->data[repo->buflen]), ptr, realsize);
   repo->buflen += realsize;
-  repo->capacity = grow + 1;
-  repo->data[repo->buflen] = '\0';
 
   return realsize;
 }
@@ -402,7 +395,7 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo) {
     snprintf(repo->diskfile, sizeof(repo->diskfile), CACHEPATH "/%s.files",
              repo->name);
     curl_easy_setopt(repo->curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(repo->curl, CURLOPT_WRITEFUNCTION, write_response);
+    curl_easy_setopt(repo->curl, CURLOPT_WRITEFUNCTION, write_handler);
     curl_easy_setopt(repo->curl, CURLOPT_WRITEDATA, repo);
     curl_easy_setopt(repo->curl, CURLOPT_PRIVATE, repo);
     curl_easy_setopt(repo->curl, CURLOPT_ERRORBUFFER, repo->errmsg);
