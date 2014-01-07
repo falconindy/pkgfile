@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 by Dave Reisner <dreisner@archlinux.org>
+ * Copyright (C) 2014 by Dave Reisner <dreisner@archlinux.org>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,15 +22,16 @@
 
 #pragma once
 
-#include <curl/curl.h>
+#include <sys/types.h>
 
-#include "buffer.h"
+struct buffer_t {
+  void *data;
+  size_t size;
+  size_t capacity;
+};
 
-#define PACMANCONFIG "/etc/pacman.conf"
-
-struct config_t;
-struct repovec_t;
-
-int pkgfile_update(struct repovec_t *repos, struct config_t *config);
+int buffer_append(struct buffer_t *buffer, void *append, size_t appendsize);
+int buffer_resize(struct buffer_t *buffer, size_t newsize);
+void buffer_reset(struct buffer_t *buffer, int freedata);
 
 /* vim: set ts=2 sw=2 et: */

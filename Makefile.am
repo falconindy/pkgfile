@@ -50,6 +50,7 @@ AM_CPPFLAGS += \
 endif
 
 pkgfile_SOURCES = \
+	src/buffer.c src/buffer.h \
 	src/match.c src/match.h \
 	src/pkgfile.c src/pkgfile.h \
 	src/repo.c src/repo.h \

@@ -27,6 +27,8 @@
 
 #include <curl/curl.h>
 
+#include "buffer.h"
+
 struct repo_t {
   char *name;
   char **servers;
@@ -45,11 +47,7 @@ struct repo_t {
   /* index to currently in-use server */
   int server_idx;
   /* write buffer for downloaded data */
-  unsigned char *data;
-  /* max capacity of write buffer */
-  size_t capacity;
-  /* size of data written */
-  size_t buflen;
+  struct buffer_t content;
   /* error buffer */
   char errmsg[CURL_ERROR_SIZE];
   /* numeric err for determining success */

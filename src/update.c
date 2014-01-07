@@ -266,7 +266,8 @@ static int archive_conv_open(struct archive_conv *conv,
 
   archive_read_support_format_tar(conv->in);
   archive_read_support_filter_all(conv->in);
-  r = archive_read_open_memory(conv->in, repo->data, repo->buflen);
+  r = archive_read_open_memory(conv->in, repo->content.data,
+                               repo->content.size);
   if (r != ARCHIVE_OK) {
     fprintf(stderr, "error: failed to create archive reader for %s: %s\n",
             repo->name, strerror(archive_errno(conv->in)));
@@ -353,30 +354,27 @@ static int repack_repo_data_async(struct repo_t *repo) {
 static size_t write_handler(void *ptr, size_t size, size_t nmemb, void *data) {
   const size_t realsize = size * nmemb;
   struct repo_t *repo = data;
+  double contentlen = 0;
 
-  if (repo->buflen + realsize > repo->capacity) {
-    double contentlen = 0;
-    size_t grow;
+  if (repo->content.size + realsize > repo->content.capacity) {
 
     /* try to alloc at once based on Content-Length; falling back on
      * incremental growth if the server is a bucket of fail. */
     curl_easy_getinfo(repo->curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
                       &contentlen);
 
-    grow = contentlen > 0 ? (size_t) contentlen : repo->buflen + realsize;
-    if (grow > 0) {
-      void *writebuf = realloc(repo->data, grow);
-      if (!writebuf) {
-        fprintf(stderr, "error: failed to reallocate %zd bytes\n", grow);
+    if (contentlen > 0) {
+      if (buffer_resize(&repo->content, (size_t) contentlen) < 0) {
+        fprintf(stderr, "error: failed to reallocate %zd bytes\n",
+                (size_t) contentlen);
         return 0;
       }
-      repo->data = writebuf;
-      repo->capacity = grow;
     }
   }
 
-  memcpy(&(repo->data[repo->buflen]), ptr, realsize);
-  repo->buflen += realsize;
+  if (buffer_append(&repo->content, ptr, realsize) < 0) {
+    fprintf(stderr, "error: failed to append %zd bytes\n", realsize);
+  }
 
   return realsize;
 }
@@ -402,9 +400,7 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo) {
     curl_easy_setopt(repo->curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
   } else {
     curl_multi_remove_handle(multi, repo->curl);
-    FREE(repo->data);
-    repo->buflen = 0;
-    repo->capacity = 0;
+    buffer_reset(&repo->content, 0);
     repo->server_idx++;
   }
 
@@ -450,8 +446,8 @@ static void print_download_success(struct repo_t *repo, int remaining) {
   double rate, xfered_human;
   int width;
 
-  rate = repo->buflen / (now() - repo->dl_time_start);
-  xfered_human = humanize_size(repo->buflen, '\0', -1, &xfered_label);
+  rate = repo->content.size / (now() - repo->dl_time_start);
+  xfered_human = humanize_size(repo->content.size, '\0', -1, &xfered_label);
 
   printf("  download complete: %-20s [", repo->name);
   if (fabs(rate - INFINITY) < DBL_EPSILON) {
@@ -629,9 +625,8 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     curl_multi_remove_handle(cmulti, repo->curl);
     curl_easy_cleanup(repo->curl);
 
-    FREE(repo->data);
-
-    total_xfer += repo->buflen;
+    total_xfer += repo->content.size;
+    buffer_reset(&repo->content, 1);
 
     switch (repo->err) {
       case 0:
