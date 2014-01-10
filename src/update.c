@@ -296,7 +296,7 @@ open_error:
 
 static int repack_repo_data(const struct repo_t *repo) {
   struct archive_conv conv = {};
-  int r;
+  int r = 0;
 
   if (archive_conv_open(&conv, repo) < 0) {
     return -1;
