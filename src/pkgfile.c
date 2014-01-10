@@ -45,7 +45,7 @@
 static struct config_t config;
 
 static const char *filtermethods[] = {[FILTER_GLOB] = "glob",
-                                      [FILTER_REGEX] = "regex" };
+                                      [FILTER_REGEX] = "regex"};
 
 static int reader_block_consume(struct archive_line_reader *reader,
                                 struct archive *a) {
@@ -204,7 +204,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
       continue;
     }
 
-    if (config.filterfunc(&config.filter, buf->line.base, (int) len,
+    if (config.filterfunc(&config.filter, buf->line.base, (int)len,
                           config.icase) == 0) {
       _cleanup_free_ char *line = NULL;
       int prefixlen = format_search_result(&line, repo, pkg);
@@ -416,12 +416,13 @@ static int validate_compression(const char *compress) {
 static void usage(void) {
   fputs("pkgfile " PACKAGE_VERSION "\nUsage: pkgfile [options] target\n\n",
         stdout);
-  fputs(" Operations:\n"
-        "  -l, --list              list contents of a package\n"
-        "  -s, --search            search for packages containing the target "
-        "(default)\n"
-        "  -u, --update            update repo files lists\n\n",
-        stdout);
+  fputs(
+      " Operations:\n"
+      "  -l, --list              list contents of a package\n"
+      "  -s, --search            search for packages containing the target "
+      "(default)\n"
+      "  -u, --update            update repo files lists\n\n",
+      stdout);
   fputs(
       " Matching:\n"
       "  -b, --binaries          return only files contained in a bin dir\n"
@@ -431,21 +432,24 @@ static void usage(void) {
       "  -R, --repo <repo>       search a singular repo\n"
       "  -r, --regex             enable matching with regular expressions\n\n",
       stdout);
-  fputs(" Output:\n"
-        "  -q, --quiet             output less when listing\n"
-        "  -v, --verbose           output more\n"
-        "  -w, --raw               disable output justification\n"
-        "  -0, --null              null terminate output\n\n",
-        stdout);
-  fputs(" Downloading:\n"
-        "  -z, --compress[=type]   compress downloaded repos\n\n",
-        stdout);
-  fputs(" General:\n"
-        "  -C, --config <file>     use an alternate config (default: "
-        "/etc/pacman.conf)\n"
-        "  -h, --help              display this help and exit\n"
-        "  -V, --version           display the version and exit\n\n",
-        stdout);
+  fputs(
+      " Output:\n"
+      "  -q, --quiet             output less when listing\n"
+      "  -v, --verbose           output more\n"
+      "  -w, --raw               disable output justification\n"
+      "  -0, --null              null terminate output\n\n",
+      stdout);
+  fputs(
+      " Downloading:\n"
+      "  -z, --compress[=type]   compress downloaded repos\n\n",
+      stdout);
+  fputs(
+      " General:\n"
+      "  -C, --config <file>     use an alternate config (default: "
+      "/etc/pacman.conf)\n"
+      "  -h, --help              display this help and exit\n"
+      "  -V, --version           display the version and exit\n\n",
+      stdout);
 }
 
 static void print_version(void) {
@@ -456,18 +460,24 @@ static int parse_opts(int argc, char **argv) {
   int opt;
   static const char *shortopts = "0bdghilqR:rsuVvwz::";
   static const struct option longopts[] = {
-    { "binaries", no_argument, 0, 'b' },
-    { "compress", optional_argument, 0, 'z' },
-    { "config", required_argument, 0, 'C' },
-    { "directories", no_argument, 0, 'd' }, { "glob", no_argument, 0, 'g' },
-    { "help", no_argument, 0, 'h' }, { "ignorecase", no_argument, 0, 'i' },
-    { "list", no_argument, 0, 'l' }, { "quiet", no_argument, 0, 'q' },
-    { "repo", required_argument, 0, 'R' }, { "regex", no_argument, 0, 'r' },
-    { "search", no_argument, 0, 's' }, { "update", no_argument, 0, 'u' },
-    { "version", no_argument, 0, 'V' }, { "verbose", no_argument, 0, 'v' },
-    { "raw", no_argument, 0, 'w' }, { "null", no_argument, 0, '0' },
-    { 0, 0, 0, 0 }
-  };
+      {"binaries", no_argument, 0, 'b'},
+      {"compress", optional_argument, 0, 'z'},
+      {"config", required_argument, 0, 'C'},
+      {"directories", no_argument, 0, 'd'},
+      {"glob", no_argument, 0, 'g'},
+      {"help", no_argument, 0, 'h'},
+      {"ignorecase", no_argument, 0, 'i'},
+      {"list", no_argument, 0, 'l'},
+      {"quiet", no_argument, 0, 'q'},
+      {"repo", required_argument, 0, 'R'},
+      {"regex", no_argument, 0, 'r'},
+      {"search", no_argument, 0, 's'},
+      {"update", no_argument, 0, 'u'},
+      {"version", no_argument, 0, 'V'},
+      {"verbose", no_argument, 0, 'v'},
+      {"raw", no_argument, 0, 'w'},
+      {"null", no_argument, 0, '0'},
+      {0, 0, 0, 0}};
 
   /* defaults */
   config.filefunc = search_metafile;
@@ -655,7 +665,8 @@ int main(int argc, char *argv[]) {
 
   /* override behavior on $repo/$pkg syntax or --repo */
   if ((config.filefunc == list_metafile && config.filterby == FILTER_EXACT &&
-       strchr(argv[optind], '/')) || config.targetrepo) {
+       strchr(argv[optind], '/')) ||
+      config.targetrepo) {
     ret = search_single_repo(repos, argv[optind]);
   } else {
     int prefixlen;
@@ -665,7 +676,7 @@ int main(int argc, char *argv[]) {
     prefixlen = config.raw ? 0 : results_get_prefixlen(results, repos->size);
     REPOVEC_FOREACH(repo, repos) {
       reposfound += repo->fd >= 0;
-      ret += (int) result_print(results[i_], prefixlen, config.eol);
+      ret += (int)result_print(results[i_], prefixlen, config.eol);
       result_free(results[i_]);
     }
 

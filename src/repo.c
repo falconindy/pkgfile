@@ -132,7 +132,7 @@ static size_t strtrim(char *str) {
     return 0;
   }
 
-  while (isspace((unsigned char) * left)) {
+  while (isspace((unsigned char)*left)) {
     left++;
   }
   if (left != str) {
@@ -144,7 +144,7 @@ static size_t strtrim(char *str) {
   }
 
   right = (char *)rawmemchr(str, '\0') - 1;
-  while (isspace((unsigned char) * right)) {
+  while (isspace((unsigned char)*right)) {
     right--;
   }
   *++right = '\0';

@@ -55,20 +55,20 @@
 #define MAX_LINE_SIZE ((size_t)(10 * 1024)) /* used by archive_fgets */
 
 #ifndef MIN
-#define MIN(a, b)      \
+#define MIN(a, b)           \
   __extension__({           \
     __typeof__(a) _a = (a); \
     __typeof__(b) _b = (b); \
-    _a < _b ? _a : _b;           \
+    _a < _b ? _a : _b;      \
   })
 #endif
 
 #ifndef MAX
-#define MAX(a, b)      \
+#define MAX(a, b)           \
   __extension__({           \
     __typeof__(a) _a = (a); \
     __typeof__(b) _b = (b); \
-    _a > _b ? _a : _b;           \
+    _a > _b ? _a : _b;      \
   })
 #endif
 

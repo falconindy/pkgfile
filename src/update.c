@@ -71,11 +71,11 @@ static double simple_pow(int base, int exp) {
 
 static double humanize_size(off_t bytes, const char target_unit, int precision,
                             const char **label) {
-  static const char *labels[] = { "B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB",
-                                  "ZiB", "YiB" };
+  static const char *labels[] = {"B",   "KiB", "MiB", "GiB", "TiB",
+                                 "PiB", "EiB", "ZiB", "YiB"};
   static const int unitcount = sizeof(labels) / sizeof(labels[0]);
 
-  double val = (double) bytes;
+  double val = (double)bytes;
   int index;
 
   for (index = 0; index < unitcount - 1; ++index) {
@@ -364,9 +364,9 @@ static size_t write_handler(void *ptr, size_t size, size_t nmemb, void *data) {
                       &contentlen);
 
     if (contentlen > 0) {
-      if (buffer_resize(&repo->content, (size_t) contentlen) < 0) {
+      if (buffer_resize(&repo->content, (size_t)contentlen) < 0) {
         fprintf(stderr, "error: failed to reallocate %zd bytes\n",
-                (size_t) contentlen);
+                (size_t)contentlen);
         return 0;
       }
     }
@@ -418,7 +418,7 @@ static int add_repo_download(CURLM *multi, struct repo_t *repo) {
   curl_easy_setopt(repo->curl, CURLOPT_URL, url);
 
   if (repo->force == 0 && stat(repo->diskfile, &st) == 0) {
-    curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long) st.st_mtime);
+    curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
     curl_easy_setopt(repo->curl, CURLOPT_TIMECONDITION,
                      CURL_TIMECOND_IFMODSINCE);
   }
