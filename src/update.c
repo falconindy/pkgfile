@@ -379,7 +379,7 @@ static size_t write_handler(void *ptr, size_t size, size_t nmemb, void *data) {
   return realsize;
 }
 
-static int add_repo_download(CURLM *multi, struct repo_t *repo) {
+static int download_queue_request(CURLM *multi, struct repo_t *repo) {
   struct stat st;
   _cleanup_free_ char *url = NULL;
 
@@ -474,7 +474,7 @@ static void print_total_dl_stats(int count, double duration, off_t total_xfer) {
   printf(" %2d file%c    >\n", count, count == 1 ? ' ' : 's');
 }
 
-static int handle_download_complete(CURLM *multi, int remaining) {
+static int download_check_complete(CURLM *multi, int remaining) {
   int msgs_left;
   CURLMsg *msg;
 
@@ -509,7 +509,7 @@ static int handle_download_complete(CURLM *multi, int remaining) {
                 effective_url, resp);
       }
 
-      return add_repo_download(multi, repo);
+      return download_queue_request(multi, repo);
     }
 
     print_download_success(repo, remaining);
@@ -520,7 +520,7 @@ static int handle_download_complete(CURLM *multi, int remaining) {
   return 0;
 }
 
-static void hit_multi_handle_until_candy_comes_out(CURLM *multi) {
+static void download_wait_loop(CURLM *multi) {
   int active_handles;
 
   do {
@@ -536,7 +536,7 @@ static void hit_multi_handle_until_candy_comes_out(CURLM *multi) {
       break;
     }
 
-    while (handle_download_complete(multi, active_handles) == 0)
+    while (download_check_complete(multi, active_handles) == 0)
       ;
   } while (active_handles > 0);
 }
@@ -580,7 +580,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   int r, xfer_count = 0, ret = 0;
   struct repo_t *repo;
   struct utsname un;
-  CURLM *cmulti;
+  CURLM *curl_multi;
   off_t total_xfer = 0;
   double t_start, duration;
 
@@ -593,8 +593,8 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   printf(":: Updating %d repos...\n", repos->size);
 
   curl_global_init(CURL_GLOBAL_ALL);
-  cmulti = curl_multi_init();
-  if (cmulti == NULL) {
+  curl_multi = curl_multi_init();
+  if (curl_multi == NULL) {
     /* this can only fail due to out an OOM condition */
     fprintf(stderr, "error: failed to initialize curl: %s\n", strerror(ENOMEM));
     return 1;
@@ -610,19 +610,19 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     repo->arch = un.machine;
     repo->force = config->doupdate > 1;
     repo->config = config;
-    r = add_repo_download(cmulti, repo);
+    r = download_queue_request(curl_multi, repo);
     if (r != 0) {
       ret = r;
     }
   }
 
   t_start = now();
-  hit_multi_handle_until_candy_comes_out(cmulti);
+  download_wait_loop(curl_multi);
   duration = now() - t_start;
 
   /* remove handles, aggregate results */
   REPOVEC_FOREACH(repo, repos) {
-    curl_multi_remove_handle(cmulti, repo->curl);
+    curl_multi_remove_handle(curl_multi, repo->curl);
     curl_easy_cleanup(repo->curl);
 
     total_xfer += repo->content.size;
@@ -647,7 +647,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     ret = 1;
   }
 
-  curl_multi_cleanup(cmulti);
+  curl_multi_cleanup(curl_multi);
   curl_global_cleanup();
 
   return ret;
