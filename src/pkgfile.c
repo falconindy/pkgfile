@@ -635,7 +635,7 @@ static int filter_setup(char *arg) {
 }
 
 int main(int argc, char *argv[]) {
-  int reposfound = 0, ret = 1;
+  int reposfound = 0, ret = 0;
   struct repovec_t *repos = NULL;
   _cleanup_free_ struct result_t **results = NULL;
 
