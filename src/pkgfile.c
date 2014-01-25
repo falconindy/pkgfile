@@ -57,7 +57,7 @@ static int reader_block_consume(struct archive_line_reader *reader,
   }
 
   /* there's still more that reader_line_consume can use */
-  if (reader->block.base + reader->block.size != reader->block.offset) {
+  if (reader->block.offset < reader->block.base + reader->block.size) {
     return ARCHIVE_OK;
   }
 
@@ -77,7 +77,7 @@ static void *reader_block_find_eol(struct archive_line_reader *reader) {
    * or simply the end of the data block read from the archive. */
   endp = memchr(reader->block.offset, '\n', n);
   if (endp == NULL) {
-    endp = reader->block.base + reader->block.size - 1;
+    endp = reader->block.base + reader->block.size;
   }
 
   return endp;
