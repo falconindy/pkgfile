@@ -458,7 +458,7 @@ static void print_version(void) {
 
 static int parse_opts(int argc, char **argv) {
   int opt;
-  static const char *shortopts = "0bdghilqR:rsuVvwz::";
+  static const char *shortopts = "0bC:dghilqR:rsuVvwz::";
   static const struct option longopts[] = {
       {"binaries", no_argument, 0, 'b'},
       {"compress", optional_argument, 0, 'z'},
