@@ -275,7 +275,7 @@ static int archive_conv_open(struct archive_conv *conv,
     goto open_error;
   }
 
-  archive_write_set_format_cpio(conv->out);
+  archive_write_set_format_cpio_newc(conv->out);
   archive_write_add_filter(conv->out, repo->config->compress);
   r = archive_write_open_filename(conv->out, conv->tmpfile);
   if (r != ARCHIVE_OK) {
