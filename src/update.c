@@ -600,14 +600,17 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     return 1;
   }
 
-  uname(&un);
+  if (repos->architecture == NULL) {
+    uname(&un);
+    repos->architecture = strdup(un.machine);
+  }
 
   /* ensure all our DBs are 0644 */
   umask(0022);
 
   /* prime the handle by adding a URL from each repo */
   REPOVEC_FOREACH(repo, repos) {
-    repo->arch = un.machine;
+    repo->arch = repos->architecture;
     repo->force = config->doupdate > 1;
     repo->config = config;
     r = download_queue_request(curl_multi, repo);

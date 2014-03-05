@@ -107,6 +107,7 @@ void repos_free(struct repovec_t *repos) {
 
   REPOVEC_FOREACH(repo, repos) { repo_free(repo); }
 
+  free(repos->architecture);
   free(repos->repos);
   free(repos);
 }
@@ -185,6 +186,7 @@ static int parse_one_file(const char *filename, char **section,
   char line[4096];
   const char *const server = "Server";
   const char *const include = "Include";
+  const char *const architecture = "Architecture";
   int in_options = 0, r = 0, lineno = 0;
 
   fp = fopen(filename, "r");
@@ -221,8 +223,7 @@ static int parse_one_file(const char *filename, char **section,
 
     if (memchr(line, '=', len)) {
       char *key = line, *val = split_keyval(line, "=");
-      size_t keysz = strtrim(key);
-      strtrim(val);
+      size_t keysz = strtrim(key), valsz = strtrim(val);
 
       if (keysz == strlen(server) && memcmp(key, server, keysz) == 0) {
         if (*section == NULL) {
@@ -247,6 +248,11 @@ static int parse_one_file(const char *filename, char **section,
         }
       } else if (keysz == strlen(include) && memcmp(key, include, keysz) == 0) {
         parse_include(val, section, repos);
+      } else if (in_options && keysz == strlen(architecture) &&
+                 memcmp(key, architecture, keysz) == 0) {
+        if (valsz == 4 && memcmp(val, "auto", 4) != 0) {
+          repos->architecture = strndup(val, valsz);
+        }
       }
     }
   }
