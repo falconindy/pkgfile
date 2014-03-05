@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "macro.h"
 #include "repo.h"
@@ -42,8 +43,8 @@ struct repo_t *repo_new(const char *reponame) {
     return NULL;
   }
 
-  /* assume glorious failure */
   repo->err = 1;
+  repo->tmpfile.fd = -1;
 
   return repo;
 }
@@ -54,6 +55,10 @@ void repo_free(struct repo_t *repo) {
     free(repo->servers[i]);
   }
   free(repo->servers);
+
+  if (repo->tmpfile.fd >= 0) {
+    close(repo->tmpfile.fd);
+  }
 
   free(repo);
 }

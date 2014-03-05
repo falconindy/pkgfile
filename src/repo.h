@@ -23,11 +23,10 @@
 #pragma once
 
 #include <limits.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 
 #include <curl/curl.h>
-
-#include "buffer.h"
 
 struct repo_t {
   char *name;
@@ -46,8 +45,6 @@ struct repo_t {
   char diskfile[PATH_MAX];
   /* index to currently in-use server */
   int server_idx;
-  /* write buffer for downloaded data */
-  struct buffer_t content;
   /* error buffer */
   char errmsg[CURL_ERROR_SIZE];
   /* numeric err for determining success */
@@ -58,6 +55,11 @@ struct repo_t {
   double dl_time_start;
   /* PID of repo_repack worker */
   pid_t worker;
+
+  struct {
+    int fd;
+    off_t size;
+  } tmpfile;
 };
 
 struct repovec_t {

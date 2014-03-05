@@ -24,8 +24,6 @@
 
 #include <curl/curl.h>
 
-#include "buffer.h"
-
 #define PACMANCONFIG "/etc/pacman.conf"
 
 struct config_t;

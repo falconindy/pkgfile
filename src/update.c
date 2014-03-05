@@ -21,6 +21,7 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
 #include <float.h>
 #include <limits.h>
 #include <math.h>
@@ -266,8 +267,7 @@ static int archive_conv_open(struct archive_conv *conv,
 
   archive_read_support_format_tar(conv->in);
   archive_read_support_filter_all(conv->in);
-  r = archive_read_open_memory(conv->in, repo->content.data,
-                               repo->content.size);
+  r = archive_read_open_fd(conv->in, repo->tmpfile.fd, BUFSIZ);
   if (r != ARCHIVE_OK) {
     fprintf(stderr, "error: failed to create archive reader for %s: %s\n",
             repo->name, strerror(archive_errno(conv->in)));
@@ -352,31 +352,57 @@ static int repack_repo_data_async(struct repo_t *repo) {
 }
 
 static size_t write_handler(void *ptr, size_t size, size_t nmemb, void *data) {
-  const size_t realsize = size * nmemb;
   struct repo_t *repo = data;
-  double contentlen = 0;
+  const uint8_t *p = ptr;
+  size_t nbytes = size * nmemb;
+  ssize_t n = 0;
 
-  if (repo->content.size + realsize > repo->content.capacity) {
+  while (nbytes > 0) {
+    ssize_t k;
 
-    /* try to alloc at once based on Content-Length; falling back on
-     * incremental growth if the server is a bucket of fail. */
-    curl_easy_getinfo(repo->curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD,
-                      &contentlen);
-
-    if (contentlen > 0) {
-      if (buffer_resize(&repo->content, (size_t)contentlen) < 0) {
-        fprintf(stderr, "error: failed to reallocate %zd bytes\n",
-                (size_t)contentlen);
-        return 0;
-      }
+    k = write(repo->tmpfile.fd, p, nbytes);
+    if (k < 0 && errno == EINTR) {
+      continue;
     }
+
+    if (k <= 0) {
+      return n > 0 ? n : (k < 0 ? -errno : 0);
+    }
+
+    p += k;
+    nbytes -= k;
+    n += k;
   }
 
-  if (buffer_append(&repo->content, ptr, realsize) < 0) {
-    fprintf(stderr, "error: failed to append %zd bytes\n", realsize);
+  return n;
+}
+
+static int open_tmpfile(int flags) {
+  const char *tmpdir;
+  char *p;
+  int fd;
+
+  tmpdir = getenv("TMPDIR");
+  if (tmpdir == NULL) {
+    tmpdir = "/tmp";
   }
 
-  return realsize;
+#ifdef O_TMPFILE
+  fd = open(tmpdir, flags | O_TMPFILE, S_IRUSR | S_IWUSR);
+  if (fd >= 0) {
+    return fd;
+  }
+#endif
+
+  if (asprintf(&p, "%s/pkgfile-tmp-XXXXXX", tmpdir) < 0) {
+    return -ENOMEM;
+  }
+
+  fd = mkostemp(p, flags);
+  unlink(p);
+  free(p);
+
+  return fd;
 }
 
 static int download_queue_request(CURLM *multi, struct repo_t *repo) {
@@ -398,9 +424,17 @@ static int download_queue_request(CURLM *multi, struct repo_t *repo) {
     curl_easy_setopt(repo->curl, CURLOPT_PRIVATE, repo);
     curl_easy_setopt(repo->curl, CURLOPT_ERRORBUFFER, repo->errmsg);
     curl_easy_setopt(repo->curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
+    repo->tmpfile.fd = open_tmpfile(O_RDWR | O_NONBLOCK);
+    if (repo->tmpfile.fd < 0) {
+      fprintf(stderr,
+              "error: failed to create temporary file for download: %s\n",
+              strerror(-repo->tmpfile.fd));
+      return -1;
+    }
   } else {
     curl_multi_remove_handle(multi, repo->curl);
-    buffer_reset(&repo->content, 0);
+    lseek(repo->tmpfile.fd, 0, SEEK_SET);
+    ftruncate(repo->tmpfile.fd, 0);
     repo->server_idx++;
   }
 
@@ -446,8 +480,8 @@ static void print_download_success(struct repo_t *repo, int remaining) {
   double rate, xfered_human;
   int width;
 
-  rate = repo->content.size / (now() - repo->dl_time_start);
-  xfered_human = humanize_size(repo->content.size, '\0', -1, &xfered_label);
+  rate = repo->tmpfile.size / (now() - repo->dl_time_start);
+  xfered_human = humanize_size(repo->tmpfile.size, '\0', -1, &xfered_label);
 
   printf("  download complete: %-20s [", repo->name);
   if (fabs(rate - INFINITY) < DBL_EPSILON) {
@@ -511,6 +545,9 @@ static int download_check_complete(CURLM *multi, int remaining) {
 
       return download_queue_request(multi, repo);
     }
+
+    repo->tmpfile.size = lseek(repo->tmpfile.fd, 0, SEEK_CUR);
+    lseek(repo->tmpfile.fd, 0, SEEK_SET);
 
     print_download_success(repo, remaining);
     repack_repo_data_async(repo);
@@ -628,8 +665,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     curl_multi_remove_handle(curl_multi, repo->curl);
     curl_easy_cleanup(repo->curl);
 
-    total_xfer += repo->content.size;
-    buffer_reset(&repo->content, 1);
+    total_xfer += repo->tmpfile.size;
 
     switch (repo->err) {
       case 0:
