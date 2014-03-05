@@ -251,6 +251,7 @@ static int parse_one_file(const char *filename, char **section,
       } else if (in_options && keysz == strlen(architecture) &&
                  memcmp(key, architecture, keysz) == 0) {
         if (valsz == 4 && memcmp(val, "auto", 4) != 0) {
+          free(repos->architecture);
           repos->architecture = strndup(val, valsz);
         }
       }
