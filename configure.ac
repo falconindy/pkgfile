@@ -1,6 +1,6 @@
 AC_PREREQ(2.60)
 AC_INIT(pkgfile,
-	[12],
+	[13],
 	[dreisner@archlinux.org])
 
 AC_CONFIG_SRCDIR([src/pkgfile.c])
