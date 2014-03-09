@@ -121,9 +121,11 @@ int reader_getline(struct archive_line_reader *reader, struct archive *a) {
     }
 
     r = reader_line_consume(reader);
-    if (r != EAGAIN) {
-      return r;
+    if (r == EAGAIN) {
+      continue;
     }
+
+    return r;
   }
 }
 
