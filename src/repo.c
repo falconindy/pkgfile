@@ -143,6 +143,7 @@ static size_t strtrim(char *str) {
   }
   if (left != str) {
     memmove(str, left, (strlen(left) + 1));
+    left = str;
   }
 
   if (*str == '\0') {
@@ -255,7 +256,7 @@ static int parse_one_file(const char *filename, char **section,
         parse_include(val, section, repos);
       } else if (in_options && keysz == strlen(architecture) &&
                  memcmp(key, architecture, keysz) == 0) {
-        if (valsz == 4 && memcmp(val, "auto", 4) != 0) {
+        if (valsz != 4 || memcmp(val, "auto", 4) != 0) {
           free(repos->architecture);
           repos->architecture = strndup(val, valsz);
         }
