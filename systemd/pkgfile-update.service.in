@@ -1,0 +1,16 @@
+[Unit]
+Description=pkgfile database update
+RequiresMountsFor=@CACHEPATH@
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/pkgfile -u
+Nice=19
+StandardOutput=null
+StandardError=journal
+PrivateTmp=yes
+PrivateDevices=yes
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ReadOnlyDirectories=/
+ReadWriteDirectories=@CACHEPATH@

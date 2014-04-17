@@ -152,11 +152,13 @@ to run pkgfile when an executed command is not found.
 
 =back
 
-=head1 UPDATING VIA CRON
+=head1 PERIODIC UPDATES
 
-It is recommended that the .files databases are updated on a regular basis in
-order to ensure accurate results. This is easily accomplished by adding a cron
-job to run I<pkgfile> with the B<--update> flag daily.
+pkgfile includes systemd timer and service units to automate periodic updates
+to the .files DBs. Assuming that pkgfile was built with systemd support, this
+can be enabled with:
+
+  systemctl enable pkgfile-update.timer && systemctl start pkgfile-update.timer
 
 =head1 SEE ALSO
 

@@ -1,9 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}
 AM_MAKEFLAGS = --no-print-directory
 
-CLEANFILES = \
-	$(dist_man_MANS)
-
 bashcompletiondir=$(datarootdir)/bash-completion/completions
 zshcompletiondir=$(datarootdir)/zsh/site-functions
 shelldatadir=$(datarootdir)/doc/pkgfile
@@ -24,6 +21,19 @@ dist_man_MANS = \
 
 bin_PROGRAMS = \
 	pkgfile
+
+if HAVE_SYSTEMD
+systemdsystemunit_DATA = \
+	systemd/pkgfile-update.service \
+	systemd/pkgfile-update.timer
+
+nodist_systemdsystemunit_DATA = \
+	systemd/pkgfile-update.service
+
+EXTRA_DIST += \
+	systemd/pkgfile-update.service.in \
+	systemd/pkgfile-update.timer
+endif
 
 if USE_GIT_VERSION
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty | sed 's/^v//')
@@ -91,8 +101,24 @@ uninstall-local:
 	$(RM) $(DESTDIR)$(bashcompletiondir)/pkgfile
 	$(RM) $(DESTDIR)$(zshcompletiondir)/_pkgfile
 
+CLEANFILES = \
+	$(dist_man_MANS) \
+	$(nodist_systemdsystemunit_DATA)
+
 DISTCHECK_CONFIGURE_FLAGS = \
+	--with-systemdsystemunitdir=$$dc_install_base/$(systemdsystemunitdir) \
 	--with-cachedir=$$dc_install_base$(CACHEPATH)
+
+substitutions = \
+	'|CACHEPATH=$(CACHEPATH)|'
+
+SED_PROCESS = \
+	$(AM_V_GEN)$(MKDIR_P) $(dir $@) && \
+		$(SED) $(subst '|,-e 's|@,$(subst =,\@|,$(subst |',|g',$(substitutions)))) \
+		< $< > $@
+
+systemd/%: systemd/%.in
+	$(SED_PROCESS)
 
 # custom targets
 upload: all distcheck

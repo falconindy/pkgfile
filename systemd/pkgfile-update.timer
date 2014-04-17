@@ -1,0 +1,10 @@
+[Unit]
+Description=pkgfile database update timer
+
+[Timer]
+OnCalendar=daily
+AccuracySec=6h
+Persistent=yes
+
+[Install]
+WantedBy=mutli-user.target
