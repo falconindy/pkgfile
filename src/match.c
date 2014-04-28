@@ -34,10 +34,8 @@ int match_glob(const filterpattern_t *pattern, const char *line, int UNUSED len,
 
 int match_regex(const filterpattern_t *pattern, const char *line, int len,
                 int UNUSED flags) {
-  const struct pcre_data *re = &pattern->re;
-
-  return pcre_exec(re->re, re->re_extra, line, len, 0, PCRE_NO_UTF16_CHECK,
-                   NULL, 0) < 0;
+  return pcre_exec(pattern->re.re, pattern->re.re_extra, line, len, 0,
+                   PCRE_NO_UTF16_CHECK, NULL, 0) < 0;
 }
 
 void free_regex(filterpattern_t *pattern) {
