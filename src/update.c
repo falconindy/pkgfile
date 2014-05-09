@@ -539,7 +539,7 @@ static int download_check_complete(CURLM *multi, int remaining) {
         fprintf(stderr, "warning: download failed: %s: %s\n", effective_url,
                 repo->errmsg);
       } else {
-        fprintf(stderr, "warning: download failed: %s [HTTP %ld]\n",
+        fprintf(stderr, "warning: download failed: %s [error %ld]\n",
                 effective_url, resp);
       }
 
