@@ -561,15 +561,20 @@ static void download_wait_loop(CURLM *multi) {
   int active_handles;
 
   do {
-    int rc = curl_multi_perform(multi, &active_handles);
+    int nfd, rc = curl_multi_wait(multi, NULL, 0, 1000, &nfd);
     if (rc != CURLM_OK) {
-      fprintf(stderr, "error: curl_multi_perform failed (%d)\n", rc);
+      fprintf(stderr, "error: curl_multi_wait failed (%d)\n", rc);
       break;
     }
 
-    rc = curl_multi_wait(multi, NULL, 0, 1000, NULL);
+    if (nfd < 0) {
+      fprintf(stderr, "error: poll error, possible network problem\n");
+      break;
+    }
+
+    rc = curl_multi_perform(multi, &active_handles);
     if (rc != CURLM_OK) {
-      fprintf(stderr, "error: curl_multi_wait failed (%d)\n", rc);
+      fprintf(stderr, "error: curl_multi_perform failed (%d)\n", rc);
       break;
     }
 
