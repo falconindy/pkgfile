@@ -567,7 +567,7 @@ static void download_wait_loop(CURLM *multi) {
       break;
     }
 
-    rc = curl_multi_wait(multi, NULL, 0, -1, NULL);
+    rc = curl_multi_wait(multi, NULL, 0, 1000, NULL);
     if (rc != CURLM_OK) {
       fprintf(stderr, "error: curl_multi_wait failed (%d)\n", rc);
       break;
