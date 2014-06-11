@@ -585,10 +585,16 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring) {
 
   REPOVEC_FOREACH(repo, repos) {
     if (strcmp(repo->name, config.targetrepo) == 0) {
-      struct result_t *result = load_repo(repo);
+      struct result_t *result;
+      int r;
+
+      result = load_repo(repo);
+      r = result->size == 0;
+
       result_print(result, config.raw ? 0 : result->max_prefixlen, config.eol);
       result_free(result);
-      return result->size == 0;
+
+      return r;
     }
   }
 
