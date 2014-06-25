@@ -1,6 +1,6 @@
 [Unit]
 Description=pkgfile database update
-RequiresMountsFor=@CACHEPATH@
+RequiresMountsFor=/var/cache/pkgfile
 
 [Service]
 Type=oneshot
@@ -13,4 +13,4 @@ PrivateDevices=yes
 CapabilityBoundingSet=
 NoNewPrivileges=yes
 ReadOnlyDirectories=/
-ReadWriteDirectories=@CACHEPATH@
+ReadWriteDirectories=/var/cache/pkgfile

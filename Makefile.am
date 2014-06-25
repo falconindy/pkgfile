@@ -23,15 +23,8 @@ bin_PROGRAMS = \
 	pkgfile
 
 if HAVE_SYSTEMD
-systemdsystemunit_DATA = \
+dist_systemdsystemunit_DATA = \
 	systemd/pkgfile-update.service \
-	systemd/pkgfile-update.timer
-
-nodist_systemdsystemunit_DATA = \
-	systemd/pkgfile-update.service
-
-EXTRA_DIST += \
-	systemd/pkgfile-update.service.in \
 	systemd/pkgfile-update.timer
 endif
 
@@ -108,17 +101,6 @@ CLEANFILES = \
 DISTCHECK_CONFIGURE_FLAGS = \
 	--with-systemdsystemunitdir=$$dc_install_base/$(systemdsystemunitdir) \
 	--with-cachedir=$$dc_install_base$(CACHEPATH)
-
-substitutions = \
-	'|CACHEPATH=$(CACHEPATH)|'
-
-SED_PROCESS = \
-	$(AM_V_GEN)$(MKDIR_P) $(dir $@) && \
-		$(SED) $(subst '|,-e 's|@,$(subst =,\@|,$(subst |',|g',$(substitutions)))) \
-		< $< > $@
-
-systemd/%: systemd/%.in
-	$(SED_PROCESS)
 
 # custom targets
 upload: all distcheck
