@@ -5,16 +5,14 @@ bashcompletiondir=$(datarootdir)/bash-completion/completions
 zshcompletiondir=$(datarootdir)/zsh/site-functions
 shelldatadir=$(datarootdir)/doc/pkgfile
 
-shelldata_DATA = \
+dist_shelldata_DATA = \
 	extra/command-not-found.bash \
 	extra/command-not-found.zsh
 
 EXTRA_DIST = \
 	README.pod \
 	extra/bash-completion \
-	extra/zsh-completion \
-	extra/command-not-found.bash \
-	extra/command-not-found.zsh
+	extra/zsh-completion
 
 dist_man_MANS = \
 	pkgfile.1
