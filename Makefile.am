@@ -56,7 +56,7 @@ pkgfile_SOURCES = \
 	src/repo.c src/repo.h \
 	src/result.c src/result.h \
 	src/update.c src/update.h \
-	src/macro.h
+	src/macro.h src/missing.h
 
 pkgfile_CFLAGS = \
 	$(AM_CFLAGS) \

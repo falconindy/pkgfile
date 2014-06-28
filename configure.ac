@@ -88,7 +88,7 @@ if test "$wanttcmalloc" != "no" ; then
 	fi
 fi
 
-AC_CHECK_FUNCS([clock_gettime])
+AC_CHECK_FUNCS([clock_gettime mempcpy])
 
 CC_CHECK_FLAGS_APPEND(with_cflags, [CFLAGS], [\
 	-g \
