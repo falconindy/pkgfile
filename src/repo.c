@@ -150,7 +150,7 @@ static size_t strtrim(char *str) {
     return 0;
   }
 
-  right = (char *)rawmemchr(str, '\0') - 1;
+  right = strchr(str, '\0') - 1;
   while (isspace((unsigned char)*right)) {
     right--;
   }
