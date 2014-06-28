@@ -269,18 +269,20 @@ static int parse_one_file(const char *filename, char **section,
   return r;
 }
 
-struct repovec_t *load_repos_from_file(const char *filename) {
-  char *section = NULL;
-  struct repovec_t *repos = repos_new();
+int load_repos_from_file(const char *filename, struct repovec_t **repos) {
+  _cleanup_free_ char *section = NULL;
+  struct repovec_t *r = repos_new();
+  int k;
 
-  if (parse_one_file(filename, &section, repos) < 0) {
-    repos_free(repos);
-    return NULL;
+  k = parse_one_file(filename, &section, r);
+  if (k < 0) {
+    repos_free(r);
+    return k;
   }
 
-  free(section);
+  *repos = r;
 
-  return repos;
+  return 0;
 }
 
 /* vim: set ts=2 sw=2 et: */
