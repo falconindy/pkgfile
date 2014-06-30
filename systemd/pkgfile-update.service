@@ -12,5 +12,3 @@ PrivateTmp=yes
 PrivateDevices=yes
 CapabilityBoundingSet=
 NoNewPrivileges=yes
-ReadOnlyDirectories=/
-ReadWriteDirectories=/var/cache/pkgfile
