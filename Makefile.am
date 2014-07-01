@@ -84,7 +84,6 @@ install-data-local:
 	$(INSTALL_DATA) $(top_srcdir)/extra/bash-completion $(DESTDIR)$(bashcompletiondir)/pkgfile
 	$(MKDIR_P) $(DESTDIR)$(zshcompletiondir)
 	$(INSTALL_DATA) $(top_srcdir)/extra/zsh-completion $(DESTDIR)$(zshcompletiondir)/_pkgfile
-	@echo "DESTDIR=${DESTDIR}"
 	$(MKDIR_P) $(DESTDIR)$(CACHEPATH)
 	chmod 775 $(DESTDIR)$(CACHEPATH)
 
@@ -93,8 +92,7 @@ uninstall-local:
 	$(RM) $(DESTDIR)$(zshcompletiondir)/_pkgfile
 
 CLEANFILES = \
-	$(dist_man_MANS) \
-	$(nodist_systemdsystemunit_DATA)
+	$(dist_man_MANS)
 
 DISTCHECK_CONFIGURE_FLAGS = \
 	--with-systemdsystemunitdir=$$dc_install_base/$(systemdsystemunitdir) \
