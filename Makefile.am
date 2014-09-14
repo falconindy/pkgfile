@@ -7,7 +7,8 @@ shelldatadir=$(datarootdir)/doc/pkgfile
 
 dist_shelldata_DATA = \
 	extra/command-not-found.bash \
-	extra/command-not-found.zsh
+	extra/command-not-found.zsh \
+	extra/command-not-found.fish
 
 EXTRA_DIST = \
 	README.pod \
