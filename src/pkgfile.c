@@ -24,6 +24,7 @@
 #include <fcntl.h>
 #include <fnmatch.h>
 #include <getopt.h>
+#include <locale.h>
 #include <pthread.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -651,6 +652,8 @@ int main(int argc, char *argv[]) {
   int reposfound = 0, ret = 0;
   struct repovec_t *repos = NULL;
   _cleanup_free_ struct result_t **results = NULL;
+
+  setlocale(LC_ALL, "");
 
   if (parse_opts(argc, argv) != 0) {
     return 2;
