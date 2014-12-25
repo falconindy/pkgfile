@@ -379,7 +379,7 @@ static size_t write_handler(void *ptr, size_t size, size_t nmemb, void *data) {
 
 static int open_tmpfile(int flags) {
   const char *tmpdir;
-  char *p;
+  _cleanup_free_ char *p = NULL;
   int fd;
 
   tmpdir = getenv("TMPDIR");
@@ -399,8 +399,12 @@ static int open_tmpfile(int flags) {
   }
 
   fd = mkostemp(p, flags);
+  if (fd < 0) {
+    return -errno;
+  }
+
+  /* ignore any (unlikely) error */
   unlink(p);
-  free(p);
 
   return fd;
 }
