@@ -625,7 +625,6 @@ static int reap_children(struct repovec_t *repos) {
 int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   int r, xfer_count = 0, ret = 0;
   struct repo_t *repo;
-  struct utsname un;
   CURLM *curl_multi;
   off_t total_xfer = 0;
   double t_start, duration;
@@ -647,6 +646,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   }
 
   if (repos->architecture == NULL) {
+    struct utsname un;
     uname(&un);
     repos->architecture = strdup(un.machine);
   }
