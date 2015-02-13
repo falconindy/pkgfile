@@ -112,12 +112,9 @@ static char *strreplace(const char *str, const char *needle,
     return NULL;
   }
 
-  p = str;
-  q = strstr(p, needle);
-  while (q) {
+  for (p = str, q = strstr(p, needle); q; q = strstr(p, needle)) {
     list[listsz++] = (char *)q;
     p = q + needlesz;
-    q = strstr(p, needle);
   }
 
   /* no occurences of needle found */
@@ -135,11 +132,9 @@ static char *strreplace(const char *str, const char *needle,
     q = list[i];
     if (q > p) {
       /* add chars between this occurence and last occurence, if any */
-      memcpy(newp, p, (size_t)(q - p));
-      newp += q - p;
+      newp = mempcpy(newp, p, (size_t)(q - p));
     }
-    memcpy(newp, replace, replacesz);
-    newp += replacesz;
+    newp = mempcpy(newp, replace, replacesz);
     p = q + needlesz;
   }
 
