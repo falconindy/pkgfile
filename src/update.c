@@ -428,6 +428,8 @@ static int download_queue_request(CURLM *multi, struct repo_t *repo) {
     curl_easy_setopt(repo->curl, CURLOPT_PRIVATE, repo);
     curl_easy_setopt(repo->curl, CURLOPT_ERRORBUFFER, repo->errmsg);
     curl_easy_setopt(repo->curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
+    curl_easy_setopt(repo->curl, CURLOPT_USERAGENT,
+                     PACKAGE "/v" PACKAGE_VERSION);
     repo->tmpfile.fd = open_tmpfile(O_RDWR | O_NONBLOCK);
     if (repo->tmpfile.fd < 0) {
       fprintf(stderr,
