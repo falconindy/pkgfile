@@ -523,7 +523,7 @@ static int download_check_complete(CURLM *multi, int remaining) {
     char *effective_url;
     struct repo_t *repo;
 
-    curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, (char **)&repo);
+    curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &repo);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_CONDITION_UNMET, &uptodate);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &resp);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL, &effective_url);
