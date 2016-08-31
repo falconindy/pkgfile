@@ -152,6 +152,11 @@ Storage location for metadata.
 zsh, bash and fish compatible functions which can be included in shell initalization
 to run pkgfile when an executed command is not found.
 
+If the environment variable PKGFILE_PROMPT_INSTALL_MISSING is set, and only one
+package is found, a prompt to install the package will be shown. B<NOTE>: this
+feature requires the B<sudo>(8) program, and is currently only supported by the bash
+implementation.
+
 =back
 
 =head1 PERIODIC UPDATES
@@ -160,7 +165,7 @@ pkgfile includes systemd timer and service units to automate periodic updates
 to the .files DBs. Assuming that pkgfile was built with systemd support, this
 can be enabled with:
 
-  systemctl enable pkgfile-update.timer && systemctl start pkgfile-update.timer
+  systemctl enable --now pkgfile-update.timer
 
 =head1 SEE ALSO
 
