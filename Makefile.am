@@ -102,7 +102,7 @@ DISTCHECK_CONFIGURE_FLAGS = \
 # custom targets
 upload: all distcheck
 	gpg --detach-sign pkgfile-$(VERSION).tar.xz
-	scp pkgfile-$(VERSION).tar.xz pkgfile-$(VERSION).tar.xz.sig code.falconindy.com:archive/pkgfile/
+	scp pkgfile-$(VERSION).tar.xz pkgfile-$(VERSION).tar.xz.sig pkgbuild.com:public_html/sources/pkgfile/
 
 fmt:
 	clang-format -i -style=Google $(pkgfile_SOURCES)
