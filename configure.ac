@@ -21,6 +21,18 @@ AM_SILENT_RULES([yes])
 PKG_CHECK_MODULES(PCRE,    [ libpcre ])
 PKG_CHECK_MODULES(ARCHIVE, [ libarchive >= 3.0.0 ])
 PKG_CHECK_MODULES(CURL,    [ libcurl >= 7.28.0 ])
+AC_CHECK_HEADER([gdbm.h], [], [
+    echo "Error: gdbm is required and should contain gdbm.h."
+    exit -1
+], [
+    #ifdef HAVE_GDBM_H
+    #include <gdbm.h>
+    #endif
+])
+AC_CHECK_LIB([gdbm], [gdbm_fetch], [], [
+    echo "Error: gdbm is required and should be able to link with -lgdbm."
+    exit -1
+])
 
 # Help line for using git version in pkgfile version string
 AC_ARG_ENABLE(git-version,

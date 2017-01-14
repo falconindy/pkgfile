@@ -99,5 +99,8 @@ struct config_t {
 };
 
 int reader_getline(struct archive_line_reader *b, struct archive *a);
+bool is_binary(const char *line, const size_t len);
+int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len);
+int format_search_result(char **result, const char *repo, struct pkg_t *pkg);
 
 /* vim: set ts=2 sw=2 et: */
