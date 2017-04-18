@@ -150,7 +150,10 @@ Storage location for metadata.
 =item I</usr/share/doc/pkgfile/command-not-found.fish>
 
 zsh, bash and fish compatible functions which can be included in shell initalization
-to run pkgfile when an executed command is not found.
+to run pkgfile when an executed command is not found. 
+
+If the environment variable PKGFILE_PROMPT_INSTALL_MISSING is set, and only one
+package is found, a prompt to install the package will be shown.
 
 If the environment variable PKGFILE_PROMPT_INSTALL_MISSING is set, and only one
 package is found, a prompt to install the package will be shown. B<NOTE>: this
