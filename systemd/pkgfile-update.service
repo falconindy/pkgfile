@@ -1,6 +1,7 @@
 [Unit]
 Description=pkgfile database update
 RequiresMountsFor=/var/cache/pkgfile
+After=network-online.target
 
 [Service]
 Type=oneshot
