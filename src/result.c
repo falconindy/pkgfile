@@ -157,7 +157,7 @@ static void result_print_two_columns(struct result_t *result, int prefixlen,
 
 static void result_print_one_column(struct result_t *result, char eol) {
   for (size_t i = 0; i < result->size; ++i) {
-    printf("%s%c", result->lines[i]->prefix, eol);
+    printf("%s\t%s%c", result->lines[i]->prefix, result->lines[i]->entry, eol);
   }
 }
 
