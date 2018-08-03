@@ -147,15 +147,15 @@ static int linecmp(const void *l1, const void *l2) {
   }
 }
 
-static void result_print_long(struct result_t *result, int prefixlen,
-                              char eol) {
+static void result_print_two_columns(struct result_t *result, int prefixlen,
+                                     char eol) {
   for (size_t i = 0; i < result->size; ++i) {
     printf("%-*s\t%s%c", prefixlen, result->lines[i]->prefix,
            result->lines[i]->entry, eol);
   }
 }
 
-static void result_print_short(struct result_t *result, char eol) {
+static void result_print_one_column(struct result_t *result, char eol) {
   for (size_t i = 0; i < result->size; ++i) {
     printf("%s%c", result->lines[i]->prefix, eol);
   }
@@ -168,8 +168,12 @@ size_t result_print(struct result_t *result, int prefixlen, char eol) {
 
   qsort(result->lines, result->size, sizeof(char *), linecmp);
 
-  prefixlen == 0 ? result_print_short(result, eol)
-                 : result_print_long(result, prefixlen, eol);
+  /* It's expected that results are homogenous. */
+  if (result->lines[0]->entry) {
+    result_print_two_columns(result, prefixlen, eol);
+  } else {
+    result_print_one_column(result, eol);
+  }
 
   return result->size;
 }
