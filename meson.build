@@ -102,3 +102,7 @@ install_data(
   'extra/zsh-completion',
   rename : ['_pkgfile'],
   install_dir : join_paths(get_option('datadir'), 'zsh/site-functions '))
+
+install_data(
+  'LICENSE',
+  install_dir : join_paths(get_option('datadir'), 'licenses/pkgfile'))
