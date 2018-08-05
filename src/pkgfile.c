@@ -31,10 +31,10 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include "pkgfile.h"
 #include "macro.h"
 #include "match.h"
 #include "missing.h"
+#include "pkgfile.h"
 #include "repo.h"
 #include "result.h"
 #include "update.h"
@@ -213,7 +213,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
     }
 
     if (config.filterfunc(&config.filter, buf->line.base, (int)len,
-                          config.icase) == 0) {
+                          config.matchflags) == 0) {
       _cleanup_free_ char *line = NULL;
       int prefixlen = format_search_result(&line, repo, pkg);
       if (prefixlen < 0) {
@@ -236,7 +236,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
                          struct result_t *result,
                          struct archive_line_reader *buf) {
   if (config.filterfunc(&config.filter, pkg->name, pkg->namelen,
-                        config.icase) != 0) {
+                        config.matchflags) != 0) {
     return 0;
   }
 
@@ -630,19 +630,20 @@ static int filter_setup(char *arg) {
 
   switch (config.filterby) {
     case FILTER_EXACT:
+      config.matchflags = config.icase;
       config.filter.glob.glob = arg;
       config.filterfunc = strchr(arg, '/') ? match_exact : match_exact_basename;
       break;
     case FILTER_GLOB:
-      config.icase *= FNM_CASEFOLD;
+      config.matchflags = FNM_PATHNAME | (config.icase ? FNM_CASEFOLD : 0);
       config.filter.glob.glob = arg;
       config.filterfunc = match_glob;
       break;
     case FILTER_REGEX:
-      config.icase *= PCRE_CASELESS;
+      config.matchflags = config.icase ? PCRE_CASELESS : 0;
       config.filterfunc = match_regex;
       config.filterfree = free_regex;
-      return compile_pcre_expr(&config.filter.re, arg, config.icase);
+      return compile_pcre_expr(&config.filter.re, arg, config.matchflags);
   }
 
   return 0;

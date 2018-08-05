@@ -44,7 +44,7 @@ void free_regex(filterpattern_t *pattern) {
 }
 
 int match_exact_basename(const filterpattern_t *pattern, const char *line,
-                         int len, int flags) {
+                         int len, int case_insensitive) {
   const char *ptr = line, *slash = memrchr(line, '/', len - 1);
 
   if (slash) {
@@ -52,17 +52,17 @@ int match_exact_basename(const filterpattern_t *pattern, const char *line,
     len -= ptr - line;
   }
 
-  return match_exact(pattern, ptr, len, flags);
+  return match_exact(pattern, ptr, len, case_insensitive);
 }
 
 int match_exact(const filterpattern_t *pattern, const char *line, int len,
-                int flags) {
+                int case_insensitive) {
   if (pattern->glob.globlen != len) {
     return -1;
   }
 
-  return flags ? strcasecmp(pattern->glob.glob, line)
-               : memcmp(pattern->glob.glob, line, len);
+  return case_insensitive ? strcasecmp(pattern->glob.glob, line)
+                          : memcmp(pattern->glob.glob, line, len);
 }
 
 /* vim: set ts=2 sw=2 et: */

@@ -91,6 +91,7 @@ struct config_t {
   bool binaries;
   bool directories;
   bool icase;
+  int matchflags;
   bool quiet;
   bool verbose;
   bool raw;
