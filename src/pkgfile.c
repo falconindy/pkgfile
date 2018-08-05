@@ -38,6 +38,7 @@
 #include "repo.h"
 #include "result.h"
 #include "update.h"
+#include "cmddb.h"
 
 #ifdef GIT_VERSION
 #undef PACKAGE_VERSION
@@ -139,7 +140,7 @@ static bool is_directory(const char *line, const size_t len) {
   return line[len - 1] == '/';
 }
 
-static bool is_binary(const char *line, const size_t len) {
+bool is_binary(const char *line, const size_t len) {
   const char *ptr;
 
   if (is_directory(line, len)) {
@@ -180,7 +181,7 @@ found_match_candidate:
   return memchr(ptr + 4, '/', (line + len) - (ptr + 4)) == NULL;
 }
 
-static int format_search_result(char **result, const char *repo,
+int format_search_result(char **result, const char *repo,
                                 struct pkg_t *pkg) {
   if (config.verbose) {
     return asprintf(result, "%s/%s %s", repo, pkg->name, pkg->version);
@@ -271,7 +272,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
   return config.filterby == FILTER_EXACT ? -1 : 0;
 }
 
-static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
+int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
   const char *dash, *slash = &entryname[len];
 
   dash = slash;
@@ -671,6 +672,9 @@ int main(int argc, char *argv[]) {
 
   if (config.doupdate) {
     ret = !!pkgfile_update(repos, &config);
+    if (ret != 0) goto cleanup;
+    puts(":: Generating command databases...");
+    cmddb_genall(repos, &config);
     goto cleanup;
   }
 
@@ -691,7 +695,11 @@ int main(int argc, char *argv[]) {
   } else {
     int prefixlen;
     struct repo_t *repo;
-    results = search_all_repos(repos);
+    if ((config.filefunc == search_metafile && config.filterby == FILTER_EXACT && config.verbose && config.binaries)) {
+      results = cmddb_search_all(repos,argv[optind]);
+    } else {
+      results = search_all_repos(repos);
+    }
 
     prefixlen = config.raw ? 0 : results_get_prefixlen(results, repos->size);
     REPOVEC_FOREACH(repo, repos) {
