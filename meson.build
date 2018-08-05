@@ -30,6 +30,7 @@ pthreads = dependency('threads')
 
 pod2man = find_program('pod2man')
 pkgconfig = find_program('pkg-config')
+mkdir_p = 'mkdir -p $DESTDIR/@0@'
 
 if get_option('systemd_units')
   systemdsystemunitdir = run_command(
@@ -85,6 +86,8 @@ command_not_found_hooks = files('''
   extra/command-not-found.zsh
   extra/command-not-found.fish
 '''.split())
+
+meson.add_install_script('sh', '-c', mkdir_p.format(get_option('cachedir')))
 
 install_data(
   command_not_found_hooks,
