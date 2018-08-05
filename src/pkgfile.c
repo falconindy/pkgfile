@@ -17,15 +17,6 @@
 #include "result.h"
 #include "update.h"
 
-#ifdef GIT_VERSION
-#undef PACKAGE_VERSION
-#define PACKAGE_VERSION GIT_VERSION
-#endif
-
-#ifndef MAP_POPULATE
-#define MAP_POPULATE 0
-#endif
-
 static struct config_t config;
 
 static const char *filtermethods[] = {[FILTER_GLOB] = "glob",

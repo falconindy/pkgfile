@@ -17,6 +17,10 @@ if cc.has_function('mempcpy', args: '-D_GNU_SOURCE')
   conf.set('HAVE_MEMPCPY', true)
 endif
 
+if cc.get_define('MAP_POPULATE') == ''
+  conf.set('MAP_POPULATE', 0)
+endif
+
 configure_file(
     output : 'config.h',
     configuration : conf)
