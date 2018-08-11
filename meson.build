@@ -28,7 +28,7 @@ configure_file(
 add_project_arguments('-include', 'config.h', language : 'c')
 
 libpcre = dependency('libpcre')
-libarchive = dependency('libarchive')
+libarchive = dependency('libarchive', version : '>= 3.2.0')
 libcurl = dependency('libcurl')
 pthreads = dependency('threads')
 
