@@ -383,6 +383,8 @@ static int validate_compression(const char *compress) {
     return ARCHIVE_FILTER_LZMA;
   } else if (strcmp(compress, "lzop") == 0) {
     return ARCHIVE_FILTER_LZOP;
+  } else if (strcmp(compress, "lz4") == 0) {
+    return ARCHIVE_FILTER_LZ4;
   } else if (strcmp(compress, "xz") == 0) {
     return ARCHIVE_FILTER_XZ;
   } else {

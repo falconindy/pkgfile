@@ -10,7 +10,7 @@ _repos(){
 
 _compression(){
     local -a cmd _comps
-    _comps=('none' 'gzip' 'bzip2' 'lzma' 'lzop' 'xz')
+    _comps=('none' 'gzip' 'bzip2' 'lzma' 'lzop' 'lz4' 'xz')
     typeset -U _comps
     compadd "$@" -a _comps
 }
