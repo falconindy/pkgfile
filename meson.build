@@ -17,10 +17,22 @@ if cc.has_function('mempcpy', args: '-D_GNU_SOURCE')
   conf.set('HAVE_MEMPCPY', true)
 endif
 
+if cc.get_define('BUFSIZ',
+                 args: '-D_GNU_SOURCE',
+                 prefix : '''#include <stdio.h>''') == ''
+  conf.set('BUFSIZ', 8192)
+endif
+
 if cc.get_define('MAP_POPULATE',
                  args: '-D_GNU_SOURCE',
                  prefix: '''#include <sys/mman.h>''') == ''
   conf.set('MAP_POPULATE', 0)
+endif
+
+# allow compilation with pcre < 8.30
+if cc.get_define('PCRE_STUDY_JIT_COMPILE',
+                 prefix : '''#include <pcre.h>''') == ''
+  conf.set('PCRE_STUDY_JIT_COMPILE', 0)
 endif
 
 configure_file(

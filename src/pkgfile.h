@@ -10,15 +10,6 @@
 
 #include "result.h"
 
-#ifndef BUFSIZ
-#define BUFSIZ 8192
-#endif
-
-/* allow compilation with pcre < 8.30 */
-#ifndef PCRE_STUDY_JIT_COMPILE
-#define PCRE_STUDY_JIT_COMPILE 0
-#endif
-
 struct memblock_t {
   char *base;
   char *offset;
