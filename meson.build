@@ -1,5 +1,5 @@
 project('pkgfile', 'c',
-        version : '18',
+        version : '19',
         license : 'MIT',
         default_options : [
           'c_std=c99',
