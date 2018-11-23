@@ -88,14 +88,15 @@ man = custom_target(
     install : true,
     install_dir : join_paths(get_option('mandir'), 'man1'))
 
-systemd_units = files('''
-  systemd/pkgfile-update.service
-  systemd/pkgfile-update.timer
-'''.split())
-
 if systemdsystemunitdir != ''
   install_data(
-    systemd_units,
+    'systemd/pkgfile-update.timer',
+    install_dir : systemdsystemunitdir)
+
+  configure_file(
+    input : 'systemd/pkgfile-update.service.in',
+    output : 'pkgfile-update.service',
+    configuration : conf,
     install_dir : systemdsystemunitdir)
 endif
 

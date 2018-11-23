@@ -1,6 +1,6 @@
 [Unit]
 Description=pkgfile database update
-RequiresMountsFor=/var/cache/pkgfile
+RequiresMountsFor=@DEFAULT_CACHEPATH@
 
 [Service]
 Type=oneshot
