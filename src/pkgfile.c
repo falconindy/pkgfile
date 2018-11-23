@@ -426,10 +426,10 @@ static void usage(void) {
   fputs(
       " General:\n"
       "  -C, --config <file>     use an alternate config (default: "
+      "/etc/pacman.conf)\n"
       "  -D, --cachedir <dir>    use an alternate cachedir "
       "(default: " DEFAULT_CACHEPATH
       ")\n"
-      "/etc/pacman.conf)\n"
       "  -h, --help              display this help and exit\n"
       "  -V, --version           display the version and exit\n\n",
       stdout);
