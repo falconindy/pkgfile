@@ -17,7 +17,9 @@ if cc.has_function('mempcpy', args: '-D_GNU_SOURCE')
   conf.set('HAVE_MEMPCPY', true)
 endif
 
-if cc.get_define('MAP_POPULATE') == ''
+if cc.get_define('MAP_POPULATE',
+                 args: '-D_GNU_SOURCE',
+                 prefix: '''#include <sys/mman.h>''') == ''
   conf.set('MAP_POPULATE', 0)
 endif
 
