@@ -10,7 +10,7 @@ conf = configuration_data()
 conf.set('_GNU_SOURCE', true)
 conf.set_quoted('PACKAGE_NAME', meson.project_name())
 conf.set_quoted('PACKAGE_VERSION', meson.project_version())
-conf.set_quoted('CACHEPATH', get_option('cachedir'))
+conf.set_quoted('DEFAULT_CACHEPATH', get_option('cachedir'))
 
 cc = meson.get_compiler('c')
 if cc.has_function('mempcpy', args: '-D_GNU_SOURCE')

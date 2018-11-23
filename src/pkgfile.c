@@ -276,7 +276,8 @@ static void *load_repo(void *repo_obj) {
   struct archive_line_reader read_buffer = {};
 
   repo = repo_obj;
-  snprintf(repofile, sizeof(repofile), CACHEPATH "/%s.files", repo->name);
+  snprintf(repofile, sizeof(repofile), "%s/%s.files", config.cachedir,
+           repo->name);
   result = result_new(repo->name, 50);
 
   a = archive_read_new();
@@ -425,6 +426,9 @@ static void usage(void) {
   fputs(
       " General:\n"
       "  -C, --config <file>     use an alternate config (default: "
+      "  -D, --cachedir <dir>    use an alternate cachedir "
+      "(default: " DEFAULT_CACHEPATH
+      ")\n"
       "/etc/pacman.conf)\n"
       "  -h, --help              display this help and exit\n"
       "  -V, --version           display the version and exit\n\n",
@@ -437,9 +441,10 @@ static void print_version(void) {
 
 static int parse_opts(int argc, char **argv) {
   int opt;
-  static const char *shortopts = "0bC:dghilqR:rsuVvwz::";
+  static const char *shortopts = "0bC:D:dghilqR:rsuVvwz::";
   static const struct option longopts[] = {
       {"binaries", no_argument, 0, 'b'},
+      {"cachedir", required_argument, 0, 'D'},
       {"compress", optional_argument, 0, 'z'},
       {"config", required_argument, 0, 'C'},
       {"directories", no_argument, 0, 'd'},
@@ -462,6 +467,7 @@ static int parse_opts(int argc, char **argv) {
   config.filefunc = search_metafile;
   config.eol = '\n';
   config.cfgfile = PACMANCONFIG;
+  config.cachedir = DEFAULT_CACHEPATH;
 
   for (;;) {
     opt = getopt_long(argc, argv, shortopts, longopts, NULL);
@@ -477,6 +483,9 @@ static int parse_opts(int argc, char **argv) {
         break;
       case 'C':
         config.cfgfile = optarg;
+        break;
+      case 'D':
+        config.cachedir = optarg;
         break;
       case 'd':
         config.directories = true;

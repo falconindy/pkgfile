@@ -393,8 +393,8 @@ static int download_queue_request(CURLM *multi, struct repo_t *repo) {
       return -1;
     }
     repo->curl = curl_easy_init();
-    snprintf(repo->diskfile, sizeof(repo->diskfile), CACHEPATH "/%s.files",
-             repo->name);
+    snprintf(repo->diskfile, sizeof(repo->diskfile), "%s/%s.files",
+             repo->config->cachedir, repo->name);
     curl_easy_setopt(repo->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(repo->curl, CURLOPT_WRITEFUNCTION, write_handler);
     curl_easy_setopt(repo->curl, CURLOPT_WRITEDATA, repo);
@@ -604,8 +604,8 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   off_t total_xfer = 0;
   double t_start, duration;
 
-  if (access(CACHEPATH, W_OK)) {
-    fprintf(stderr, "error: unable to write to " CACHEPATH ": %s\n",
+  if (access(config->cachedir, W_OK)) {
+    fprintf(stderr, "error: unable to write to %s: %s\n", config->cachedir,
             strerror(errno));
     return 1;
   }

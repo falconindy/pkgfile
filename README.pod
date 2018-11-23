@@ -114,6 +114,10 @@ concerns.
 
 Use a config file other than the default of I</etc/pacman.conf>.
 
+=item B<-D> I<DIRECTORY>, B<--cachedir=>I<DIRECTORY>
+
+Use a cache path other than the compile-time default.
+
 =item B<-h>, B<--help>
 
 Print help and exit.
@@ -136,13 +140,9 @@ match the provided target as an exact package name. If the target contains a '/'
 character, the text before the slash will be assumed to be a repository and the
 search will be restricted.
 
-=head1 FILES
+=head1 COMMAND NOT FOUND HOOKS
 
 =over 4
-
-=item I</var/cache/pkgfile>
-
-Storage location for metadata.
 
 =item I</usr/share/doc/pkgfile/command-not-found.bash>
 
@@ -160,7 +160,7 @@ implementation.
 
 =back
 
-=head1 PERIODIC UPDATES
+=head1 AUTOMATING UPDATES
 
 pkgfile includes systemd timer and service units to automate periodic updates
 to the .files DBs. Assuming that pkgfile was built with systemd support, this
