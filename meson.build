@@ -29,19 +29,13 @@ if cc.get_define('MAP_POPULATE',
   conf.set('MAP_POPULATE', 0)
 endif
 
-# allow compilation with pcre < 8.30
-if cc.get_define('PCRE_STUDY_JIT_COMPILE',
-                 prefix : '''#include <pcre.h>''') == ''
-  conf.set('PCRE_STUDY_JIT_COMPILE', 0)
-endif
-
 configure_file(
     output : 'config.h',
     configuration : conf)
 
 add_project_arguments('-include', 'config.h', language : 'c')
 
-libpcre = dependency('libpcre')
+libpcre = dependency('libpcre', version : '>= 8.30')
 libarchive = dependency('libarchive', version : '>= 3.2.0')
 libcurl = dependency('libcurl')
 pthreads = dependency('threads')
