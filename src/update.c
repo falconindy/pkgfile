@@ -515,6 +515,7 @@ static int download_check_complete(CURLM *multi, int remaining) {
 
     /* was it a success? */
     if (msg->data.result != CURLE_OK || resp >= 400) {
+      repo->err = 1;
       if (*repo->errmsg) {
         fprintf(stderr, "warning: download failed: %s: %s\n", effective_url,
                 repo->errmsg);
@@ -652,13 +653,10 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
 
     total_xfer += repo->tmpfile.size;
 
-    switch (repo->err) {
-      case 0:
-        xfer_count++;
-        break;
-      case -1:
-        ret = 1;
-        break;
+    if (repo->err == 0) {
+      xfer_count++;
+    } else {
+      ret = 1;
     }
   }
 
