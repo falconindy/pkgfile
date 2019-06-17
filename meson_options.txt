@@ -1,3 +1,9 @@
-option('cachedir', type : 'string', value : '/var/cache/pkgfile',
+option('cachedir',
+       type : 'string',
+       value : '/var/cache/pkgfile',
        description : 'default directory to store pkgfile data')
-option('systemd_units', type : 'boolean', value : true)
+
+option('systemd_units',
+       type : 'boolean',
+       value : true,
+       description : 'install systemd units to system unit directory')

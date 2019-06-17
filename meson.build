@@ -44,11 +44,6 @@ pod2man = find_program('pod2man')
 pkgconfig = find_program('pkg-config')
 mkdir_p = 'mkdir -p $DESTDIR/@0@'
 
-if get_option('systemd_units')
-  systemdsystemunitdir = run_command(
-    pkgconfig, '--variable=systemdsystemunitdir', 'systemd').stdout().strip()
-endif
-
 pkgfile_sources = files('''
   src/match.c src/match.h
   src/pkgfile.c src/pkgfile.h
@@ -82,16 +77,20 @@ man = custom_target(
     install : true,
     install_dir : join_paths(get_option('mandir'), 'man1'))
 
-if systemdsystemunitdir != ''
+if get_option('systemd_units')
+  systemd = dependency(
+    'systemd', not_found_message : 'systemd not found but systemd_units=true')
+  systemunitdir = systemd.get_pkgconfig_variable('systemdsystemunitdir')
+
   install_data(
     'systemd/pkgfile-update.timer',
-    install_dir : systemdsystemunitdir)
+    install_dir : systemunitdir)
 
   configure_file(
     input : 'systemd/pkgfile-update.service.in',
     output : 'pkgfile-update.service',
     configuration : conf,
-    install_dir : systemdsystemunitdir)
+    install_dir : systemunitdir)
 endif
 
 command_not_found_hooks = files('''
