@@ -21,8 +21,8 @@ command_not_found_handle () {
     printf '%s may be found in the following packages:\n' "$cmd"
     printf '  %s\n' "${pkgs[@]}"
   else
-    printf "bash: %s: command not found\n" "$cmd" >&2
-  fi
+    printf "bash: %s: command not found\n" "$cmd"
+  fi >&2
 
   return 127
 }

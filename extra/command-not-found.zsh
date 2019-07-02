@@ -6,8 +6,8 @@ command_not_found_handler() {
     printf '%s may be found in the following packages:\n' "$cmd"
     printf '  %s\n' $pkgs[@]
   else
-    printf 'zsh: command not found: %s\n' "$cmd" 1>&2
-  fi
+    printf 'zsh: command not found: %s\n' "$cmd"
+  fi 1>&2
 
   return 127
 }
