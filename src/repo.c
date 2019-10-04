@@ -21,7 +21,7 @@ struct repo_t *repo_new(const char *reponame) {
     return NULL;
   }
 
-  repo->err = 1;
+  repo->dl_result = RESULT_UNKNOWN;
   repo->tmpfile.fd = -1;
 
   return repo;

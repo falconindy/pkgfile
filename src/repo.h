@@ -6,6 +6,13 @@
 
 #include <curl/curl.h>
 
+enum download_result_t {
+  RESULT_UNKNOWN,
+  RESULT_OK,
+  RESULT_UPTODATE,
+  RESULT_ERROR,
+};
+
 struct repo_t {
   char *name;
   char **servers;
@@ -26,7 +33,7 @@ struct repo_t {
   /* error buffer */
   char errmsg[CURL_ERROR_SIZE];
   /* numeric err for determining success */
-  int err;
+  enum download_result_t dl_result;
   /* force update repos */
   short force;
   /* start time for download */

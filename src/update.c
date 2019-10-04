@@ -509,13 +509,13 @@ static int download_check_complete(CURLM *multi, int remaining) {
 
     if (uptodate) {
       printf("  %s is up to date\n", repo->name);
-      repo->err = 1;
+      repo->dl_result = RESULT_UPTODATE;
       return 0;
     }
 
     /* was it a success? */
     if (msg->data.result != CURLE_OK || resp >= 400) {
-      repo->err = 1;
+      repo->dl_result = RESULT_ERROR;
       if (*repo->errmsg) {
         fprintf(stderr, "warning: download failed: %s: %s\n", effective_url,
                 repo->errmsg);
@@ -532,7 +532,7 @@ static int download_check_complete(CURLM *multi, int remaining) {
 
     print_download_success(repo, remaining);
     repack_repo_data_async(repo);
-    repo->err = 0;
+    repo->dl_result = RESULT_OK;
   }
 
   return 0;
@@ -653,10 +653,18 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
 
     total_xfer += repo->tmpfile.size;
 
-    if (repo->err == 0) {
-      xfer_count++;
-    } else {
-      ret = 1;
+    switch (repo->dl_result) {
+      case RESULT_OK:
+        xfer_count++;
+        break;
+      case RESULT_UPTODATE:
+        break;
+      case RESULT_ERROR:
+        ret = 1;
+        break;
+      default:
+        fprintf(stderr, "BUG: unhandled repo->dl_result=%d\n", repo->dl_result);
+        break;
     }
   }
 
