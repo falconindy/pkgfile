@@ -78,73 +78,30 @@ static double humanize_size(off_t bytes, const char target_unit, int precision,
   return val;
 }
 
-static char *strreplace(const char *str, const char *needle,
-                        const char *replace) {
-  const char *p, *q;
-  char *newstr, *newp;
-  char *list[8];
-  int listsz = 0;
-  size_t needlesz = strlen(needle), replacesz = strlen(replace);
-
-  if (!str) {
-    return NULL;
-  }
-
-  for (p = str, q = strstr(p, needle); q; q = strstr(p, needle)) {
-    list[listsz++] = (char *)q;
-    p = q + needlesz;
-  }
-
-  /* no occurences of needle found */
-  if (!listsz) {
-    return strdup(str);
-  }
-  /* size of new string = size of old string + "number of occurences of needle"
-   * x "size difference between replace and needle" */
-  CALLOC(newstr, strlen(str) + 1 + listsz * (replacesz - needlesz),
-         sizeof(char), return NULL);
-
-  p = str;
-  newp = newstr;
-  for (int i = 0; i < listsz; ++i) {
-    q = list[i];
-    if (q > p) {
-      /* add chars between this occurence and last occurence, if any */
-      newp = (char *)mempcpy(newp, p, (size_t)(q - p));
+static void strreplace(std::string *str, const std::string &needle,
+                       const std::string &replace) {
+  for (;;) {
+    auto pos = str->find(needle);
+    if (pos == std::string::npos) {
+      break;
     }
-    newp = (char *)mempcpy(newp, replace, replacesz);
-    p = q + needlesz;
-  }
 
-  if (*p) {
-    /* add the rest of 'p' */
-    strcpy(newp, p);
+    str->replace(pos, needle.length(), replace);
   }
-
-  return newstr;
 }
 
-static char *prepare_url(const char *url_template, const char *repo,
-                         const char *arch) {
-  _cleanup_free_ char *save = NULL, *prepared = NULL;
-  char *url;
+static std::string prepare_url(const std::string &url_template,
+                               const std::string &repo,
+                               const std::string &arch) {
+  std::string url = url_template;
 
-  prepared = save = strreplace(url_template, "$arch", arch);
-  if (prepared == NULL) {
-    return NULL;
-  }
+  strreplace(&url, "$arch", arch);
+  strreplace(&url, "$repo", repo);
 
-  prepared = strreplace(save, "$repo", repo);
-  if (prepared == NULL) {
-    return NULL;
-  }
+  std::stringstream ss;
 
-  if (asprintf(&url, "%s/%s.files", prepared, repo) == -1) {
-    fputs("error: failed to allocate memory\n", stderr);
-    url = NULL;
-  }
-
-  return url;
+  ss << url << '/' << repo << ".files";
+  return ss.str();
 }
 
 static int endswith(const char *s, const char *postfix) {
@@ -387,7 +344,6 @@ static int open_tmpfile(int flags) {
 
 static int download_queue_request(CURLM *multi, struct repo_t *repo) {
   struct stat st;
-  _cleanup_free_ char *url = NULL;
 
   if (repo->curl == NULL) {
     /* it's my first time, be gentle */
@@ -427,14 +383,10 @@ static int download_queue_request(CURLM *multi, struct repo_t *repo) {
     return -1;
   }
 
-  url = prepare_url(repo->servers[repo->server_idx].c_str(), repo->name.c_str(),
-                    repo->arch);
-  if (url == NULL) {
-    fputs("error: failed to allocate URL for download\n", stderr);
-    return -1;
-  }
+  std::string url =
+      prepare_url(repo->servers[repo->server_idx], repo->name, repo->arch);
 
-  curl_easy_setopt(repo->curl, CURLOPT_URL, url);
+  curl_easy_setopt(repo->curl, CURLOPT_URL, url.c_str());
 
   if (repo->force == 0 && stat(repo->diskfile, &st) == 0) {
     curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
