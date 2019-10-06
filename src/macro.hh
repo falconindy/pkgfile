@@ -23,32 +23,8 @@
       action;                        \
     }                                \
   } while (0)
-#define FREE(p) \
-  do {          \
-    free(p);    \
-    p = NULL;   \
-  } while (0)
-#define UNUSED __attribute__((unused))
 
 #define MAX_LINE_SIZE ((size_t)(10 * 1024)) /* used by archive_fgets */
-
-#ifndef MIN
-#define MIN(a, b)           \
-  __extension__({           \
-    __typeof__(a) _a = (a); \
-    __typeof__(b) _b = (b); \
-    _a < _b ? _a : _b;      \
-  })
-#endif
-
-#ifndef MAX
-#define MAX(a, b)           \
-  __extension__({           \
-    __typeof__(a) _a = (a); \
-    __typeof__(b) _b = (b); \
-    _a > _b ? _a : _b;      \
-  })
-#endif
 
 static inline void freep(void *p) { free(*(void **)p); }
 #define _cleanup_(x) __attribute__((cleanup(x)))

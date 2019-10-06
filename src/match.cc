@@ -5,13 +5,13 @@
 #include "match.hh"
 #include "pkgfile.hh"
 
-int match_glob(const filterpattern_t *pattern, const char *line, int UNUSED len,
+int match_glob(const filterpattern_t *pattern, const char *line, int,
                int flags) {
   return fnmatch(pattern->glob.glob, line, flags);
 }
 
 int match_regex(const filterpattern_t *pattern, const char *line, int len,
-                int UNUSED flags) {
+                int) {
   return pcre_exec(pattern->re.re, pattern->re.re_extra, line, len, 0,
                    PCRE_NO_UTF16_CHECK, NULL, 0) < 0;
 }
