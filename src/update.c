@@ -191,6 +191,9 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
   /* adjust the entry size for removing the first line and adding slashes */
   archive_entry_set_size(conv->ae, bytes_w);
 
+  /* inodes in cpio archives are dumb. */
+  archive_entry_set_ino64(conv->ae, 0);
+
   /* store the metadata as simply $pkgname-$pkgver-$pkgrel */
   s = strdup(entryname);
   *(strrchr(s, '/')) = '\0';
