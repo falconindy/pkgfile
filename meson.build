@@ -12,6 +12,8 @@ conf.set_quoted('PACKAGE_NAME', meson.project_name())
 conf.set_quoted('PACKAGE_VERSION', meson.project_version())
 conf.set_quoted('DEFAULT_CACHEPATH', get_option('cachedir'))
 
+cpp = meson.get_compiler('cpp')
+
 configure_file(
     output : 'config.hh',
     configuration : conf)
@@ -22,6 +24,7 @@ libpcre = dependency('libpcre', version : '>= 8.30')
 libarchive = dependency('libarchive', version : '>= 3.2.0')
 libcurl = dependency('libcurl')
 pthreads = dependency('threads')
+stdcppfs = cpp.find_library('stdc++fs')
 
 pod2man = find_program('pod2man')
 pkgconfig = find_program('pkg-config')
@@ -42,7 +45,7 @@ run_target(
 executable(
   'pkgfile',
   pkgfile_sources,
-  dependencies : [libpcre, libarchive, libcurl, pthreads],
+  dependencies : [libpcre, libarchive, libcurl, pthreads, stdcppfs],
   install : true)
 
 man = custom_target(

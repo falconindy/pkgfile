@@ -11,6 +11,10 @@
 
 #include <curl/curl.h>
 
+#include <filesystem>
+#include <sstream>
+#include <string_view>
+
 #include "macro.hh"
 #include "pkgfile.hh"
 #include "repo.hh"
@@ -104,57 +108,36 @@ static std::string prepare_url(const std::string &url_template,
   return ss.str();
 }
 
-static int endswith(const char *s, const char *postfix) {
-  size_t sl, pl;
-
-  sl = strlen(s);
-  pl = strlen(postfix);
-
-  if (pl == 0 || sl < pl) return 0;
-
-  return memcmp(s + sl - pl, postfix, pl) == 0;
-}
-
-static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
-  off_t entry_size = archive_entry_size(conv->ae);
-  off_t bytes_w = 0;
-  size_t alloc_size = entry_size * 1.1;
+static int write_cpio_entry(struct archive_conv *conv,
+                            std::filesystem::path &entryname) {
   struct archive_line_reader reader = {};
-  _cleanup_free_ char *entry_data = NULL, *s = NULL, *line = NULL;
 
-  /* be generous */
-  MALLOC(entry_data, alloc_size, return -1);
-  MALLOC(line, MAX_LINE_SIZE, return -1);
+  std::string line;
+  line.resize(MAX_LINE_SIZE);
 
-  reader.line.base = line;
+  reader.line.base = line.data();
 
   /* discard the first line */
   reader_getline(&reader, conv->in);
 
+  std::stringstream entry_data;
   while (reader_getline(&reader, conv->in) == ARCHIVE_OK) {
-    /* ensure enough memory */
-    if (bytes_w + reader.line.size + 1 > alloc_size) {
-      alloc_size *= 1.1;
-      entry_data = (char *)realloc(entry_data, alloc_size);
-    }
-
     /* do the copy, with a slash prepended */
-    entry_data[bytes_w++] = '/';
-    memcpy(&entry_data[bytes_w], reader.line.base, reader.line.size);
-    bytes_w += reader.line.size;
-    entry_data[bytes_w++] = '\n';
+    entry_data << "/" << std::string_view(reader.line.base, reader.line.size)
+               << '\n';
   }
 
+  const auto entry = entry_data.str();
+
   /* adjust the entry size for removing the first line and adding slashes */
-  archive_entry_set_size(conv->ae, bytes_w);
+  archive_entry_set_size(conv->ae, entry.size());
 
   /* inodes in cpio archives are dumb. */
   archive_entry_set_ino64(conv->ae, 0);
 
   /* store the metadata as simply $pkgname-$pkgver-$pkgrel */
-  s = strdup(entryname);
-  *(strrchr(s, '/')) = '\0';
-  archive_entry_update_pathname_utf8(conv->ae, s);
+  archive_entry_update_pathname_utf8(conv->ae,
+                                     entryname.parent_path().string().c_str());
 
   if (archive_write_header(conv->out, conv->ae) != ARCHIVE_OK) {
     fprintf(stderr, "error: failed to write entry header: %s/%s: %s\n",
@@ -162,7 +145,8 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
     return -errno;
   }
 
-  if (archive_write_data(conv->out, entry_data, bytes_w) != bytes_w) {
+  if (archive_write_data(conv->out, entry.c_str(), entry.size()) !=
+      entry.size()) {
     fprintf(stderr, "error: failed to write entry: %s/%s: %s\n", conv->reponame,
             archive_entry_pathname(conv->ae), strerror(errno));
     return -errno;
@@ -236,10 +220,9 @@ static int repack_repo_data(const struct repo_t *repo) {
   }
 
   while (archive_read_next_header(conv.in, &conv.ae) == ARCHIVE_OK) {
-    const char *entryname = archive_entry_pathname(conv.ae);
-
+    std::filesystem::path entryname = archive_entry_pathname(conv.ae);
     /* ignore everything but the /files metadata */
-    if (endswith(entryname, "/files")) {
+    if (entryname.filename() == "files") {
       r = write_cpio_entry(&conv, entryname);
       if (r < 0) {
         break;
