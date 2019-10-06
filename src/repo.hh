@@ -6,6 +6,7 @@
 
 #include <curl/curl.h>
 
+#include <future>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,12 @@ enum download_result_t {
 struct repo_t {
   explicit repo_t(const char *name) : name(name) {}
   ~repo_t();
+
+  repo_t(const repo_t &) = delete;
+  repo_t &operator=(const repo_t &) = delete;
+
+  repo_t(repo_t &&) = default;
+  repo_t &operator=(repo_t &&) = default;
 
   std::string name;
   std::vector<std::string> servers;
@@ -44,8 +51,8 @@ struct repo_t {
   short force = false;
   /* start time for download */
   double dl_time_start;
-  /* PID of repo_repack worker */
-  pid_t worker;
+
+  std::future<int> worker;
 
   struct {
     int fd = -1;

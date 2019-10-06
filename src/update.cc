@@ -6,11 +6,10 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
-#include <sys/wait.h>
-#include <unistd.h>
 
 #include <curl/curl.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <sstream>
 #include <string_view>
@@ -146,7 +145,7 @@ static int write_cpio_entry(struct archive_conv *conv,
   }
 
   if (archive_write_data(conv->out, entry.c_str(), entry.size()) !=
-      entry.size()) {
+      static_cast<ssize_t>(entry.size())) {
     fprintf(stderr, "error: failed to write entry: %s/%s: %s\n", conv->reponame,
             archive_entry_pathname(conv->ae), strerror(errno));
     return -errno;
@@ -245,23 +244,6 @@ static int repack_repo_data(const struct repo_t *repo) {
     fprintf(stderr, "error: failed to rotate new repo for %s into place: %s\n",
             repo->name.c_str(), strerror(errno));
     return -1;
-  }
-
-  return 0;
-}
-
-static int repack_repo_data_async(struct repo_t *repo) {
-  repo->worker = fork();
-
-  if (repo->worker < 0) {
-    perror("warning: failed to fork new process");
-
-    /* don't just give up, try to repack the repo synchronously */
-    return repack_repo_data(repo);
-  }
-
-  if (repo->worker == 0) {
-    exit(repack_repo_data(repo));
   }
 
   return 0;
@@ -471,7 +453,8 @@ static int download_check_complete(CURLM *multi, int remaining) {
     lseek(repo->tmpfile.fd, 0, SEEK_SET);
 
     print_download_success(repo, remaining);
-    repack_repo_data_async(repo);
+    repo->worker = std::async(std::launch::async,
+                              [repo] { return repack_repo_data(repo); });
     repo->dl_result = RESULT_OK;
   }
 
@@ -504,34 +487,29 @@ static void download_wait_loop(CURLM *multi) {
   } while (active_handles > 0);
 }
 
-static int reap_children(struct repovec_t *repos) {
-  int r = 0, running = 0;
-
-  /* immediately reap zombies, but don't wait on still active children */
+static int wait_for_repacking(struct repovec_t *repos) {
+  int running = 0;
   for (auto &repo : repos->repos) {
-    int stat_loc;
-    if (repo.worker > 0) {
-      if (wait4(repo.worker, &stat_loc, WNOHANG, NULL) == 0) {
-        running++;
-      } else {
-        /* exited, grab the status */
-        r += WEXITSTATUS(stat_loc);
-      }
+    // The future won't be valid if the repo was up to date.
+    if (!repo.worker.valid()) {
+      continue;
+    }
+
+    if (repo.worker.wait_for(std::chrono::seconds(0)) !=
+        std::future_status::ready) {
+      ++running;
     }
   }
 
   if (running > 0) {
-    int stat_loc;
     printf(":: waiting for %d process%s to finish repacking repos...\n",
            running, running == 1 ? "" : "es");
-    for (;;) {
-      pid_t pid = wait4(-1, &stat_loc, 0, NULL);
-      if (pid < 0 && errno == ECHILD) {
-        /* no more children */
-        break;
-      } else if (pid > 0) {
-        r += WEXITSTATUS(stat_loc);
-      }
+  }
+
+  int r = 0;
+  for (auto &repo : repos->repos) {
+    if (repo.worker.valid()) {
+      r += repo.worker.get();
     }
   }
 
@@ -542,7 +520,6 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   int r, xfer_count = 0, ret = 0;
   CURLM *curl_multi;
   off_t total_xfer = 0;
-  double t_start, duration;
 
   if (access(config->cachedir, W_OK)) {
     fprintf(stderr, "error: unable to write to %s: %s\n", config->cachedir,
@@ -580,9 +557,10 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     }
   }
 
-  t_start = now();
+  auto t_start = std::chrono::system_clock::now();
   download_wait_loop(curl_multi);
-  duration = now() - t_start;
+  std::chrono::duration<double> dur =
+      std::chrono::system_clock::now() - t_start;
 
   /* remove handles, aggregate results */
   for (auto &repo : repos->repos) {
@@ -608,10 +586,10 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
 
   /* print transfer stats if we downloaded more than 1 file */
   if (xfer_count > 0) {
-    print_total_dl_stats(xfer_count, duration, total_xfer);
+    print_total_dl_stats(xfer_count, dur.count(), total_xfer);
   }
 
-  if (reap_children(repos) != 0) {
+  if (wait_for_repacking(repos) != 0) {
     ret = 1;
   }
 
