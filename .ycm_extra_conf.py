@@ -123,7 +123,7 @@ _project_src_dir = os.path.join(DirectoryOfThisScript(), "src")
 _include_dirs_set = TraverseByDepth(_project_src_dir, frozenset({".h"}))
 flags = [
     "-x",
-    "c"
+    "c++"
     # The following flags are partially redundant due to the existence of
     # 'compile_commands.json'.
     #    '-Wall',
@@ -132,6 +132,7 @@ flags = [
     #    '-Wpointer-arith',
     #    '-Wshadow',
     #    '-std=gnu99',
+    '-std=c++17',
 ]
 
 for include_dir in _include_dirs_set:

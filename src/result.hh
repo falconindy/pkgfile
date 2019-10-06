@@ -2,22 +2,27 @@
 
 #include <sys/types.h>
 
+#include <string>
+#include <vector>
+
 struct line_t {
-  char *prefix;
-  char *entry;
+  line_t(std::string prefix, std::string entry)
+      : prefix(std::move(prefix)), entry(std::move(entry)) {}
+
+  std::string prefix;
+  std::string entry;
 };
 
 struct result_t {
-  size_t size;
-  size_t capacity;
-  char *name;
-  struct line_t **lines;
-  int max_prefixlen;
+  result_t(const std::string &name) : name(name) {}
+  ~result_t();
+
+  std::string name;
+  std::vector<line_t> lines;
+  int max_prefixlen = 0;
 };
 
-struct result_t *result_new(char *name, size_t initial_size);
 int result_add(struct result_t *result, char *repo, char *entry, int prefixlen);
-void result_free(struct result_t *result);
 size_t result_print(struct result_t *result, int prefixlen, char eol);
 int results_get_prefixlen(struct result_t **results, int count);
 

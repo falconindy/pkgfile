@@ -230,7 +230,7 @@ static int archive_conv_open(struct archive_conv *conv,
    * methods. this also gives us an opportunity to rewrite the archive as CPIO,
    * which is marginally faster given our staunch sequential access. */
 
-  conv->reponame = repo->name;
+  conv->reponame = repo->name.c_str();
   stpcpy(stpcpy(conv->tmpfile, repo->diskfile), "~");
 
   conv->in = archive_read_new();
@@ -246,7 +246,7 @@ static int archive_conv_open(struct archive_conv *conv,
   r = archive_read_open_fd(conv->in, repo->tmpfile.fd, BUFSIZ);
   if (r != ARCHIVE_OK) {
     fprintf(stderr, "error: failed to create archive reader for %s: %s\n",
-            repo->name, strerror(archive_errno(conv->in)));
+            repo->name.c_str(), strerror(archive_errno(conv->in)));
     r = archive_errno(conv->in);
     goto open_error;
   }
@@ -303,7 +303,7 @@ static int repack_repo_data(const struct repo_t *repo) {
 
   if (rename(conv.tmpfile, repo->diskfile) != 0) {
     fprintf(stderr, "error: failed to rotate new repo for %s into place: %s\n",
-            repo->name, strerror(errno));
+            repo->name.c_str(), strerror(errno));
     return -1;
   }
 
@@ -391,13 +391,14 @@ static int download_queue_request(CURLM *multi, struct repo_t *repo) {
 
   if (repo->curl == NULL) {
     /* it's my first time, be gentle */
-    if (repo->servercount == 0) {
-      fprintf(stderr, "error: no servers configured for repo %s\n", repo->name);
+    if (repo->servers.empty()) {
+      fprintf(stderr, "error: no servers configured for repo %s\n",
+              repo->name.c_str());
       return -1;
     }
     repo->curl = curl_easy_init();
     snprintf(repo->diskfile, sizeof(repo->diskfile), "%s/%s.files",
-             repo->config->cachedir, repo->name);
+             repo->config->cachedir, repo->name.c_str());
     curl_easy_setopt(repo->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(repo->curl, CURLOPT_WRITEFUNCTION, write_handler);
     curl_easy_setopt(repo->curl, CURLOPT_WRITEDATA, repo);
@@ -421,12 +422,13 @@ static int download_queue_request(CURLM *multi, struct repo_t *repo) {
     repo->server_idx++;
   }
 
-  if (repo->server_idx >= repo->servercount) {
-    fprintf(stderr, "error: failed to update repo: %s\n", repo->name);
+  if (repo->server_idx >= repo->servers.size()) {
+    fprintf(stderr, "error: failed to update repo: %s\n", repo->name.c_str());
     return -1;
   }
 
-  url = prepare_url(repo->servers[repo->server_idx], repo->name, repo->arch);
+  url = prepare_url(repo->servers[repo->server_idx].c_str(), repo->name.c_str(),
+                    repo->arch);
   if (url == NULL) {
     fputs("error: failed to allocate URL for download\n", stderr);
     return -1;
@@ -466,7 +468,7 @@ static void print_download_success(struct repo_t *repo, int remaining) {
   rate = repo->tmpfile.size / (now() - repo->dl_time_start);
   xfered_human = humanize_size(repo->tmpfile.size, '\0', -1, &xfered_label);
 
-  printf("  download complete: %-20s [", repo->name);
+  printf("  download complete: %-20s [", repo->name.c_str());
   if (fabs(rate - INFINITY) < DBL_EPSILON) {
     width = printf(" [%6.1f %3s  %7s ", xfered_human, xfered_label, "----");
   } else {
@@ -511,7 +513,7 @@ static int download_check_complete(CURLM *multi, int remaining) {
     curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL, &effective_url);
 
     if (uptodate) {
-      printf("  %s is up to date\n", repo->name);
+      printf("  %s is up to date\n", repo->name.c_str());
       repo->dl_result = RESULT_UPTODATE;
       return 0;
     }
@@ -569,13 +571,12 @@ static void download_wait_loop(CURLM *multi) {
 
 static int reap_children(struct repovec_t *repos) {
   int r = 0, running = 0;
-  struct repo_t *repo;
 
   /* immediately reap zombies, but don't wait on still active children */
-  REPOVEC_FOREACH(repo, repos) {
+  for (auto &repo : repos->repos) {
     int stat_loc;
-    if (repo->worker > 0) {
-      if (wait4(repo->worker, &stat_loc, WNOHANG, NULL) == 0) {
+    if (repo.worker > 0) {
+      if (wait4(repo.worker, &stat_loc, WNOHANG, NULL) == 0) {
         running++;
       } else {
         /* exited, grab the status */
@@ -604,7 +605,6 @@ static int reap_children(struct repovec_t *repos) {
 
 int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   int r, xfer_count = 0, ret = 0;
-  struct repo_t *repo;
   CURLM *curl_multi;
   off_t total_xfer = 0;
   double t_start, duration;
@@ -615,7 +615,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     return 1;
   }
 
-  printf(":: Updating %d repos...\n", repos->size);
+  printf(":: Updating %zd repos...\n", repos->repos.size());
 
   curl_global_init(CURL_GLOBAL_ALL);
   curl_multi = curl_multi_init();
@@ -625,21 +625,21 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     return 1;
   }
 
-  if (repos->architecture == NULL) {
+  if (repos->architecture.empty()) {
     struct utsname un;
     uname(&un);
-    repos->architecture = strdup(un.machine);
+    repos->architecture = un.machine;
   }
 
   /* ensure all our DBs are 0644 */
   umask(0022);
 
   /* prime the handle by adding a URL from each repo */
-  REPOVEC_FOREACH(repo, repos) {
-    repo->arch = repos->architecture;
-    repo->force = config->doupdate > 1;
-    repo->config = config;
-    r = download_queue_request(curl_multi, repo);
+  for (auto &repo : repos->repos) {
+    repo.arch = repos->architecture.c_str();
+    repo.force = config->doupdate > 1;
+    repo.config = config;
+    r = download_queue_request(curl_multi, &repo);
     if (r != 0) {
       ret = r;
     }
@@ -650,13 +650,13 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
   duration = now() - t_start;
 
   /* remove handles, aggregate results */
-  REPOVEC_FOREACH(repo, repos) {
-    curl_multi_remove_handle(curl_multi, repo->curl);
-    curl_easy_cleanup(repo->curl);
+  for (auto &repo : repos->repos) {
+    curl_multi_remove_handle(curl_multi, repo.curl);
+    curl_easy_cleanup(repo.curl);
 
-    total_xfer += repo->tmpfile.size;
+    total_xfer += repo.tmpfile.size;
 
-    switch (repo->dl_result) {
+    switch (repo.dl_result) {
       case RESULT_OK:
         xfer_count++;
         break;
@@ -666,7 +666,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
         ret = 1;
         break;
       default:
-        fprintf(stderr, "BUG: unhandled repo->dl_result=%d\n", repo->dl_result);
+        fprintf(stderr, "BUG: unhandled repo->dl_result=%d\n", repo.dl_result);
         break;
     }
   }

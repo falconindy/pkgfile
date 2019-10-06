@@ -276,8 +276,8 @@ static void *load_repo(void *repo_obj) {
 
   repo = (repo_t *)repo_obj;
   snprintf(repofile, sizeof(repofile), "%s/%s.files", config.cachedir,
-           repo->name);
-  result = result_new(repo->name, 50);
+           repo->name.c_str());
+  result = new result_t(repo->name);
 
   a = archive_read_new();
   archive_read_support_format_all(a);
@@ -330,7 +330,7 @@ static void *load_repo(void *repo_obj) {
 
     memset(&read_buffer, 0, sizeof(struct archive_line_reader));
     read_buffer.line.base = line;
-    r = config.filefunc(repo->name, &pkg, a, result, &read_buffer);
+    r = config.filefunc(repo->name.c_str(), &pkg, a, result, &read_buffer);
     if (r < 0) {
       break;
     }
@@ -555,8 +555,6 @@ static int parse_opts(int argc, char **argv) {
 }
 
 static int search_single_repo(struct repovec_t *repos, char *searchstring) {
-  struct repo_t *repo;
-
   if (!config.targetrepo) {
     config.targetrepo = strsep(&searchstring, "/");
     config.filter.glob.glob = searchstring;
@@ -564,16 +562,15 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring) {
     config.filterby = FILTER_EXACT;
   }
 
-  REPOVEC_FOREACH(repo, repos) {
-    if (strcmp(repo->name, config.targetrepo) == 0) {
+  for (auto &repo : repos->repos) {
+    if (strcmp(repo.name.c_str(), config.targetrepo) == 0) {
       struct result_t *result;
       int r;
 
-      result = (result_t *)load_repo(repo);
-      r = result->size == 0;
+      result = (result_t *)load_repo(&repo);
+      r = result->lines.empty();
 
       result_print(result, config.raw ? 0 : result->max_prefixlen, config.eol);
-      result_free(result);
 
       return r;
     }
@@ -588,18 +585,19 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring) {
 static struct result_t **search_all_repos(struct repovec_t *repos) {
   struct result_t **results;
   pthread_t *t;
-  struct repo_t *repo;
 
-  t = (pthread_t *)alloca(repos->size * sizeof(pthread_t));
-  CALLOC(results, repos->size, sizeof(result_t *), return NULL);
+  t = (pthread_t *)alloca(repos->repos.size() * sizeof(pthread_t));
+  CALLOC(results, repos->repos.size(), sizeof(result_t *), return NULL);
 
   /* load and process DBs */
-  REPOVEC_FOREACH(repo, repos) {
-    pthread_create(&t[i_], NULL, load_repo, repo);
+  for (size_t i = 0; i < repos->repos.size(); ++i) {
+    pthread_create(&t[i], NULL, load_repo, &repos->repos[i]);
   }
 
   /* gather results */
-  REPOVEC_FOREACH(repo, repos) { pthread_join(t[i_], (void **)&results[i_]); }
+  for (size_t i = 0; i < repos->repos.size(); ++i) {
+    pthread_join(t[i], (void **)&results[i]);
+  }
 
   return results;
 }
@@ -630,7 +628,7 @@ static int filter_setup(char *arg) {
 
 int main(int argc, char *argv[]) {
   int reposfound = 0, ret = 0;
-  struct repovec_t *repos = NULL;
+  repovec_t repos;
   _cleanup_free_ struct result_t **results = NULL;
 
   setlocale(LC_ALL, "");
@@ -644,13 +642,13 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  if (repos == NULL || repos->size == 0) {
+  if (repos.repos.empty()) {
     fprintf(stderr, "error: no repos found in %s\n", config.cfgfile);
     return 1;
   }
 
   if (config.doupdate) {
-    ret = !!pkgfile_update(repos, &config);
+    ret = !!pkgfile_update(&repos, &config);
     goto cleanup;
   }
 
@@ -667,17 +665,16 @@ int main(int argc, char *argv[]) {
   if ((config.filefunc == list_metafile && config.filterby == FILTER_EXACT &&
        strchr(argv[optind], '/')) ||
       config.targetrepo) {
-    ret = search_single_repo(repos, argv[optind]);
+    ret = search_single_repo(&repos, argv[optind]);
   } else {
     int prefixlen;
-    struct repo_t *repo;
-    results = search_all_repos(repos);
+    results = search_all_repos(&repos);
 
-    prefixlen = config.raw ? 0 : results_get_prefixlen(results, repos->size);
-    REPOVEC_FOREACH(repo, repos) {
-      reposfound += repo->fd >= 0;
-      ret += (int)result_print(results[i_], prefixlen, config.eol);
-      result_free(results[i_]);
+    prefixlen =
+        config.raw ? 0 : results_get_prefixlen(results, repos.repos.size());
+    for (size_t i = 0; i < repos.repos.size(); ++i) {
+      reposfound += repos.repos[i].fd >= 0;
+      ret += (int)result_print(results[i], prefixlen, config.eol);
     }
 
     if (!reposfound) {
@@ -693,8 +690,6 @@ int main(int argc, char *argv[]) {
   }
 
 cleanup:
-  repos_free(repos);
-
   return ret;
 }
 

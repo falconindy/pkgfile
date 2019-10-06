@@ -6,6 +6,9 @@
 
 #include <curl/curl.h>
 
+#include <string>
+#include <vector>
+
 enum download_result_t {
   RESULT_UNKNOWN,
   RESULT_OK,
@@ -14,11 +17,14 @@ enum download_result_t {
 };
 
 struct repo_t {
-  char *name;
-  char **servers;
-  int servercount;
+  explicit repo_t(const char *name) : name(name) {}
+  ~repo_t();
+
+  std::string name;
+  std::vector<std::string> servers;
+
   int fd;
-  char *arch;
+  const char *arch;
 
   const struct config_t *config;
 
@@ -29,7 +35,7 @@ struct repo_t {
   /* destination */
   char diskfile[PATH_MAX];
   /* index to currently in-use server */
-  int server_idx = 0;
+  size_t server_idx = 0;
   /* error buffer */
   char errmsg[CURL_ERROR_SIZE];
   /* numeric err for determining success */
@@ -42,25 +48,18 @@ struct repo_t {
   pid_t worker;
 
   struct {
-    int fd;
+    int fd = -1;
     off_t size;
   } tmpfile;
 };
 
 struct repovec_t {
-  struct repo_t **repos;
-  int size;
-  int capacity;
-  char *architecture;
+  repovec_t() {}
+
+  std::vector<repo_t> repos;
+  std::string architecture;
 };
 
-#define REPOVEC_FOREACH(r, repos) \
-  for (int i_ = 0; i_ < repos->size && (r = repos->repos[i_]); ++i_)
-
-struct repo_t *repo_new(const char *reponame);
-void repo_free(struct repo_t *repo);
-void repos_free(struct repovec_t *repos);
-int repo_add_server(struct repo_t *repo, const char *server);
-int load_repos_from_file(const char *filename, struct repovec_t **repos);
+int load_repos_from_file(const char *filename, struct repovec_t *repos);
 
 /* vim: set ts=2 sw=2 et: */
