@@ -8,7 +8,7 @@
 
 #include <pcre.h>
 
-#include "result.h"
+#include "result.hh"
 
 struct memblock_t {
   char *base;
@@ -23,13 +23,9 @@ struct archive_line_reader {
   long ret;
 };
 
-typedef enum _filterstyle_t {
-  FILTER_EXACT = 0,
-  FILTER_GLOB,
-  FILTER_REGEX
-} filterstyle_t;
+enum filterstyle_t { FILTER_EXACT = 0, FILTER_GLOB, FILTER_REGEX };
 
-typedef union _filterpattern_t {
+union filterpattern_t {
   struct pcre_data {
     pcre *re;
     pcre_extra *re_extra;
@@ -38,7 +34,7 @@ typedef union _filterpattern_t {
     char *glob;
     int globlen;
   } glob;
-} filterpattern_t;
+};
 
 struct pkg_t {
   char name[PATH_MAX];

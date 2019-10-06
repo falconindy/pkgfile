@@ -6,8 +6,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "macro.h"
-#include "repo.h"
+#include "macro.hh"
+#include "repo.hh"
 
 struct repo_t *repo_new(const char *reponame) {
   struct repo_t *repo;
@@ -44,8 +44,8 @@ void repo_free(struct repo_t *repo) {
 static int repos_add_repo(struct repovec_t *repos, const char *name) {
   if (repos->size == repos->capacity) {
     int new_capacity = repos->size * 2.5;
-    struct repo_t **new_repos =
-        realloc(repos->repos, sizeof(struct repo_t *) * new_capacity);
+    struct repo_t **new_repos = (repo_t **)realloc(
+        repos->repos, sizeof(struct repo_t *) * new_capacity);
     if (new_repos == NULL) {
       return -ENOMEM;
     }
@@ -65,12 +65,12 @@ static int repos_add_repo(struct repovec_t *repos, const char *name) {
 }
 
 static struct repovec_t *repos_new(void) {
-  struct repovec_t *repos = calloc(1, sizeof(struct repovec_t));
+  struct repovec_t *repos = (repovec_t *)calloc(1, sizeof(struct repovec_t));
   if (repos == NULL) {
     return NULL;
   }
 
-  repos->repos = malloc(10 * sizeof(struct repo_t *));
+  repos->repos = (repo_t **)malloc(10 * sizeof(struct repo_t *));
   if (repos->repos == NULL) {
     free(repos);
     return NULL;
@@ -101,7 +101,7 @@ int repo_add_server(struct repo_t *repo, const char *server) {
   }
 
   repo->servers =
-      realloc(repo->servers, sizeof(char *) * (repo->servercount + 1));
+      (char **)realloc(repo->servers, sizeof(char *) * (repo->servercount + 1));
 
   repo->servers[repo->servercount] = strdup(server);
   repo->servercount++;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pkgfile.h"
+#include "pkgfile.hh"
 
 int match_glob(const filterpattern_t *filter, const char *line, int len,
                int flags);

@@ -11,10 +11,10 @@
 
 #include <curl/curl.h>
 
-#include "macro.h"
-#include "pkgfile.h"
-#include "repo.h"
-#include "update.h"
+#include "macro.hh"
+#include "pkgfile.hh"
+#include "repo.hh"
+#include "update.hh"
 
 struct archive_conv {
   struct archive *in;
@@ -110,9 +110,9 @@ static char *strreplace(const char *str, const char *needle,
     q = list[i];
     if (q > p) {
       /* add chars between this occurence and last occurence, if any */
-      newp = mempcpy(newp, p, (size_t)(q - p));
+      newp = (char *)mempcpy(newp, p, (size_t)(q - p));
     }
-    newp = mempcpy(newp, replace, replacesz);
+    newp = (char *)mempcpy(newp, replace, replacesz);
     p = q + needlesz;
   }
 
@@ -178,7 +178,7 @@ static int write_cpio_entry(struct archive_conv *conv, const char *entryname) {
     /* ensure enough memory */
     if (bytes_w + reader.line.size + 1 > alloc_size) {
       alloc_size *= 1.1;
-      entry_data = realloc(entry_data, alloc_size);
+      entry_data = (char *)realloc(entry_data, alloc_size);
     }
 
     /* do the copy, with a slash prepended */
@@ -328,8 +328,8 @@ static int repack_repo_data_async(struct repo_t *repo) {
 }
 
 static size_t write_handler(void *ptr, size_t size, size_t nmemb, void *data) {
-  struct repo_t *repo = data;
-  const uint8_t *p = ptr;
+  struct repo_t *repo = (repo_t *)data;
+  const uint8_t *p = (uint8_t *)ptr;
   size_t nbytes = size * nmemb;
   ssize_t n = 0;
 

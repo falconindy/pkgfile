@@ -1,39 +1,22 @@
-project('pkgfile', 'c',
+project('pkgfile', 'cpp',
         version : '21',
         license : 'MIT',
         default_options : [
-          'c_std=c99',
+          'cpp_std=c++17',
+          'warning_level=3',
           'prefix=/usr',
         ])
 
 conf = configuration_data()
-conf.set('_GNU_SOURCE', true)
 conf.set_quoted('PACKAGE_NAME', meson.project_name())
 conf.set_quoted('PACKAGE_VERSION', meson.project_version())
 conf.set_quoted('DEFAULT_CACHEPATH', get_option('cachedir'))
 
-cc = meson.get_compiler('c')
-if cc.has_function('mempcpy', args: '-D_GNU_SOURCE')
-  conf.set('HAVE_MEMPCPY', true)
-endif
-
-if cc.get_define('BUFSIZ',
-                 args: '-D_GNU_SOURCE',
-                 prefix : '''#include <stdio.h>''') == ''
-  conf.set('BUFSIZ', 8192)
-endif
-
-if cc.get_define('MAP_POPULATE',
-                 args: '-D_GNU_SOURCE',
-                 prefix: '''#include <sys/mman.h>''') == ''
-  conf.set('MAP_POPULATE', 0)
-endif
-
 configure_file(
-    output : 'config.h',
+    output : 'config.hh',
     configuration : conf)
 
-add_project_arguments('-include', 'config.h', language : 'c')
+add_project_arguments('-include', 'config.hh', language : 'cpp')
 
 libpcre = dependency('libpcre', version : '>= 8.30')
 libarchive = dependency('libarchive', version : '>= 3.2.0')
@@ -45,12 +28,12 @@ pkgconfig = find_program('pkg-config')
 mkdir_p = 'mkdir -p $DESTDIR/@0@'
 
 pkgfile_sources = files('''
-  src/match.c src/match.h
-  src/pkgfile.c src/pkgfile.h
-  src/repo.c src/repo.h
-  src/result.c src/result.h
-  src/update.c src/update.h
-  src/macro.h src/missing.h
+  src/match.cc src/match.hh
+  src/pkgfile.cc src/pkgfile.hh
+  src/repo.cc src/repo.hh
+  src/result.cc src/result.hh
+  src/update.cc src/update.hh
+  src/macro.hh
 '''.split())
 
 run_target(

@@ -9,18 +9,16 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include "macro.h"
-#include "match.h"
-#include "missing.h"
-#include "pkgfile.h"
-#include "repo.h"
-#include "result.h"
-#include "update.h"
+#include "macro.hh"
+#include "match.hh"
+#include "pkgfile.hh"
+#include "repo.hh"
+#include "result.hh"
+#include "update.hh"
 
 static struct config_t config;
 
-static const char *filtermethods[] = {[FILTER_GLOB] = "glob",
-                                      [FILTER_REGEX] = "regex"};
+static const char *filtermethods[2] = {"glob", "regex"};
 
 static int reader_block_consume(struct archive_line_reader *reader,
                                 struct archive *a) {
@@ -37,7 +35,7 @@ static int reader_block_consume(struct archive_line_reader *reader,
   }
 
   /* grab a new block of data from the archive */
-  reader->ret = archive_read_data_block(a, (void *)&reader->block.base,
+  reader->ret = archive_read_data_block(a, (const void **)&reader->block.base,
                                         &reader->block.size, &offset);
   reader->block.offset = reader->block.base;
 
@@ -47,7 +45,7 @@ static int reader_block_consume(struct archive_line_reader *reader,
 static char *reader_block_find_eol(struct archive_line_reader *reader) {
   size_t n = reader->block.base + reader->block.size - reader->block.offset;
 
-  return memchr(reader->block.offset, '\n', n);
+  return static_cast<char*>(memchr(reader->block.offset, '\n', n));
 }
 
 static bool reader_line_would_overflow(struct archive_line_reader *b,
@@ -74,7 +72,7 @@ static int reader_line_consume(struct archive_line_reader *reader) {
 
   /* do a real copy from the block to the line buffer */
   reader->line.offset =
-      mempcpy(reader->line.offset, reader->block.offset, copylen);
+      (char *)mempcpy(reader->line.offset, reader->block.offset, copylen);
   *reader->line.offset = '\0';
   reader->line.size += copylen;
   reader->block.offset += copylen + 1;
@@ -116,7 +114,7 @@ static bool is_binary(const char *line, const size_t len) {
     return false;
   }
 
-  ptr = memmem(line, len, "bin/", 4);
+  ptr = (char *)memmem(line, len, "bin/", 4);
 
   /* toss out the obvious non-matches */
   if (!ptr) {
@@ -276,7 +274,7 @@ static void *load_repo(void *repo_obj) {
   void *repodata = MAP_FAILED;
   struct archive_line_reader read_buffer = {};
 
-  repo = repo_obj;
+  repo = (repo_t *)repo_obj;
   snprintf(repofile, sizeof(repofile), "%s/%s.files", config.cachedir,
            repo->name);
   result = result_new(repo->name, 50);
@@ -352,8 +350,8 @@ cleanup:
   return result;
 }
 
-static int compile_pcre_expr(struct pcre_data *re, const char *preg,
-                             int flags) {
+static int compile_pcre_expr(struct filterpattern_t::pcre_data *re,
+                             const char *preg, int flags) {
   const char *err;
   int err_offset;
 
@@ -571,7 +569,7 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring) {
       struct result_t *result;
       int r;
 
-      result = load_repo(repo);
+      result = (result_t *)load_repo(repo);
       r = result->size == 0;
 
       result_print(result, config.raw ? 0 : result->max_prefixlen, config.eol);
@@ -592,8 +590,8 @@ static struct result_t **search_all_repos(struct repovec_t *repos) {
   pthread_t *t;
   struct repo_t *repo;
 
-  t = alloca(repos->size * sizeof(pthread_t));
-  CALLOC(results, repos->size, sizeof(struct result_t *), return NULL);
+  t = (pthread_t *)alloca(repos->size * sizeof(pthread_t));
+  CALLOC(results, repos->size, sizeof(result_t *), return NULL);
 
   /* load and process DBs */
   REPOVEC_FOREACH(repo, repos) {

@@ -1,7 +1,7 @@
 #include <string.h>
 
-#include "macro.h"
-#include "result.h"
+#include "macro.hh"
+#include "result.hh"
 
 static void line_free(struct line_t *line) {
   if (!line) {
@@ -14,7 +14,7 @@ static void line_free(struct line_t *line) {
 }
 
 static struct line_t *line_new(char *prefix, char *entry) {
-  struct line_t *line = calloc(1, sizeof(struct line_t));
+  struct line_t *line = (struct line_t *)calloc(1, sizeof(struct line_t));
   if (line == NULL) {
     goto alloc_fail;
   }
@@ -41,7 +41,8 @@ alloc_fail:
 
 static int result_grow(struct result_t *result) {
   size_t newsz = result->capacity * 3;
-  result->lines = realloc(result->lines, newsz * sizeof(struct line_t *));
+  result->lines =
+      (struct line_t **)realloc(result->lines, newsz * sizeof(struct line_t *));
   if (!result->lines) {
     return 1;
   }
@@ -52,12 +53,14 @@ static int result_grow(struct result_t *result) {
 }
 
 struct result_t *result_new(char *name, size_t initial_size) {
-  struct result_t *result = calloc(1, sizeof(struct result_t));
+  struct result_t *result =
+      (struct result_t *)calloc(1, sizeof(struct result_t));
   if (result == NULL) {
     goto alloc_fail;
   }
 
-  result->lines = calloc(initial_size, sizeof(struct line_t *));
+  result->lines =
+      (struct line_t **)calloc(initial_size, sizeof(struct line_t *));
   if (!result->lines) {
     goto alloc_fail;
   }

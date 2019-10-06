@@ -25,17 +25,17 @@ struct repo_t {
   /* download stuff */
 
   /* curl easy handle */
-  CURL *curl;
+  CURL *curl = nullptr;
   /* destination */
   char diskfile[PATH_MAX];
   /* index to currently in-use server */
-  int server_idx;
+  int server_idx = 0;
   /* error buffer */
   char errmsg[CURL_ERROR_SIZE];
   /* numeric err for determining success */
-  enum download_result_t dl_result;
+  enum download_result_t dl_result = RESULT_UNKNOWN;
   /* force update repos */
-  short force;
+  short force = false;
   /* start time for download */
   double dl_time_start;
   /* PID of repo_repack worker */
