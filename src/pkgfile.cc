@@ -3,11 +3,13 @@
 #include <fnmatch.h>
 #include <getopt.h>
 #include <locale.h>
-#include <pthread.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/time.h>
 #include <unistd.h>
+
+#include <future>
+#include <vector>
 
 #include "macro.hh"
 #include "match.hh"
@@ -262,28 +264,24 @@ static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
   return 0;
 }
 
-static void *load_repo(void *repo_obj) {
+static result_t load_repo(repo_t *repo) {
   char repofile[FILENAME_MAX];
-  _cleanup_free_ char *line = NULL;
+  std::string line;
   struct archive *a;
   struct archive_entry *e;
   struct pkg_t pkg;
-  struct repo_t *repo;
-  struct result_t *result;
   struct stat st;
   void *repodata = MAP_FAILED;
   struct archive_line_reader read_buffer = {};
 
-  repo = (repo_t *)repo_obj;
+  result_t result(repo->name);
+
   snprintf(repofile, sizeof(repofile), "%s/%s.files", config.cachedir,
            repo->name.c_str());
-  result = new result_t(repo->name);
 
   a = archive_read_new();
   archive_read_support_format_all(a);
   archive_read_support_filter_all(a);
-
-  MALLOC(line, MAX_LINE_SIZE, return NULL);
 
   repo->fd = open(repofile, O_RDONLY);
   if (repo->fd < 0) {
@@ -310,6 +308,7 @@ static void *load_repo(void *repo_obj) {
     goto cleanup;
   }
 
+  line.resize(MAX_LINE_SIZE);
   while (archive_read_next_header(a, &e) == ARCHIVE_OK) {
     const char *entryname = archive_entry_pathname(e);
     size_t len;
@@ -329,8 +328,8 @@ static void *load_repo(void *repo_obj) {
     }
 
     memset(&read_buffer, 0, sizeof(struct archive_line_reader));
-    read_buffer.line.base = line;
-    r = config.filefunc(repo->name.c_str(), &pkg, a, result, &read_buffer);
+    read_buffer.line.base = line.data();
+    r = config.filefunc(repo->name.c_str(), &pkg, a, &result, &read_buffer);
     if (r < 0) {
       break;
     }
@@ -564,13 +563,12 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring) {
 
   for (auto &repo : repos->repos) {
     if (strcmp(repo.name.c_str(), config.targetrepo) == 0) {
-      struct result_t *result;
       int r;
 
-      result = (result_t *)load_repo(&repo);
-      r = result->lines.empty();
+      auto result = load_repo(&repo);
+      r = result.lines.empty();
 
-      result_print(result, config.raw ? 0 : result->max_prefixlen, config.eol);
+      result_print(&result, config.raw ? 0 : result.max_prefixlen, config.eol);
 
       return r;
     }
@@ -582,21 +580,17 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring) {
   return 1;
 }
 
-static struct result_t **search_all_repos(struct repovec_t *repos) {
-  struct result_t **results;
-  pthread_t *t;
+static std::vector<result_t> search_all_repos(repovec_t *repos) {
+  std::vector<result_t> results;
+  std::vector<std::future<result_t>> futures;
 
-  t = (pthread_t *)alloca(repos->repos.size() * sizeof(pthread_t));
-  CALLOC(results, repos->repos.size(), sizeof(result_t *), return NULL);
-
-  /* load and process DBs */
-  for (size_t i = 0; i < repos->repos.size(); ++i) {
-    pthread_create(&t[i], NULL, load_repo, &repos->repos[i]);
+  for (auto &repo : repos->repos) {
+    futures.push_back(
+        std::async(std::launch::async, [&repo] { return load_repo(&repo); }));
   }
 
-  /* gather results */
-  for (size_t i = 0; i < repos->repos.size(); ++i) {
-    pthread_join(t[i], (void **)&results[i]);
+  for (auto &fu : futures) {
+    results.emplace_back(fu.get());
   }
 
   return results;
@@ -629,7 +623,7 @@ static int filter_setup(char *arg) {
 int main(int argc, char *argv[]) {
   int reposfound = 0, ret = 0;
   repovec_t repos;
-  _cleanup_free_ struct result_t **results = NULL;
+  std::vector<result_t> results;
 
   setlocale(LC_ALL, "");
 
@@ -670,11 +664,10 @@ int main(int argc, char *argv[]) {
     int prefixlen;
     results = search_all_repos(&repos);
 
-    prefixlen =
-        config.raw ? 0 : results_get_prefixlen(results, repos.repos.size());
+    prefixlen = config.raw ? 0 : results_get_prefixlen(results);
     for (size_t i = 0; i < repos.repos.size(); ++i) {
       reposfound += repos.repos[i].fd >= 0;
-      ret += (int)result_print(results[i], prefixlen, config.eol);
+      ret += (int)result_print(&results[i], prefixlen, config.eol);
     }
 
     if (!reposfound) {

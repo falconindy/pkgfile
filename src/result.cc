@@ -55,14 +55,12 @@ size_t result_print(struct result_t *result, int prefixlen, char eol) {
   return result->lines.size();
 }
 
-int results_get_prefixlen(struct result_t **results, int count) {
-  int maxlen = 0;
-
-  for (int i = 0; i < count; ++i) {
-    maxlen = MAX(maxlen, results[i]->max_prefixlen);
-  }
-
-  return maxlen;
+size_t results_get_prefixlen(const std::vector<result_t> &results) {
+  return std::max_element(results.begin(), results.end(),
+                          [](const result_t &a, const result_t &b) {
+                            return a.max_prefixlen < b.max_prefixlen;
+                          })
+      ->max_prefixlen;
 }
 
 /* vim: set ts=2 sw=2 et: */
