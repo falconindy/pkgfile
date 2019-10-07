@@ -48,10 +48,10 @@ static char *split_keyval(char *line, const char *sep) {
   return line;
 }
 
-static int parse_one_file(const char *, std::string *, struct repovec_t *);
+static int parse_one_file(const char *, std::string *, struct AlpmConfig *);
 
 static int parse_include(const char *include, std::string *section,
-                         struct repovec_t *repos) {
+                         struct AlpmConfig *alpm_config) {
   glob_t globbuf;
 
   if (glob(include, GLOB_NOCHECK, NULL, &globbuf) != 0) {
@@ -61,7 +61,7 @@ static int parse_include(const char *include, std::string *section,
   }
 
   for (size_t i = 0; i < globbuf.gl_pathc; ++i) {
-    parse_one_file(globbuf.gl_pathv[i], section, repos);
+    parse_one_file(globbuf.gl_pathv[i], section, alpm_config);
   }
 
   globfree(&globbuf);
@@ -70,7 +70,7 @@ static int parse_include(const char *include, std::string *section,
 }
 
 static int parse_one_file(const char *filename, std::string *section,
-                          struct repovec_t *repos) {
+                          struct AlpmConfig *alpm_config) {
   FILE *fp;
   char *ptr;
   char line[4096];
@@ -106,7 +106,7 @@ static int parse_one_file(const char *filename, std::string *section,
       section->assign(&line[1], len - 2);
       in_options = len - 2 == 7 && *section == "options";
       if (!in_options) {
-        repos->repos.emplace_back(*section);
+        alpm_config->repos.emplace_back(*section);
       }
     }
 
@@ -132,13 +132,13 @@ static int parse_one_file(const char *filename, std::string *section,
           continue;
         }
 
-        repos->repos.back().servers.push_back(val);
+        alpm_config->repos.back().servers.push_back(val);
       } else if (keysz == strlen(include) && memcmp(key, include, keysz) == 0) {
-        parse_include(val, section, repos);
+        parse_include(val, section, alpm_config);
       } else if (in_options && keysz == strlen(architecture) &&
                  memcmp(key, architecture, keysz) == 0) {
         if (valsz != 4 || memcmp(val, "auto", 4) != 0) {
-          repos->architecture.assign(val, valsz);
+          alpm_config->architecture.assign(val, valsz);
         }
       }
     }
@@ -149,11 +149,11 @@ static int parse_one_file(const char *filename, std::string *section,
   return r;
 }
 
-int load_repos_from_file(const char *filename, struct repovec_t *repos) {
+int AlpmConfig::LoadFromFile(const char *filename, AlpmConfig *alpm_config) {
   std::string section;
   int k;
 
-  k = parse_one_file(filename, &section, repos);
+  k = parse_one_file(filename, &section, alpm_config);
   if (k < 0) {
     return k;
   }

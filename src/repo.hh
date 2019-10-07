@@ -31,7 +31,7 @@ struct repo_t {
   std::vector<std::string> servers;
 
   int fd;
-  const char *arch;
+  std::string arch;
 
   const struct config_t *config;
 
@@ -60,13 +60,13 @@ struct repo_t {
   } tmpfile;
 };
 
-struct repovec_t {
-  repovec_t() {}
+struct AlpmConfig {
+  AlpmConfig() {}
+
+  static int LoadFromFile(const char *filename, AlpmConfig *config);
 
   std::vector<repo_t> repos;
   std::string architecture;
 };
-
-int load_repos_from_file(const char *filename, struct repovec_t *repos);
 
 /* vim: set ts=2 sw=2 et: */

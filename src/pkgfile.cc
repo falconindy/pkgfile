@@ -553,7 +553,7 @@ static int parse_opts(int argc, char **argv) {
   return 0;
 }
 
-static int search_single_repo(struct repovec_t *repos, char *searchstring) {
+static int search_single_repo(std::vector<repo_t> *repos, char *searchstring) {
   if (!config.targetrepo) {
     config.targetrepo = strsep(&searchstring, "/");
     config.filter.glob.glob = searchstring;
@@ -561,7 +561,7 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring) {
     config.filterby = FILTER_EXACT;
   }
 
-  for (auto &repo : repos->repos) {
+  for (auto &repo : *repos) {
     if (strcmp(repo.name.c_str(), config.targetrepo) == 0) {
       int r;
 
@@ -580,11 +580,11 @@ static int search_single_repo(struct repovec_t *repos, char *searchstring) {
   return 1;
 }
 
-static std::vector<result_t> search_all_repos(repovec_t *repos) {
+static std::vector<result_t> search_all_repos(std::vector<repo_t> *repos) {
   std::vector<result_t> results;
   std::vector<std::future<result_t>> futures;
 
-  for (auto &repo : repos->repos) {
+  for (auto &repo : *repos) {
     futures.push_back(
         std::async(std::launch::async, [&repo] { return load_repo(&repo); }));
   }
@@ -622,7 +622,7 @@ static int filter_setup(char *arg) {
 
 int main(int argc, char *argv[]) {
   int reposfound = 0, ret = 0;
-  repovec_t repos;
+  AlpmConfig alpm_config;
   std::vector<result_t> results;
 
   setlocale(LC_ALL, "");
@@ -631,18 +631,19 @@ int main(int argc, char *argv[]) {
     return 2;
   }
 
-  ret = load_repos_from_file(config.cfgfile, &repos);
+  ret = AlpmConfig::LoadFromFile(config.cfgfile, &alpm_config);
   if (ret < 0) {
     return 1;
   }
 
-  if (repos.repos.empty()) {
+  auto *repos = &alpm_config.repos;
+  if (repos->empty()) {
     fprintf(stderr, "error: no repos found in %s\n", config.cfgfile);
     return 1;
   }
 
   if (config.doupdate) {
-    ret = !!pkgfile_update(&repos, &config);
+    ret = !!pkgfile_update(&alpm_config, &config);
     goto cleanup;
   }
 
@@ -659,14 +660,14 @@ int main(int argc, char *argv[]) {
   if ((config.filefunc == list_metafile && config.filterby == FILTER_EXACT &&
        strchr(argv[optind], '/')) ||
       config.targetrepo) {
-    ret = search_single_repo(&repos, argv[optind]);
+    ret = search_single_repo(repos, argv[optind]);
   } else {
     int prefixlen;
-    results = search_all_repos(&repos);
+    results = search_all_repos(&alpm_config.repos);
 
     prefixlen = config.raw ? 0 : results_get_prefixlen(results);
-    for (size_t i = 0; i < repos.repos.size(); ++i) {
-      reposfound += repos.repos[i].fd >= 0;
+    for (size_t i = 0; i < alpm_config.repos.size(); ++i) {
+      reposfound += alpm_config.repos[i].fd >= 0;
       ret += (int)result_print(&results[i], prefixlen, config.eol);
     }
 

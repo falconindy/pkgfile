@@ -485,9 +485,9 @@ static void download_wait_loop(CURLM *multi) {
   } while (active_handles > 0);
 }
 
-static int wait_for_repacking(struct repovec_t *repos) {
+static int wait_for_repacking(std::vector<repo_t> *repos) {
   int running = 0;
-  for (auto &repo : repos->repos) {
+  for (auto &repo : *repos) {
     // The future won't be valid if the repo was up to date.
     if (!repo.worker.valid()) {
       continue;
@@ -505,7 +505,7 @@ static int wait_for_repacking(struct repovec_t *repos) {
   }
 
   int r = 0;
-  for (auto &repo : repos->repos) {
+  for (auto &repo : *repos) {
     if (repo.worker.valid()) {
       r += repo.worker.get();
     }
@@ -514,7 +514,7 @@ static int wait_for_repacking(struct repovec_t *repos) {
   return r;
 }
 
-int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
+int pkgfile_update(AlpmConfig *alpm_config, struct config_t *config) {
   int r, xfer_count = 0, ret = 0;
   CURLM *curl_multi;
   off_t total_xfer = 0;
@@ -525,7 +525,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     return 1;
   }
 
-  printf(":: Updating %zd repos...\n", repos->repos.size());
+  printf(":: Updating %zd repos...\n", alpm_config->repos.size());
 
   curl_global_init(CURL_GLOBAL_ALL);
   curl_multi = curl_multi_init();
@@ -535,18 +535,20 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     return 1;
   }
 
-  if (repos->architecture.empty()) {
+  if (alpm_config->architecture.empty()) {
     struct utsname un;
     uname(&un);
-    repos->architecture = un.machine;
+    alpm_config->architecture = un.machine;
   }
 
   /* ensure all our DBs are 0644 */
   umask(0022);
 
+  auto &repos = alpm_config->repos;
+
   /* prime the handle by adding a URL from each repo */
-  for (auto &repo : repos->repos) {
-    repo.arch = repos->architecture.c_str();
+  for (auto &repo : repos) {
+    repo.arch = alpm_config->architecture;
     repo.force = config->doupdate > 1;
     repo.config = config;
     r = download_queue_request(curl_multi, &repo);
@@ -561,7 +563,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
       std::chrono::system_clock::now() - t_start;
 
   /* remove handles, aggregate results */
-  for (auto &repo : repos->repos) {
+  for (auto &repo : repos) {
     curl_multi_remove_handle(curl_multi, repo.curl);
     curl_easy_cleanup(repo.curl);
 
@@ -587,7 +589,7 @@ int pkgfile_update(struct repovec_t *repos, struct config_t *config) {
     print_total_dl_stats(xfer_count, dur.count(), total_xfer);
   }
 
-  if (wait_for_repacking(repos) != 0) {
+  if (wait_for_repacking(&repos) != 0) {
     ret = 1;
   }
 
