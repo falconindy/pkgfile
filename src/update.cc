@@ -12,77 +12,47 @@
 #include <algorithm>
 #include <filesystem>
 #include <sstream>
-#include <string_view>
 
 #include "macro.hh"
 #include "pkgfile.hh"
 #include "repo.hh"
 #include "update.hh"
 
+namespace chrono = std::chrono;
+
 struct archive_conv {
-  struct archive *in;
-  struct archive *out;
-  struct archive_entry *ae;
-  const char *reponame;
+  struct archive* in;
+  struct archive* out;
+  struct archive_entry* ae;
+  const char* reponame;
   char tmpfile[PATH_MAX];
 };
 
-#if defined(CLOCK_MONOTONIC) && !defined(CLOCK_MONOTONIC_COARSE)
-#define CLOCK_MONOTONIC_COARSE CLOCK_MONOTONIC
-#endif
+auto now = chrono::system_clock::now;
 
-static double now(void) {
-#if defined(HAVE_CLOCK_GETTIME) && defined(CLOCK_MONOTONIC_COARSE)
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
-  return ts.tv_sec + ts.tv_nsec / 1e9;
-#else
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return tv.tv_sec + tv.tv_usec / 1e6;
-#endif
-}
+static std::pair<double, const char*> Humanize(off_t bytes) {
+  std::array<const char*, 9> labels{"B",   "KiB", "MiB", "GiB", "TiB",
+                                    "PiB", "EiB", "ZiB", "YiB"};
 
-static double simple_pow(int base, int exp) {
-  double result = 1.0;
-  for (; exp > 0; --exp) {
-    result *= base;
-  }
-  return result;
-}
+  double val = static_cast<double>(bytes);
 
-static double humanize_size(off_t bytes, const char target_unit, int precision,
-                            const char **label) {
-  static const char *labels[] = {"B",   "KiB", "MiB", "GiB", "TiB",
-                                 "PiB", "EiB", "ZiB", "YiB"};
-  static const int unitcount = sizeof(labels) / sizeof(labels[0]);
-
-  double val = (double)bytes;
-  int index;
-
-  for (index = 0; index < unitcount - 1; ++index) {
-    if (target_unit != '\0' && labels[index][0] == target_unit) {
-      break;
-    } else if (target_unit == '\0' && val <= 2048.0 && val >= -2048.0) {
+  decltype(labels)::iterator iter;
+  for (iter = labels.begin(); iter != labels.end(); ++iter) {
+    if (val <= 2048.0 && val >= -2048.0) {
       break;
     }
     val /= 1024.0;
   }
 
-  if (label) {
-    *label = labels[index];
+  if (iter == labels.end()) {
+    iter = &labels.back();
   }
 
-  /* fix FS#27924 so that it doesn't display negative zeroes */
-  if (precision >= 0 && val < 0.0 && val > (-0.5 / simple_pow(10, precision))) {
-    val = 0.0;
-  }
-
-  return val;
+  return {val, *iter};
 }
 
-static void strreplace(std::string *str, const std::string &needle,
-                       const std::string &replace) {
+static void StrReplace(std::string* str, const std::string& needle,
+                       const std::string& replace) {
   for (;;) {
     auto pos = str->find(needle);
     if (pos == std::string::npos) {
@@ -93,13 +63,13 @@ static void strreplace(std::string *str, const std::string &needle,
   }
 }
 
-static std::string prepare_url(const std::string &url_template,
-                               const std::string &repo,
-                               const std::string &arch) {
+static std::string prepare_url(const std::string& url_template,
+                               const std::string& repo,
+                               const std::string& arch) {
   std::string url = url_template;
 
-  strreplace(&url, "$arch", arch);
-  strreplace(&url, "$repo", repo);
+  StrReplace(&url, "$arch", arch);
+  StrReplace(&url, "$repo", repo);
 
   std::stringstream ss;
 
@@ -107,34 +77,32 @@ static std::string prepare_url(const std::string &url_template,
   return ss.str();
 }
 
-static int write_cpio_entry(struct archive_conv *conv,
-                            std::filesystem::path &entryname) {
+static int write_cpio_entry(struct archive_conv* conv,
+                            std::filesystem::path& entryname) {
   struct archive_line_reader reader = {};
 
-  std::string line;
-  line.resize(MAX_LINE_SIZE);
-
+  std::array<char, MAX_LINE_SIZE> line;
   reader.line.base = line.data();
 
-  /* discard the first line */
+  // discard the first line
   reader_getline(&reader, conv->in);
 
   std::stringstream entry_data;
   while (reader_getline(&reader, conv->in) == ARCHIVE_OK) {
-    /* do the copy, with a slash prepended */
+    // do the copy, with a slash prepended
     entry_data << "/" << std::string_view(reader.line.base, reader.line.size)
                << '\n';
   }
 
   const auto entry = entry_data.str();
 
-  /* adjust the entry size for removing the first line and adding slashes */
+  // adjust the entry size for removing the first line and adding slashes
   archive_entry_set_size(conv->ae, entry.size());
 
-  /* inodes in cpio archives are dumb. */
+  // inodes in cpio archives are dumb.
   archive_entry_set_ino64(conv->ae, 0);
 
-  /* store the metadata as simply $pkgname-$pkgver-$pkgrel */
+  // store the metadata as simply $pkgname-$pkgver-$pkgrel
   archive_entry_update_pathname_utf8(conv->ae,
                                      entryname.parent_path().string().c_str());
 
@@ -154,21 +122,21 @@ static int write_cpio_entry(struct archive_conv *conv,
   return 0;
 }
 
-static void archive_conv_close(struct archive_conv *conv) {
+static void archive_conv_close(struct archive_conv* conv) {
   archive_write_close(conv->out);
   archive_write_free(conv->out);
   archive_read_close(conv->in);
   archive_read_free(conv->in);
 }
 
-static int archive_conv_open(struct archive_conv *conv,
-                             const struct repo_t *repo) {
+static int archive_conv_open(struct archive_conv* conv,
+                             const struct repo_t* repo) {
   int r;
 
-  /* generally, repo files are gzip compressed, but there's no guarantee of
-   * this. in order to be compression-agnostic, use libarchive's reader/writer
-   * methods. this also gives us an opportunity to rewrite the archive as CPIO,
-   * which is marginally faster given our staunch sequential access. */
+  // generally, repo files are gzip compressed, but there's no guarantee of
+  // this. in order to be compression-agnostic, use libarchive's reader/writer
+  // methods. this also gives us an opportunity to rewrite the archive as CPIO,
+  // which is marginally faster given our staunch sequential access.
 
   conv->reponame = repo->name.c_str();
   stpcpy(stpcpy(conv->tmpfile, repo->diskfile), "~");
@@ -176,7 +144,7 @@ static int archive_conv_open(struct archive_conv *conv,
   conv->in = archive_read_new();
   conv->out = archive_write_new();
 
-  if (conv->in == NULL || conv->out == NULL) {
+  if (conv->in == nullptr || conv->out == nullptr) {
     fputs("error: failed to allocate memory for archive objects\n", stderr);
     return -ENOMEM;
   }
@@ -210,7 +178,7 @@ open_error:
   return -r;
 }
 
-static int repack_repo_data(const struct repo_t *repo) {
+static int repack_repo_data(const struct repo_t* repo) {
   struct archive_conv conv = {};
   int r = 0;
 
@@ -220,7 +188,7 @@ static int repack_repo_data(const struct repo_t *repo) {
 
   while (archive_read_next_header(conv.in, &conv.ae) == ARCHIVE_OK) {
     std::filesystem::path entryname = archive_entry_pathname(conv.ae);
-    /* ignore everything but the /files metadata */
+    // ignore everything but the /files metadata
     if (entryname.filename() == "files") {
       r = write_cpio_entry(&conv, entryname);
       if (r < 0) {
@@ -232,7 +200,7 @@ static int repack_repo_data(const struct repo_t *repo) {
   archive_conv_close(&conv);
 
   if (r < 0) {
-    /* oh noes! */
+    // oh noes!
     if (unlink(conv.tmpfile) < 0 && errno != ENOENT) {
       fprintf(stderr, "error: failed to unlink temporary file: %s: %s\n",
               conv.tmpfile, strerror(errno));
@@ -249,9 +217,9 @@ static int repack_repo_data(const struct repo_t *repo) {
   return 0;
 }
 
-static size_t write_handler(void *ptr, size_t size, size_t nmemb, void *data) {
-  struct repo_t *repo = (repo_t *)data;
-  const uint8_t *p = (uint8_t *)ptr;
+static size_t write_handler(void* ptr, size_t size, size_t nmemb, void* data) {
+  struct repo_t* repo = (repo_t*)data;
+  const uint8_t* p = (uint8_t*)ptr;
   size_t nbytes = size * nmemb;
   ssize_t n = 0;
 
@@ -276,11 +244,11 @@ static size_t write_handler(void *ptr, size_t size, size_t nmemb, void *data) {
 }
 
 static int open_tmpfile(int flags) {
-  const char *tmpdir;
+  const char* tmpdir;
   int fd;
 
   tmpdir = getenv("TMPDIR");
-  if (tmpdir == NULL) {
+  if (tmpdir == nullptr) {
     tmpdir = "/tmp";
   }
 
@@ -299,17 +267,17 @@ static int open_tmpfile(int flags) {
     return -errno;
   }
 
-  /* ignore any (unlikely) error */
+  // ignore any (unlikely) error
   unlink(p.c_str());
 
   return fd;
 }
 
-static int download_queue_request(CURLM *multi, struct repo_t *repo) {
+static int download_queue_request(CURLM* multi, struct repo_t* repo) {
   struct stat st;
 
-  if (repo->curl == NULL) {
-    /* it's my first time, be gentle */
+  if (repo->curl == nullptr) {
+    // it's my first time, be gentle
     if (repo->servers.empty()) {
       fprintf(stderr, "error: no servers configured for repo %s\n",
               repo->name.c_str());
@@ -363,9 +331,9 @@ static int download_queue_request(CURLM *multi, struct repo_t *repo) {
   return 0;
 }
 
-static int print_rate(double xfer, const char *xfer_label, double rate,
+static int print_rate(double xfer, const char* xfer_label, double rate,
                       const char rate_label) {
-  /* We will show 1.62M/s, 11.6M/s, but 116K/s and 1116K/s */
+  // We will show 1.62M/s, 11.6M/s, but 116K/s and 1116K/s
   if (rate < 9.995) {
     return printf("%8.1f %3s  %4.2f%c/s", xfer, xfer_label, rate, rate_label);
   } else if (rate < 99.95) {
@@ -375,52 +343,46 @@ static int print_rate(double xfer, const char *xfer_label, double rate,
   }
 }
 
-static void print_download_success(struct repo_t *repo, int remaining) {
-  const char *rate_label, *xfered_label;
-  double rate, xfered_human;
-  int width;
-
-  rate = repo->tmpfile.size / (now() - repo->dl_time_start);
-  xfered_human = humanize_size(repo->tmpfile.size, '\0', -1, &xfered_label);
+static void print_download_success(struct repo_t* repo, int remaining) {
+  double rate = repo->tmpfile.size /
+                chrono::duration<double>(now() - repo->dl_time_start).count();
+  auto [xfered_human, xfered_label] = Humanize(repo->tmpfile.size);
 
   printf("  download complete: %-20s [", repo->name.c_str());
+
+  int width;
   if (fabs(rate - INFINITY) < DBL_EPSILON) {
     width = printf(" [%6.1f %3s  %7s ", xfered_human, xfered_label, "----");
   } else {
-    double rate_human = humanize_size(rate, '\0', -1, &rate_label);
+    auto [rate_human, rate_label] = Humanize(rate);
     width = print_rate(xfered_human, xfered_label, rate_human, rate_label[0]);
   }
   printf(" %*d remaining]\n", 23 - width, remaining);
 }
 
 static void print_total_dl_stats(int count, double duration, off_t total_xfer) {
-  const char *rate_label, *xfered_label;
-  double rate, xfered_human, rate_human;
-  int width;
+  double rate = total_xfer / duration;
+  auto [xfered_human, xfered_label] = Humanize(total_xfer);
+  auto [rate_human, rate_label] = Humanize(rate);
 
-  rate = total_xfer / duration;
-  xfered_human = humanize_size(total_xfer, '\0', -1, &xfered_label);
-  rate_human = humanize_size(rate, '\0', -1, &rate_label);
-
-  width = printf(":: download complete in %.2fs", duration);
+  int width = printf(":: download complete in %.2fs", duration);
   printf("%*s<", 42 - width, "");
   print_rate(xfered_human, xfered_label, rate_human, rate_label[0]);
   printf(" %2d file%c    >\n", count, count == 1 ? ' ' : 's');
 }
 
-static int download_check_complete(CURLM *multi, int remaining) {
+static int download_check_complete(CURLM* multi, int remaining) {
   int msgs_left;
-  CURLMsg *msg;
 
-  msg = curl_multi_info_read(multi, &msgs_left);
-  if (msg == NULL) {
+  CURLMsg* msg = curl_multi_info_read(multi, &msgs_left);
+  if (msg == nullptr) {
     return -1;
   }
 
   if (msg->msg == CURLMSG_DONE) {
     long uptodate, resp;
-    char *effective_url;
-    struct repo_t *repo;
+    char* effective_url;
+    struct repo_t* repo;
 
     curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &repo);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_CONDITION_UNMET, &uptodate);
@@ -433,7 +395,7 @@ static int download_check_complete(CURLM *multi, int remaining) {
       return 0;
     }
 
-    /* was it a success? */
+    // was it a success?
     if (msg->data.result != CURLE_OK || resp >= 400) {
       repo->dl_result = RESULT_ERROR;
       if (*repo->errmsg) {
@@ -459,11 +421,11 @@ static int download_check_complete(CURLM *multi, int remaining) {
   return 0;
 }
 
-static void download_wait_loop(CURLM *multi) {
+static void download_wait_loop(CURLM* multi) {
   int active_handles;
 
   do {
-    int nfd, rc = curl_multi_wait(multi, NULL, 0, 1000, &nfd);
+    int nfd, rc = curl_multi_wait(multi, nullptr, 0, 1000, &nfd);
     if (rc != CURLM_OK) {
       fprintf(stderr, "error: curl_multi_wait failed (%d)\n", rc);
       break;
@@ -485,16 +447,15 @@ static void download_wait_loop(CURLM *multi) {
   } while (active_handles > 0);
 }
 
-static int wait_for_repacking(std::vector<repo_t> *repos) {
+static int wait_for_repacking(std::vector<repo_t>* repos) {
   int running = 0;
-  for (auto &repo : *repos) {
+  for (auto& repo : *repos) {
     // The future won't be valid if the repo was up to date.
     if (!repo.worker.valid()) {
       continue;
     }
 
-    if (repo.worker.wait_for(std::chrono::seconds(0)) !=
-        std::future_status::ready) {
+    if (repo.worker.wait_for(chrono::seconds(0)) != std::future_status::ready) {
       ++running;
     }
   }
@@ -505,7 +466,7 @@ static int wait_for_repacking(std::vector<repo_t> *repos) {
   }
 
   int r = 0;
-  for (auto &repo : *repos) {
+  for (auto& repo : *repos) {
     if (repo.worker.valid()) {
       r += repo.worker.get();
     }
@@ -514,9 +475,9 @@ static int wait_for_repacking(std::vector<repo_t> *repos) {
   return r;
 }
 
-int pkgfile_update(AlpmConfig *alpm_config, struct config_t *config) {
+int pkgfile_update(AlpmConfig* alpm_config, struct config_t* config) {
   int r, xfer_count = 0, ret = 0;
-  CURLM *curl_multi;
+  CURLM* curl_multi;
   off_t total_xfer = 0;
 
   if (access(config->cachedir, W_OK)) {
@@ -529,8 +490,8 @@ int pkgfile_update(AlpmConfig *alpm_config, struct config_t *config) {
 
   curl_global_init(CURL_GLOBAL_ALL);
   curl_multi = curl_multi_init();
-  if (curl_multi == NULL) {
-    /* this can only fail due to out an OOM condition */
+  if (curl_multi == nullptr) {
+    // this can only fail due to out an OOM condition
     fprintf(stderr, "error: failed to initialize curl: %s\n", strerror(ENOMEM));
     return 1;
   }
@@ -541,13 +502,13 @@ int pkgfile_update(AlpmConfig *alpm_config, struct config_t *config) {
     alpm_config->architecture = un.machine;
   }
 
-  /* ensure all our DBs are 0644 */
+  // ensure all our DBs are 0644
   umask(0022);
 
-  auto &repos = alpm_config->repos;
+  auto& repos = alpm_config->repos;
 
-  /* prime the handle by adding a URL from each repo */
-  for (auto &repo : repos) {
+  // prime the handle by adding a URL from each repo
+  for (auto& repo : repos) {
     repo.arch = alpm_config->architecture;
     repo.force = config->doupdate > 1;
     repo.config = config;
@@ -557,13 +518,12 @@ int pkgfile_update(AlpmConfig *alpm_config, struct config_t *config) {
     }
   }
 
-  auto t_start = std::chrono::system_clock::now();
+  auto t_start = now();
   download_wait_loop(curl_multi);
-  std::chrono::duration<double> dur =
-      std::chrono::system_clock::now() - t_start;
+  chrono::duration<double> dur = now() - t_start;
 
-  /* remove handles, aggregate results */
-  for (auto &repo : repos) {
+  // remove handles, aggregate results
+  for (auto& repo : repos) {
     curl_multi_remove_handle(curl_multi, repo.curl);
     curl_easy_cleanup(repo.curl);
 
@@ -584,7 +544,7 @@ int pkgfile_update(AlpmConfig *alpm_config, struct config_t *config) {
     }
   }
 
-  /* print transfer stats if we downloaded more than 1 file */
+  // print transfer stats if we downloaded more than 1 file
   if (xfer_count > 0) {
     print_total_dl_stats(xfer_count, dur.count(), total_xfer);
   }
@@ -599,4 +559,4 @@ int pkgfile_update(AlpmConfig *alpm_config, struct config_t *config) {
   return ret;
 }
 
-/* vim: set ts=2 sw=2 et: */
+// vim: set ts=2 sw=2 et:

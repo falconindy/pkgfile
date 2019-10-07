@@ -6,7 +6,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "macro.hh"
 #include "repo.hh"
 
 repo_t::~repo_t() {
@@ -15,7 +14,7 @@ repo_t::~repo_t() {
   }
 }
 
-static size_t strtrim(char *str) {
+static size_t strtrim(char* str) {
   char *left = str, *right;
 
   if (!str || *str == '\0') {
@@ -43,18 +42,18 @@ static size_t strtrim(char *str) {
   return right - left;
 }
 
-static char *split_keyval(char *line, const char *sep) {
+static char* split_keyval(char* line, const char* sep) {
   strsep(&line, sep);
   return line;
 }
 
-static int parse_one_file(const char *, std::string *, struct AlpmConfig *);
+static int parse_one_file(const char*, std::string*, struct AlpmConfig*);
 
-static int parse_include(const char *include, std::string *section,
-                         struct AlpmConfig *alpm_config) {
+static int parse_include(const char* include, std::string* section,
+                         struct AlpmConfig* alpm_config) {
   glob_t globbuf;
 
-  if (glob(include, GLOB_NOCHECK, NULL, &globbuf) != 0) {
+  if (glob(include, GLOB_NOCHECK, nullptr, &globbuf) != 0) {
     fprintf(stderr, "warning: globbing failed on '%s': out of memory\n",
             include);
     return -ENOMEM;
@@ -69,14 +68,14 @@ static int parse_include(const char *include, std::string *section,
   return 0;
 }
 
-static int parse_one_file(const char *filename, std::string *section,
-                          struct AlpmConfig *alpm_config) {
-  FILE *fp;
-  char *ptr;
+static int parse_one_file(const char* filename, std::string* section,
+                          struct AlpmConfig* alpm_config) {
+  FILE* fp;
+  char* ptr;
   char line[4096];
-  const char *const server = "Server";
-  const char *const include = "Include";
-  const char *const architecture = "Architecture";
+  constexpr std::string_view kServer = "Server";
+  constexpr std::string_view kInclude = "Include";
+  constexpr std::string_view kArchitecture = "Architecture";
   int in_options = 0, r = 0, lineno = 0;
 
   fp = fopen(filename, "r");
@@ -90,7 +89,7 @@ static int parse_one_file(const char *filename, std::string *section,
     size_t len;
     ++lineno;
 
-    /* remove comments */
+    // remove comments
     ptr = strchr(line, '#');
     if (ptr) {
       *ptr = '\0';
@@ -101,7 +100,7 @@ static int parse_one_file(const char *filename, std::string *section,
       continue;
     }
 
-    /* found a section header */
+    // found a section header
     if (line[0] == '[' && line[len - 1] == ']') {
       section->assign(&line[1], len - 2);
       in_options = len - 2 == 7 && *section == "options";
@@ -114,7 +113,7 @@ static int parse_one_file(const char *filename, std::string *section,
       char *key = line, *val = split_keyval(line, "=");
       size_t keysz = strtrim(key), valsz = strtrim(val);
 
-      if (keysz == strlen(server) && memcmp(key, server, keysz) == 0) {
+      if (std::string_view(key, keysz) == kServer) {
         if (section->empty()) {
           fprintf(
               stderr,
@@ -132,12 +131,11 @@ static int parse_one_file(const char *filename, std::string *section,
           continue;
         }
 
-        alpm_config->repos.back().servers.push_back(val);
-      } else if (keysz == strlen(include) && memcmp(key, include, keysz) == 0) {
+        alpm_config->repos.back().servers.emplace_back(val, valsz);
+      } else if (key == kInclude) {
         parse_include(val, section, alpm_config);
-      } else if (in_options && keysz == strlen(architecture) &&
-                 memcmp(key, architecture, keysz) == 0) {
-        if (valsz != 4 || memcmp(val, "auto", 4) != 0) {
+      } else if (in_options && key == kArchitecture) {
+        if (strcmp(val, "auto") != 0) {
           alpm_config->architecture.assign(val, valsz);
         }
       }
@@ -149,7 +147,7 @@ static int parse_one_file(const char *filename, std::string *section,
   return r;
 }
 
-int AlpmConfig::LoadFromFile(const char *filename, AlpmConfig *alpm_config) {
+int AlpmConfig::LoadFromFile(const char* filename, AlpmConfig* alpm_config) {
   std::string section;
   int k;
 
@@ -161,4 +159,4 @@ int AlpmConfig::LoadFromFile(const char *filename, AlpmConfig *alpm_config) {
   return 0;
 }
 
-/* vim: set ts=2 sw=2 et: */
+// vim: set ts=2 sw=2 et:

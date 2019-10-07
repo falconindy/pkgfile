@@ -1,11 +1,8 @@
 #pragma once
 
-#include <limits.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-
 #include <curl/curl.h>
 
+#include <chrono>
 #include <future>
 #include <string>
 #include <vector>
@@ -21,11 +18,11 @@ struct repo_t {
   explicit repo_t(std::string name) : name(std::move(name)) {}
   ~repo_t();
 
-  repo_t(const repo_t &) = delete;
-  repo_t &operator=(const repo_t &) = delete;
+  repo_t(const repo_t&) = delete;
+  repo_t& operator=(const repo_t&) = delete;
 
-  repo_t(repo_t &&) = default;
-  repo_t &operator=(repo_t &&) = default;
+  repo_t(repo_t&&) = default;
+  repo_t& operator=(repo_t&&) = default;
 
   std::string name;
   std::vector<std::string> servers;
@@ -33,24 +30,24 @@ struct repo_t {
   int fd;
   std::string arch;
 
-  const struct config_t *config;
+  const struct config_t* config;
 
-  /* download stuff */
+  // download stuff, should be moved to a separate class
 
-  /* curl easy handle */
-  CURL *curl = nullptr;
-  /* destination */
+  // curl easy handle
+  CURL* curl = nullptr;
+  // destination
   char diskfile[PATH_MAX];
-  /* index to currently in-use server */
+  // index to currently in-use server
   size_t server_idx = 0;
-  /* error buffer */
+  // error buffer
   char errmsg[CURL_ERROR_SIZE];
-  /* numeric err for determining success */
+  // numeric err for determining success
   enum download_result_t dl_result = RESULT_UNKNOWN;
-  /* force update repos */
+  // force update repos
   short force = false;
-  /* start time for download */
-  double dl_time_start;
+  // start time for download
+  std::chrono::time_point<std::chrono::system_clock> dl_time_start;
 
   std::future<int> worker;
 
@@ -63,10 +60,10 @@ struct repo_t {
 struct AlpmConfig {
   AlpmConfig() {}
 
-  static int LoadFromFile(const char *filename, AlpmConfig *config);
+  static int LoadFromFile(const char* filename, AlpmConfig* config);
 
   std::vector<repo_t> repos;
   std::string architecture;
 };
 
-/* vim: set ts=2 sw=2 et: */
+// vim: set ts=2 sw=2 et:

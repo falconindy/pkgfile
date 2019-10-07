@@ -138,7 +138,7 @@ static bool is_binary(const char* line, const size_t len) {
     goto found_match_candidate;
   }
 
-  // match .../sbin/*
+  // match .../sbin/
   if (ptr >= line + 2 && ptr[-2] == '/' && ptr[-1] == 's') {
     goto found_match_candidate;
   }
@@ -147,7 +147,7 @@ static bool is_binary(const char* line, const size_t len) {
 
 found_match_candidate:
   // ensure that we only match /bin/bar and not /bin/foo/bar
-  return memchr(ptr + 4, '/', (line + len) - (ptr + 4)) == NULL;
+  return memchr(ptr + 4, '/', (line + len) - (ptr + 4)) == nullptr;
 }
 
 static int format_search_result(char** result, const char* repo,
@@ -158,7 +158,7 @@ static int format_search_result(char** result, const char* repo,
 
   if (config.quiet) {
     *result = strdup(pkg->name);
-    return *result == NULL ? -ENOMEM : pkg->namelen;
+    return *result == nullptr ? -ENOMEM : pkg->namelen;
   }
 
   return asprintf(result, "%s/%s", repo, pkg->name);
@@ -184,13 +184,13 @@ static int search_metafile(const char* repo, struct pkg_t* pkg,
 
     if (config.filterfunc(&config.filter, buf->line.base, (int)len,
                           config.matchflags) == 0) {
-      _cleanup_free_ char* line = NULL;
+      _cleanup_free_ char* line = nullptr;
       int prefixlen = format_search_result(&line, repo, pkg);
       if (prefixlen < 0) {
         fputs("error: failed to allocate memory for result\n", stderr);
         return -1;
       }
-      result_add(result, line, config.verbose ? buf->line.base : NULL,
+      result_add(result, line, config.verbose ? buf->line.base : nullptr,
                  config.verbose ? prefixlen : 0);
 
       if (!config.verbose) {
@@ -213,7 +213,7 @@ static int list_metafile(const char* repo, struct pkg_t* pkg, struct archive* a,
   while (reader_getline(buf, a) == ARCHIVE_OK) {
     const size_t len = buf->line.size;
     int prefixlen = 0;
-    _cleanup_free_ char* line = NULL;
+    _cleanup_free_ char* line = nullptr;
 
     if (len == 0 || (config.binaries && !is_binary(buf->line.base, len))) {
       continue;
@@ -221,7 +221,7 @@ static int list_metafile(const char* repo, struct pkg_t* pkg, struct archive* a,
 
     if (config.quiet) {
       line = strdup(buf->line.base);
-      if (line == NULL) {
+      if (line == nullptr) {
         fputs("error: failed to allocate memory\n", stderr);
         return 0;
       }
@@ -232,12 +232,13 @@ static int list_metafile(const char* repo, struct pkg_t* pkg, struct archive* a,
         return 0;
       }
     }
-    result_add(result, line, config.quiet ? NULL : buf->line.base, prefixlen);
+    result_add(result, line, config.quiet ? nullptr : buf->line.base,
+               prefixlen);
   }
 
-  /* When we encounter a match with fixed string matching, we know we're done.
-   *  However, for other filter methods, we can't be sure that our pattern won't
-   *  produce further matches, so we signal our caller to continue. */
+  // When we encounter a match with fixed string matching, we know we're done.
+  // However, for other filter methods, we can't be sure that our pattern won't
+  // produce further matches, so we signal our caller to continue.
   return config.filterby == FILTER_EXACT ? -1 : 0;
 }
 
@@ -314,7 +315,7 @@ static result_t load_repo(repo_t* repo) {
     size_t len;
     int r;
 
-    if (entryname == NULL) {
+    if (entryname == nullptr) {
       // libarchive error
       continue;
     }
@@ -354,7 +355,7 @@ static int compile_pcre_expr(struct filterpattern_t::pcre_data* re,
   const char* err;
   int err_offset;
 
-  re->re = pcre_compile(preg, flags, &err, &err_offset, NULL);
+  re->re = pcre_compile(preg, flags, &err, &err_offset, nullptr);
   if (!re->re) {
     fprintf(stderr, "error: failed to compile regex at char %d: %s\n",
             err_offset, err);
@@ -468,7 +469,7 @@ static int parse_opts(int argc, char** argv) {
   config.cachedir = DEFAULT_CACHEPATH;
 
   for (;;) {
-    opt = getopt_long(argc, argv, shortopts, longopts, NULL);
+    opt = getopt_long(argc, argv, shortopts, longopts, nullptr);
     if (opt < 0) {
       break;
     }
@@ -535,7 +536,7 @@ static int parse_opts(int argc, char** argv) {
         config.raw = true;
         break;
       case 'z':
-        if (optarg != NULL) {
+        if (optarg != nullptr) {
           config.compress = validate_compression(optarg);
           if (config.compress < 0) {
             fprintf(stderr, "error: invalid compression option %s\n", optarg);
