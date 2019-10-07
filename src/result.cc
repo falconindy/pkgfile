@@ -4,17 +4,13 @@
 
 #include "result.hh"
 
-int result_add(struct result_t* result, char* prefix, char* entry,
+int result_add(struct result_t* result, std::string prefix, std::string entry,
                int prefixlen) {
-  if (!result || !prefix) {
-    return 1;
-  }
-
   if (prefixlen > result->max_prefixlen) {
     result->max_prefixlen = prefixlen;
   }
 
-  result->lines.emplace_back(prefix, entry ? entry : "");
+  result->lines.emplace_back(std::move(prefix), std::move(entry));
 
   return 0;
 }
@@ -42,6 +38,10 @@ static void result_print_one_column(struct result_t* result, char eol) {
 }
 
 size_t result_print(struct result_t* result, int prefixlen, char eol) {
+  if (result->lines.empty()) {
+    return 0;
+  }
+
   std::sort(result->lines.begin(), result->lines.end(), linecmp);
 
   // It's expected that results are homogenous, so we can trust the first line.

@@ -13,7 +13,6 @@
 #include <filesystem>
 #include <sstream>
 
-#include "macro.hh"
 #include "pkgfile.hh"
 #include "repo.hh"
 #include "update.hh"

@@ -12,6 +12,9 @@ conf.set_quoted('PACKAGE_NAME', meson.project_name())
 conf.set_quoted('PACKAGE_VERSION', meson.project_version())
 conf.set_quoted('DEFAULT_CACHEPATH', get_option('cachedir'))
 
+# TODO: get rid of this
+conf.set('MAX_LINE_SIZE', '(size_t) (1024 * 10)')
+
 cpp = meson.get_compiler('cpp')
 
 configure_file(
@@ -36,7 +39,6 @@ pkgfile_sources = files('''
   src/repo.cc src/repo.hh
   src/result.cc src/result.hh
   src/update.cc src/update.hh
-  src/macro.hh
 '''.split())
 
 run_target(

@@ -9,9 +9,9 @@
 #include <unistd.h>
 
 #include <future>
+#include <sstream>
 #include <vector>
 
-#include "macro.hh"
 #include "match.hh"
 #include "pkgfile.hh"
 #include "repo.hh"
@@ -22,8 +22,7 @@ static struct config_t config;
 
 static const char* filtermethods[2] = {"glob", "regex"};
 
-static int reader_block_consume(struct archive_line_reader* reader,
-                                struct archive* a) {
+static int reader_block_consume(archive_line_reader* reader, archive* a) {
   int64_t offset;
 
   // end of the archive
@@ -50,8 +49,7 @@ static char* reader_block_find_eol(struct archive_line_reader* reader) {
   return static_cast<char*>(memchr(reader->block.offset, '\n', n));
 }
 
-static bool reader_line_would_overflow(struct archive_line_reader* b,
-                                       size_t append) {
+static bool reader_line_would_overflow(archive_line_reader* b, size_t append) {
   return append >= MAX_LINE_SIZE - (b->line.offset - b->line.base);
 }
 
@@ -83,7 +81,7 @@ static int reader_line_consume(struct archive_line_reader* reader) {
   return found_eol ? 0 : EAGAIN;
 }
 
-int reader_getline(struct archive_line_reader* reader, struct archive* a) {
+int reader_getline(archive_line_reader* reader, archive* a) {
   // Reset the line
   reader->line.offset = reader->line.base;
   reader->line.size = 0;
@@ -150,23 +148,28 @@ found_match_candidate:
   return memchr(ptr + 4, '/', (line + len) - (ptr + 4)) == nullptr;
 }
 
-static int format_search_result(char** result, const char* repo,
-                                struct pkg_t* pkg) {
+static size_t format_search_result(std::string* result, const char* repo,
+                                   const Package& pkg) {
+  std::stringstream ss;
+
   if (config.verbose) {
-    return asprintf(result, "%s/%s %s", repo, pkg->name, pkg->version);
+    ss << repo << '/' << pkg.name << ' ' << pkg.version;
+    result->assign(ss.str());
+    return result->size();
   }
 
   if (config.quiet) {
-    *result = strdup(pkg->name);
-    return *result == nullptr ? -ENOMEM : pkg->namelen;
+    result->assign(pkg.name);
+    return pkg.name.size();
   }
 
-  return asprintf(result, "%s/%s", repo, pkg->name);
+  ss << repo << '/' << pkg.name;
+  result->assign(ss.str());
+  return result->size();
 }
 
-static int search_metafile(const char* repo, struct pkg_t* pkg,
-                           struct archive* a, struct result_t* result,
-                           struct archive_line_reader* buf) {
+static int search_metafile(const char* repo, const Package& pkg, archive* a,
+                           result_t* result, archive_line_reader* buf) {
   while (reader_getline(buf, a) == ARCHIVE_OK) {
     const size_t len = buf->line.size;
 
@@ -182,15 +185,11 @@ static int search_metafile(const char* repo, struct pkg_t* pkg,
       continue;
     }
 
-    if (config.filterfunc(&config.filter, buf->line.base, (int)len,
+    if (config.filterfunc(&config.filter, std::string_view(buf->line.base, len),
                           config.matchflags) == 0) {
-      _cleanup_free_ char* line = nullptr;
-      int prefixlen = format_search_result(&line, repo, pkg);
-      if (prefixlen < 0) {
-        fputs("error: failed to allocate memory for result\n", stderr);
-        return -1;
-      }
-      result_add(result, line, config.verbose ? buf->line.base : nullptr,
+      std::string line;
+      size_t prefixlen = format_search_result(&line, repo, pkg);
+      result_add(result, line, config.verbose ? buf->line.base : std::string(),
                  config.verbose ? prefixlen : 0);
 
       if (!config.verbose) {
@@ -202,38 +201,30 @@ static int search_metafile(const char* repo, struct pkg_t* pkg,
   return 0;
 }
 
-static int list_metafile(const char* repo, struct pkg_t* pkg, struct archive* a,
-                         struct result_t* result,
-                         struct archive_line_reader* buf) {
-  if (config.filterfunc(&config.filter, pkg->name, pkg->namelen,
-                        config.matchflags) != 0) {
+static int list_metafile(const char* repo, const Package& pkg, archive* a,
+                         result_t* result, archive_line_reader* buf) {
+  if (config.filterfunc(&config.filter, pkg.name, config.matchflags) != 0) {
     return 0;
   }
 
   while (reader_getline(buf, a) == ARCHIVE_OK) {
     const size_t len = buf->line.size;
-    int prefixlen = 0;
-    _cleanup_free_ char* line = nullptr;
+    size_t prefixlen = 0;
+    std::string line;
 
     if (len == 0 || (config.binaries && !is_binary(buf->line.base, len))) {
       continue;
     }
 
     if (config.quiet) {
-      line = strdup(buf->line.base);
-      if (line == nullptr) {
-        fputs("error: failed to allocate memory\n", stderr);
-        return 0;
-      }
+      line.assign(buf->line.base);
     } else {
-      prefixlen = asprintf(&line, "%s/%s", repo, pkg->name);
-      if (prefixlen < 0) {
-        fputs("error: failed to allocate memory\n", stderr);
-        return 0;
-      }
+      std::stringstream ss;
+      ss << repo << '/' << pkg.name;
+      line.assign(ss.str());
+      prefixlen = line.size();
     }
-    result_add(result, line, config.quiet ? nullptr : buf->line.base,
-               prefixlen);
+    result_add(result, line, config.quiet ? "" : buf->line.base, prefixlen);
   }
 
   // When we encounter a match with fixed string matching, we know we're done.
@@ -242,25 +233,14 @@ static int list_metafile(const char* repo, struct pkg_t* pkg, struct archive* a,
   return config.filterby == FILTER_EXACT ? -1 : 0;
 }
 
-static int parse_pkgname(struct pkg_t* pkg, const char* entryname, size_t len) {
-  const char *dash, *slash = &entryname[len];
+static int parse_pkgname(Package* pkg, std::string_view entryname) {
+  pkg->name = entryname;
 
-  dash = slash;
-  while (dash > entryname && --dash && *dash != '-')
-    ;
-  while (dash > entryname && --dash && *dash != '-')
-    ;
+  // handle errors
+  pkg->name.remove_suffix(pkg->name.size() - pkg->name.rfind('-'));
+  pkg->name.remove_suffix(pkg->name.size() - pkg->name.rfind('-'));
 
-  if (*dash != '-') {
-    return -EINVAL;
-  }
-
-  memcpy(pkg->name, entryname, len);
-
-  // ->name and ->version share the same memory
-  pkg->name[dash - entryname] = pkg->name[slash - entryname] = '\0';
-  pkg->version = &pkg->name[dash - entryname + 1];
-  pkg->namelen = pkg->version - pkg->name - 1;
+  pkg->version = entryname.substr(pkg->name.size() + 1);
 
   return 0;
 }
@@ -268,12 +248,11 @@ static int parse_pkgname(struct pkg_t* pkg, const char* entryname, size_t len) {
 static result_t load_repo(repo_t* repo) {
   char repofile[FILENAME_MAX];
   std::string line;
-  struct archive* a;
-  struct archive_entry* e;
-  struct pkg_t pkg;
+  archive* a;
+  archive_entry* e;
   struct stat st;
   void* repodata = MAP_FAILED;
-  struct archive_line_reader read_buffer = {};
+  archive_line_reader read_buffer = {};
 
   result_t result(repo->name);
 
@@ -312,25 +291,23 @@ static result_t load_repo(repo_t* repo) {
   line.resize(MAX_LINE_SIZE);
   while (archive_read_next_header(a, &e) == ARCHIVE_OK) {
     const char* entryname = archive_entry_pathname(e);
-    size_t len;
-    int r;
 
     if (entryname == nullptr) {
       // libarchive error
       continue;
     }
 
-    len = strlen(entryname);
-    r = parse_pkgname(&pkg, entryname, len);
+    Package pkg;
+    int r = parse_pkgname(&pkg, entryname);
     if (r < 0) {
       fprintf(stderr, "error parsing pkgname from: %s: %s\n", entryname,
               strerror(-r));
       continue;
     }
 
-    memset(&read_buffer, 0, sizeof(struct archive_line_reader));
+    memset(&read_buffer, 0, sizeof(archive_line_reader));
     read_buffer.line.base = line.data();
-    r = config.filefunc(repo->name.c_str(), &pkg, a, &result, &read_buffer);
+    r = config.filefunc(repo->name.c_str(), pkg, a, &result, &read_buffer);
     if (r < 0) {
       break;
     }
@@ -598,7 +575,7 @@ static std::vector<result_t> search_all_repos(std::vector<repo_t>* repos) {
 }
 
 static int filter_setup(char* arg) {
-  config.filter.glob.globlen = strlen(arg);
+  config.filter.glob.globlen = static_cast<size_t>(strlen(arg));
 
   switch (config.filterby) {
     case FILTER_EXACT:

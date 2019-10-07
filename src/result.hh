@@ -27,7 +27,8 @@ struct result_t {
   int max_prefixlen = 0;
 };
 
-int result_add(struct result_t* result, char* repo, char* entry, int prefixlen);
+int result_add(struct result_t* result, std::string prefix, std::string entry,
+               int prefixlen);
 size_t result_print(struct result_t* result, int prefixlen, char eol);
 size_t results_get_prefixlen(const std::vector<result_t>& results);
 

@@ -1,8 +1,5 @@
 #pragma once
 
-#include <limits.h>
-#include <stdbool.h>
-
 #include <archive.h>
 #include <archive_entry.h>
 
@@ -32,14 +29,13 @@ union filterpattern_t {
   } re;
   struct glob_data {
     char* glob;
-    int globlen;
+    size_t globlen;
   } glob;
 };
 
-struct pkg_t {
-  char name[PATH_MAX];
-  const char* version;
-  int namelen;
+struct Package {
+  std::string_view name;
+  std::string_view version;
 };
 
 struct config_t {
@@ -47,9 +43,9 @@ struct config_t {
   const char* cachedir;
   filterstyle_t filterby;
   filterpattern_t filter;
-  int (*filefunc)(const char* repo, struct pkg_t* pkg, struct archive* a,
-                  struct result_t* result, struct archive_line_reader* buf);
-  int (*filterfunc)(const filterpattern_t* filter, const char* line, int len,
+  int (*filefunc)(const char* repo, const Package& pkg, archive* a,
+                  result_t* result, archive_line_reader* buf);
+  int (*filterfunc)(const filterpattern_t* filter, std::string_view line,
                     int flags);
   void (*filterfree)(filterpattern_t* filter);
   int doupdate;
