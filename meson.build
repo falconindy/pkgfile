@@ -118,3 +118,26 @@ install_data(
 install_data(
   'LICENSE',
   install_dir : join_paths(get_option('datadir'), 'licenses/pkgfile'))
+
+python = import('python')
+py3 = python.find_installation('python3')
+
+python_requirement = '>=3.7'
+if py3.found() and py3.language_version().version_compare(python_requirement)
+  foreach input : [
+    'tests/list.py',
+    'tests/search.py',
+    'tests/update.py',
+  ]
+    basename = input.split('/')[-1].split('.')[0]
+
+    test(
+      'pkgfile_@0@_integration_test'.format(basename),
+      py3,
+      args : [join_paths(meson.source_root(), input)],
+      env : ['PYTHONDONTWRITEBYTECODE=1'])
+  endforeach
+else
+  message('Skipping integration tests, python @0@ not found'.format(
+    python_requirement))
+endif

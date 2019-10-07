@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+sanitizer=${1:-address}
+dir=sanbuild$$
+
+meson setup "$dir" -Db_sanitize="$sanitizer" --buildtype=debugoptimized
+meson test -C "$dir"
