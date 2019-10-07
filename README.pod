@@ -53,7 +53,9 @@ Match directories in search results.
 
 =item B<-g>, B<--glob>
 
-Enable shell-style glob pattern matching. See B<glob>(7).
+Enable shell-style glob pattern matching. See B<glob>(7). Note that the shell
+wildcards I<*> and I<?> will never match path separators. Thus, this kind of
+matching is useful for searching for entries within directories, e.g. I</usr/bin/*>.
 
 =item B<-i>, B<--ignorecase>
 
