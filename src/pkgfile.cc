@@ -20,45 +20,45 @@
 
 static struct config_t config;
 
-static const char *filtermethods[2] = {"glob", "regex"};
+static const char* filtermethods[2] = {"glob", "regex"};
 
-static int reader_block_consume(struct archive_line_reader *reader,
-                                struct archive *a) {
+static int reader_block_consume(struct archive_line_reader* reader,
+                                struct archive* a) {
   int64_t offset;
 
-  /* end of the archive */
+  // end of the archive
   if (reader->ret == ARCHIVE_EOF) {
     return ARCHIVE_EOF;
   }
 
-  /* there's still more that reader_line_consume can use */
+  // there's still more that reader_line_consume can use
   if (reader->block.offset < reader->block.base + reader->block.size) {
     return ARCHIVE_OK;
   }
 
-  /* grab a new block of data from the archive */
-  reader->ret = archive_read_data_block(a, (const void **)&reader->block.base,
+  // grab a new block of data from the archive
+  reader->ret = archive_read_data_block(a, (const void**)&reader->block.base,
                                         &reader->block.size, &offset);
   reader->block.offset = reader->block.base;
 
   return reader->ret;
 }
 
-static char *reader_block_find_eol(struct archive_line_reader *reader) {
+static char* reader_block_find_eol(struct archive_line_reader* reader) {
   size_t n = reader->block.base + reader->block.size - reader->block.offset;
 
   return static_cast<char*>(memchr(reader->block.offset, '\n', n));
 }
 
-static bool reader_line_would_overflow(struct archive_line_reader *b,
+static bool reader_line_would_overflow(struct archive_line_reader* b,
                                        size_t append) {
   return append >= MAX_LINE_SIZE - (b->line.offset - b->line.base);
 }
 
-static int reader_line_consume(struct archive_line_reader *reader) {
+static int reader_line_consume(struct archive_line_reader* reader) {
   size_t copylen;
   bool found_eol;
-  char *endp = reader_block_find_eol(reader);
+  char* endp = reader_block_find_eol(reader);
 
   found_eol = endp != NULL;
 
@@ -72,19 +72,19 @@ static int reader_line_consume(struct archive_line_reader *reader) {
     return ENOBUFS;
   }
 
-  /* do a real copy from the block to the line buffer */
+  // do a real copy from the block to the line buffer
   reader->line.offset =
-      (char *)mempcpy(reader->line.offset, reader->block.offset, copylen);
+      (char*)mempcpy(reader->line.offset, reader->block.offset, copylen);
   *reader->line.offset = '\0';
   reader->line.size += copylen;
   reader->block.offset += copylen + 1;
 
-  /* return EAGAIN if we don't yet have a full line */
+  // return EAGAIN if we don't yet have a full line
   return found_eol ? 0 : EAGAIN;
 }
 
-int reader_getline(struct archive_line_reader *reader, struct archive *a) {
-  /* Reset the line */
+int reader_getline(struct archive_line_reader* reader, struct archive* a) {
+  // Reset the line
   reader->line.offset = reader->line.base;
   reader->line.size = 0;
 
@@ -105,40 +105,40 @@ int reader_getline(struct archive_line_reader *reader, struct archive *a) {
   }
 }
 
-static bool is_directory(const char *line, const size_t len) {
+static bool is_directory(const char* line, const size_t len) {
   return line[len - 1] == '/';
 }
 
-static bool is_binary(const char *line, const size_t len) {
-  const char *ptr;
+static bool is_binary(const char* line, const size_t len) {
+  const char* ptr;
 
   if (is_directory(line, len)) {
     return false;
   }
 
-  ptr = (char *)memmem(line, len, "bin/", 4);
+  ptr = (char*)memmem(line, len, "bin/", 4);
 
-  /* toss out the obvious non-matches */
+  // toss out the obvious non-matches
   if (!ptr) {
     return false;
   }
 
-  /* match bin/... */
+  // match bin/...
   if (ptr == line) {
     goto found_match_candidate;
   }
 
-  /* match sbin/... */
+  // match sbin/...
   if (line == ptr - 1 && ptr[-1] == 's') {
     goto found_match_candidate;
   }
 
-  /* match .../bin/ */
+  // match .../bin/
   if (ptr[-1] == '/') {
     goto found_match_candidate;
   }
 
-  /* match .../sbin/ */
+  // match .../sbin/*
   if (ptr >= line + 2 && ptr[-2] == '/' && ptr[-1] == 's') {
     goto found_match_candidate;
   }
@@ -146,12 +146,12 @@ static bool is_binary(const char *line, const size_t len) {
   return false;
 
 found_match_candidate:
-  /* ensure that we only match /bin/bar and not /bin/foo/bar */
+  // ensure that we only match /bin/bar and not /bin/foo/bar
   return memchr(ptr + 4, '/', (line + len) - (ptr + 4)) == NULL;
 }
 
-static int format_search_result(char **result, const char *repo,
-                                struct pkg_t *pkg) {
+static int format_search_result(char** result, const char* repo,
+                                struct pkg_t* pkg) {
   if (config.verbose) {
     return asprintf(result, "%s/%s %s", repo, pkg->name, pkg->version);
   }
@@ -164,9 +164,9 @@ static int format_search_result(char **result, const char *repo,
   return asprintf(result, "%s/%s", repo, pkg->name);
 }
 
-static int search_metafile(const char *repo, struct pkg_t *pkg,
-                           struct archive *a, struct result_t *result,
-                           struct archive_line_reader *buf) {
+static int search_metafile(const char* repo, struct pkg_t* pkg,
+                           struct archive* a, struct result_t* result,
+                           struct archive_line_reader* buf) {
   while (reader_getline(buf, a) == ARCHIVE_OK) {
     const size_t len = buf->line.size;
 
@@ -184,7 +184,7 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
 
     if (config.filterfunc(&config.filter, buf->line.base, (int)len,
                           config.matchflags) == 0) {
-      _cleanup_free_ char *line = NULL;
+      _cleanup_free_ char* line = NULL;
       int prefixlen = format_search_result(&line, repo, pkg);
       if (prefixlen < 0) {
         fputs("error: failed to allocate memory for result\n", stderr);
@@ -202,9 +202,9 @@ static int search_metafile(const char *repo, struct pkg_t *pkg,
   return 0;
 }
 
-static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
-                         struct result_t *result,
-                         struct archive_line_reader *buf) {
+static int list_metafile(const char* repo, struct pkg_t* pkg, struct archive* a,
+                         struct result_t* result,
+                         struct archive_line_reader* buf) {
   if (config.filterfunc(&config.filter, pkg->name, pkg->namelen,
                         config.matchflags) != 0) {
     return 0;
@@ -213,7 +213,7 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
   while (reader_getline(buf, a) == ARCHIVE_OK) {
     const size_t len = buf->line.size;
     int prefixlen = 0;
-    _cleanup_free_ char *line = NULL;
+    _cleanup_free_ char* line = NULL;
 
     if (len == 0 || (config.binaries && !is_binary(buf->line.base, len))) {
       continue;
@@ -236,12 +236,12 @@ static int list_metafile(const char *repo, struct pkg_t *pkg, struct archive *a,
   }
 
   /* When we encounter a match with fixed string matching, we know we're done.
-   * However, for other filter methods, we can't be sure that our pattern won't
-   * produce further matches, so we signal our caller to continue. */
+   *  However, for other filter methods, we can't be sure that our pattern won't
+   *  produce further matches, so we signal our caller to continue. */
   return config.filterby == FILTER_EXACT ? -1 : 0;
 }
 
-static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
+static int parse_pkgname(struct pkg_t* pkg, const char* entryname, size_t len) {
   const char *dash, *slash = &entryname[len];
 
   dash = slash;
@@ -256,7 +256,7 @@ static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
 
   memcpy(pkg->name, entryname, len);
 
-  /* ->name and ->version share the same memory */
+  // ->name and ->version share the same memory
   pkg->name[dash - entryname] = pkg->name[slash - entryname] = '\0';
   pkg->version = &pkg->name[dash - entryname + 1];
   pkg->namelen = pkg->version - pkg->name - 1;
@@ -264,14 +264,14 @@ static int parse_pkgname(struct pkg_t *pkg, const char *entryname, size_t len) {
   return 0;
 }
 
-static result_t load_repo(repo_t *repo) {
+static result_t load_repo(repo_t* repo) {
   char repofile[FILENAME_MAX];
   std::string line;
-  struct archive *a;
-  struct archive_entry *e;
+  struct archive* a;
+  struct archive_entry* e;
   struct pkg_t pkg;
   struct stat st;
-  void *repodata = MAP_FAILED;
+  void* repodata = MAP_FAILED;
   struct archive_line_reader read_buffer = {};
 
   result_t result(repo->name);
@@ -285,7 +285,7 @@ static result_t load_repo(repo_t *repo) {
 
   repo->fd = open(repofile, O_RDONLY);
   if (repo->fd < 0) {
-    /* fail silently if the file doesn't exist */
+    // fail silently if the file doesn't exist
     if (errno != ENOENT) {
       fprintf(stderr, "error: failed to open repo: %s: %s\n", repofile,
               strerror(errno));
@@ -310,12 +310,12 @@ static result_t load_repo(repo_t *repo) {
 
   line.resize(MAX_LINE_SIZE);
   while (archive_read_next_header(a, &e) == ARCHIVE_OK) {
-    const char *entryname = archive_entry_pathname(e);
+    const char* entryname = archive_entry_pathname(e);
     size_t len;
     int r;
 
     if (entryname == NULL) {
-      /* libarchive error */
+      // libarchive error
       continue;
     }
 
@@ -349,9 +349,9 @@ cleanup:
   return result;
 }
 
-static int compile_pcre_expr(struct filterpattern_t::pcre_data *re,
-                             const char *preg, int flags) {
-  const char *err;
+static int compile_pcre_expr(struct filterpattern_t::pcre_data* re,
+                             const char* preg, int flags) {
+  const char* err;
   int err_offset;
 
   re->re = pcre_compile(preg, flags, &err, &err_offset, NULL);
@@ -371,7 +371,7 @@ static int compile_pcre_expr(struct filterpattern_t::pcre_data *re,
   return 0;
 }
 
-static int validate_compression(const char *compress) {
+static int validate_compression(const char* compress) {
   if (strcmp(compress, "none") == 0) {
     return ARCHIVE_FILTER_NONE;
   } else if (strcmp(compress, "gzip") == 0) {
@@ -437,9 +437,9 @@ static void print_version(void) {
   fputs(PACKAGE_NAME " v" PACKAGE_VERSION "\n", stdout);
 }
 
-static int parse_opts(int argc, char **argv) {
+static int parse_opts(int argc, char** argv) {
   int opt;
-  static const char *shortopts = "0bC:D:dghilqR:rsuVvwz::";
+  static const char* shortopts = "0bC:D:dghilqR:rsuVvwz::";
   static const struct option longopts[] = {
       {"binaries", no_argument, 0, 'b'},
       {"cachedir", required_argument, 0, 'D'},
@@ -461,7 +461,7 @@ static int parse_opts(int argc, char **argv) {
       {"null", no_argument, 0, '0'},
       {0, 0, 0, 0}};
 
-  /* defaults */
+  // defaults
   config.filefunc = search_metafile;
   config.eol = '\n';
   config.cfgfile = PACMANCONFIG;
@@ -553,7 +553,7 @@ static int parse_opts(int argc, char **argv) {
   return 0;
 }
 
-static int search_single_repo(std::vector<repo_t> *repos, char *searchstring) {
+static int search_single_repo(std::vector<repo_t>* repos, char* searchstring) {
   if (!config.targetrepo) {
     config.targetrepo = strsep(&searchstring, "/");
     config.filter.glob.glob = searchstring;
@@ -561,7 +561,7 @@ static int search_single_repo(std::vector<repo_t> *repos, char *searchstring) {
     config.filterby = FILTER_EXACT;
   }
 
-  for (auto &repo : *repos) {
+  for (auto& repo : *repos) {
     if (strcmp(repo.name.c_str(), config.targetrepo) == 0) {
       int r;
 
@@ -574,29 +574,29 @@ static int search_single_repo(std::vector<repo_t> *repos, char *searchstring) {
     }
   }
 
-  /* repo not found */
+  // repo not found
   fprintf(stderr, "error: repo not available: %s\n", config.targetrepo);
 
   return 1;
 }
 
-static std::vector<result_t> search_all_repos(std::vector<repo_t> *repos) {
+static std::vector<result_t> search_all_repos(std::vector<repo_t>* repos) {
   std::vector<result_t> results;
   std::vector<std::future<result_t>> futures;
 
-  for (auto &repo : *repos) {
+  for (auto& repo : *repos) {
     futures.push_back(
         std::async(std::launch::async, [&repo] { return load_repo(&repo); }));
   }
 
-  for (auto &fu : futures) {
+  for (auto& fu : futures) {
     results.emplace_back(fu.get());
   }
 
   return results;
 }
 
-static int filter_setup(char *arg) {
+static int filter_setup(char* arg) {
   config.filter.glob.globlen = strlen(arg);
 
   switch (config.filterby) {
@@ -620,7 +620,7 @@ static int filter_setup(char *arg) {
   return 0;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   int reposfound = 0, ret = 0;
   AlpmConfig alpm_config;
   std::vector<result_t> results;
@@ -636,7 +636,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  auto *repos = &alpm_config.repos;
+  auto* repos = &alpm_config.repos;
   if (repos->empty()) {
     fprintf(stderr, "error: no repos found in %s\n", config.cfgfile);
     return 1;
@@ -656,7 +656,7 @@ int main(int argc, char *argv[]) {
     goto cleanup;
   }
 
-  /* override behavior on $repo/$pkg syntax or --repo */
+  // override behavior on $repo/$pkg syntax or --repo
   if ((config.filefunc == list_metafile && config.filterby == FILTER_EXACT &&
        strchr(argv[optind], '/')) ||
       config.targetrepo) {
@@ -687,4 +687,4 @@ cleanup:
   return ret;
 }
 
-/* vim: set ts=2 sw=2 et: */
+// vim: set ts=2 sw=2 et:
