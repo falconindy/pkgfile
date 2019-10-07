@@ -277,7 +277,6 @@ static size_t write_handler(void *ptr, size_t size, size_t nmemb, void *data) {
 
 static int open_tmpfile(int flags) {
   const char *tmpdir;
-  _cleanup_free_ char *p = NULL;
   int fd;
 
   tmpdir = getenv("TMPDIR");
@@ -292,17 +291,16 @@ static int open_tmpfile(int flags) {
   }
 #endif
 
-  if (asprintf(&p, "%s/pkgfile-tmp-XXXXXX", tmpdir) < 0) {
-    return -ENOMEM;
-  }
+  std::string p(tmpdir);
+  p.append("/pkgfile-tmp-XXXXXX");
 
-  fd = mkostemp(p, flags);
+  fd = mkostemp(p.data(), flags);
   if (fd < 0) {
     return -errno;
   }
 
   /* ignore any (unlikely) error */
-  unlink(p);
+  unlink(p.c_str());
 
   return fd;
 }

@@ -18,7 +18,7 @@ enum download_result_t {
 };
 
 struct repo_t {
-  explicit repo_t(const char *name) : name(name) {}
+  explicit repo_t(std::string name) : name(std::move(name)) {}
   ~repo_t();
 
   repo_t(const repo_t &) = delete;

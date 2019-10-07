@@ -48,9 +48,9 @@ static char *split_keyval(char *line, const char *sep) {
   return line;
 }
 
-static int parse_one_file(const char *, char **, struct repovec_t *);
+static int parse_one_file(const char *, std::string *, struct repovec_t *);
 
-static int parse_include(const char *include, char **section,
+static int parse_include(const char *include, std::string *section,
                          struct repovec_t *repos) {
   glob_t globbuf;
 
@@ -69,7 +69,7 @@ static int parse_include(const char *include, char **section,
   return 0;
 }
 
-static int parse_one_file(const char *filename, char **section,
+static int parse_one_file(const char *filename, std::string *section,
                           struct repovec_t *repos) {
   FILE *fp;
   char *ptr;
@@ -103,9 +103,8 @@ static int parse_one_file(const char *filename, char **section,
 
     /* found a section header */
     if (line[0] == '[' && line[len - 1] == ']') {
-      free(*section);
-      *section = strndup(&line[1], len - 2);
-      in_options = len - 2 == 7 && memcmp(*section, "options", 7) == 0;
+      section->assign(&line[1], len - 2);
+      in_options = len - 2 == 7 && *section == "options";
       if (!in_options) {
         repos->repos.emplace_back(*section);
       }
@@ -116,7 +115,7 @@ static int parse_one_file(const char *filename, char **section,
       size_t keysz = strtrim(key), valsz = strtrim(val);
 
       if (keysz == strlen(server) && memcmp(key, server, keysz) == 0) {
-        if (*section == NULL) {
+        if (section->empty()) {
           fprintf(
               stderr,
               "error: failed to parse %s on line %d: found 'Server' directive "
@@ -151,7 +150,7 @@ static int parse_one_file(const char *filename, char **section,
 }
 
 int load_repos_from_file(const char *filename, struct repovec_t *repos) {
-  _cleanup_free_ char *section = NULL;
+  std::string section;
   int k;
 
   k = parse_one_file(filename, &section, repos);
