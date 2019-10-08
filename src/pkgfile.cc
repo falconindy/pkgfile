@@ -103,18 +103,18 @@ int reader_getline(archive_line_reader* reader, archive* a) {
   }
 }
 
-static bool is_directory(const char* line, const size_t len) {
-  return line[len - 1] == '/';
+static bool is_directory(std::string_view line) {
+  return line[line.size() - 1] == '/';
 }
 
-static bool is_binary(const char* line, const size_t len) {
+static bool is_binary(std::string_view line) {
   const char* ptr;
 
-  if (is_directory(line, len)) {
+  if (is_directory(line)) {
     return false;
   }
 
-  ptr = (char*)memmem(line, len, "bin/", 4);
+  ptr = (char*)memmem(line.data(), line.size(), "bin/", 4);
 
   // toss out the obvious non-matches
   if (!ptr) {
@@ -137,7 +137,7 @@ static bool is_binary(const char* line, const size_t len) {
   }
 
   // match .../sbin/
-  if (ptr >= line + 2 && ptr[-2] == '/' && ptr[-1] == 's') {
+  if (ptr >= line.data() + 2 && ptr[-2] == '/' && ptr[-1] == 's') {
     goto found_match_candidate;
   }
 
@@ -145,7 +145,8 @@ static bool is_binary(const char* line, const size_t len) {
 
 found_match_candidate:
   // ensure that we only match /bin/bar and not /bin/foo/bar
-  return memchr(ptr + 4, '/', (line + len) - (ptr + 4)) == nullptr;
+  return memchr(ptr + 4, '/', (line.data() + line.size()) - (ptr + 4)) ==
+         nullptr;
 }
 
 static size_t format_search_result(std::string* result, const char* repo,
@@ -171,22 +172,21 @@ static size_t format_search_result(std::string* result, const char* repo,
 static int search_metafile(const char* repo, const Package& pkg, archive* a,
                            result_t* result, archive_line_reader* buf) {
   while (reader_getline(buf, a) == ARCHIVE_OK) {
-    const size_t len = buf->line.size;
+    std::string_view line(buf->line.base, buf->line.size);
 
-    if (len == 0) {
+    if (line.empty()) {
       continue;
     }
 
-    if (!config.directories && is_directory(buf->line.base, len)) {
+    if (!config.directories && is_directory(line)) {
       continue;
     }
 
-    if (config.binaries && !is_binary(buf->line.base, len)) {
+    if (config.binaries && !is_binary(line)) {
       continue;
     }
 
-    if (config.filterfunc(&config.filter, std::string_view(buf->line.base, len),
-                          config.matchflags) == 0) {
+    if (config.filterfunc(&config.filter, line, config.matchflags) == 0) {
       std::string line;
       size_t prefixlen = format_search_result(&line, repo, pkg);
       result_add(result, line, config.verbose ? buf->line.base : std::string(),
@@ -208,16 +208,16 @@ static int list_metafile(const char* repo, const Package& pkg, archive* a,
   }
 
   while (reader_getline(buf, a) == ARCHIVE_OK) {
-    const size_t len = buf->line.size;
     size_t prefixlen = 0;
-    std::string line;
 
-    if (len == 0 || (config.binaries && !is_binary(buf->line.base, len))) {
+    std::string_view sv(buf->line.base, buf->line.size);
+    if (sv.empty() || (config.binaries && !is_binary(sv))) {
       continue;
     }
 
+    std::string line;
     if (config.quiet) {
-      line.assign(buf->line.base);
+      line.assign(buf->line.base, buf->line.size);
     } else {
       std::stringstream ss;
       ss << repo << '/' << pkg.name;
