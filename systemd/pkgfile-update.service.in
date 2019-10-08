@@ -1,6 +1,8 @@
 [Unit]
 Description=pkgfile database update
 RequiresMountsFor=@DEFAULT_CACHEPATH@
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
