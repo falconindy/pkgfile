@@ -44,18 +44,10 @@ static int reader_block_consume(struct archive_line_reader *reader,
   return reader->ret;
 }
 
-static void *reader_block_find_eol(struct archive_line_reader *reader) {
-  void *endp;
+static char *reader_block_find_eol(struct archive_line_reader *reader) {
   size_t n = reader->block.base + reader->block.size - reader->block.offset;
 
-  /* Find the end of the copy-worthy region. This might be a newline
-   * or simply the end of the data block read from the archive. */
-  endp = memchr(reader->block.offset, '\n', n);
-  if (endp == NULL) {
-    endp = reader->block.base + reader->block.size;
-  }
-
-  return endp;
+  return memchr(reader->block.offset, '\n', n);
 }
 
 static bool reader_line_would_overflow(struct archive_line_reader *b,
@@ -64,8 +56,17 @@ static bool reader_line_would_overflow(struct archive_line_reader *b,
 }
 
 static int reader_line_consume(struct archive_line_reader *reader) {
+  size_t copylen;
+  bool found_eol;
   char *endp = reader_block_find_eol(reader);
-  size_t copylen = endp - reader->block.offset;
+
+  found_eol = endp != NULL;
+
+  if (!found_eol) {
+    endp = reader->block.base + reader->block.size;
+  }
+
+  copylen = endp - reader->block.offset;
 
   if (reader_line_would_overflow(reader, copylen)) {
     return ENOBUFS;
@@ -79,7 +80,7 @@ static int reader_line_consume(struct archive_line_reader *reader) {
   reader->block.offset += copylen + 1;
 
   /* return EAGAIN if we don't yet have a full line */
-  return *endp == '\n' ? 0 : EAGAIN;
+  return found_eol ? 0 : EAGAIN;
 }
 
 int reader_getline(struct archive_line_reader *reader, struct archive *a) {
