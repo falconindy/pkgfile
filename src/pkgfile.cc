@@ -1,6 +1,5 @@
 #include <errno.h>
 #include <fcntl.h>
-#include <fnmatch.h>
 #include <getopt.h>
 #include <locale.h>
 #include <string.h>
@@ -12,7 +11,7 @@
 #include <sstream>
 #include <vector>
 
-#include "match.hh"
+#include "filter.hh"
 #include "pkgfile.hh"
 #include "repo.hh"
 #include "result.hh"
@@ -103,52 +102,6 @@ int reader_getline(archive_line_reader* reader, archive* a) {
   }
 }
 
-static bool is_directory(std::string_view line) {
-  return line[line.size() - 1] == '/';
-}
-
-static bool is_binary(std::string_view line) {
-  const char* ptr;
-
-  if (is_directory(line)) {
-    return false;
-  }
-
-  ptr = (char*)memmem(line.data(), line.size(), "bin/", 4);
-
-  // toss out the obvious non-matches
-  if (!ptr) {
-    return false;
-  }
-
-  // match bin/...
-  if (ptr == line) {
-    goto found_match_candidate;
-  }
-
-  // match sbin/...
-  if (line == ptr - 1 && ptr[-1] == 's') {
-    goto found_match_candidate;
-  }
-
-  // match .../bin/
-  if (ptr[-1] == '/') {
-    goto found_match_candidate;
-  }
-
-  // match .../sbin/
-  if (ptr >= line.data() + 2 && ptr[-2] == '/' && ptr[-1] == 's') {
-    goto found_match_candidate;
-  }
-
-  return false;
-
-found_match_candidate:
-  // ensure that we only match /bin/bar and not /bin/foo/bar
-  return memchr(ptr + 4, '/', (line.data() + line.size()) - (ptr + 4)) ==
-         nullptr;
-}
-
 static size_t format_search_result(std::string* result, const char* repo,
                                    const Package& pkg) {
   std::stringstream ss;
@@ -169,49 +122,42 @@ static size_t format_search_result(std::string* result, const char* repo,
   return result->size();
 }
 
-static int search_metafile(const char* repo, const Package& pkg, archive* a,
-                           result_t* result, archive_line_reader* buf) {
+static int search_metafile(const char* repo, const pkgfile::filter::Filter& filter,
+                           const Package& pkg, archive* a, result_t* result,
+                           archive_line_reader* buf) {
   while (reader_getline(buf, a) == ARCHIVE_OK) {
     std::string_view line(buf->line.base, buf->line.size);
 
-    if (line.empty()) {
+    if (line.empty() || !filter.Matches(line)) {
       continue;
     }
 
-    if (!config.directories && is_directory(line)) {
-      continue;
-    }
+    std::string out;
+    size_t prefixlen = format_search_result(&out, repo, pkg);
+    result_add(result, out, config.verbose ? buf->line.base : std::string(),
+               config.verbose ? prefixlen : 0);
 
-    if (config.binaries && !is_binary(line)) {
-      continue;
-    }
-
-    if (config.filterfunc(&config.filter, line, config.matchflags) == 0) {
-      std::string line;
-      size_t prefixlen = format_search_result(&line, repo, pkg);
-      result_add(result, line, config.verbose ? buf->line.base : std::string(),
-                 config.verbose ? prefixlen : 0);
-
-      if (!config.verbose) {
-        return 0;
-      }
+    if (!config.verbose) {
+      return 0;
     }
   }
 
   return 0;
 }
 
-static int list_metafile(const char* repo, const Package& pkg, archive* a,
-                         result_t* result, archive_line_reader* buf) {
-  if (config.filterfunc(&config.filter, pkg.name, config.matchflags) != 0) {
+static int list_metafile(const char* repo, const pkgfile::filter::Filter& filter,
+                         const Package& pkg, archive* a, result_t* result,
+                         archive_line_reader* buf) {
+  if (!filter.Matches(pkg.name)) {
     return 0;
   }
 
+  pkgfile::filter::Bin is_bin;
   while (reader_getline(buf, a) == ARCHIVE_OK) {
     size_t prefixlen = 0;
 
     std::string_view sv(buf->line.base, buf->line.size);
-    if (sv.empty() || (config.binaries && !is_binary(sv))) {
+    if (config.binaries && !is_bin.Matches(sv)) {
       continue;
     }
 
@@ -245,7 +191,7 @@ static int parse_pkgname(Package* pkg, std::string_view entryname) {
   return 0;
 }
 
-static result_t load_repo(repo_t* repo) {
+static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
   char repofile[FILENAME_MAX];
   std::string line;
   archive* a;
@@ -307,7 +253,8 @@ static result_t load_repo(repo_t* repo) {
 
     memset(&read_buffer, 0, sizeof(archive_line_reader));
     read_buffer.line.base = line.data();
-    r = config.filefunc(repo->name.c_str(), pkg, a, &result, &read_buffer);
+    r = config.filefunc(repo->name.c_str(), filter, pkg, a, &result,
+                        &read_buffer);
     if (r < 0) {
       break;
     }
@@ -325,28 +272,6 @@ cleanup:
   }
 
   return result;
-}
-
-static int compile_pcre_expr(struct filterpattern_t::pcre_data* re,
-                             const char* preg, int flags) {
-  const char* err;
-  int err_offset;
-
-  re->re = pcre_compile(preg, flags, &err, &err_offset, nullptr);
-  if (!re->re) {
-    fprintf(stderr, "error: failed to compile regex at char %d: %s\n",
-            err_offset, err);
-    return 1;
-  }
-
-  re->re_extra = pcre_study(re->re, PCRE_STUDY_JIT_COMPILE, &err);
-  if (err) {
-    fprintf(stderr, "error: failed to study regex: %s\n", err);
-    pcre_free(re->re);
-    return 1;
-  }
-
-  return 0;
 }
 
 static int validate_compression(const char* compress) {
@@ -444,6 +369,7 @@ static int parse_opts(int argc, char** argv) {
   config.eol = '\n';
   config.cfgfile = PACMANCONFIG;
   config.cachedir = DEFAULT_CACHEPATH;
+  config.mode = MODE_SEARCH;
 
   for (;;) {
     opt = getopt_long(argc, argv, shortopts, longopts, nullptr);
@@ -481,6 +407,7 @@ static int parse_opts(int argc, char** argv) {
         config.icase = true;
         break;
       case 'l':
+        config.mode = MODE_LIST;
         config.filefunc = list_metafile;
         break;
       case 'q':
@@ -498,6 +425,7 @@ static int parse_opts(int argc, char** argv) {
         config.filterby = FILTER_REGEX;
         break;
       case 's':
+        config.mode = MODE_SEARCH;
         config.filefunc = search_metafile;
         break;
       case 'u':
@@ -531,25 +459,25 @@ static int parse_opts(int argc, char** argv) {
   return 0;
 }
 
-static int search_single_repo(std::vector<repo_t>* repos, char* searchstring) {
-  if (!config.targetrepo) {
-    config.targetrepo = strsep(&searchstring, "/");
-    config.filter.glob.glob = searchstring;
-    config.filter.glob.globlen = strlen(searchstring);
-    config.filterby = FILTER_EXACT;
+static int search_single_repo(std::vector<repo_t>* repos,
+                              const pkgfile::filter::Filter& filter,
+                              std::string_view searchstring) {
+  std::string_view wanted_repo;
+  if (config.targetrepo) {
+    wanted_repo = config.targetrepo;
+  } else {
+    wanted_repo = searchstring.substr(0, searchstring.find('/'));
   }
 
   for (auto& repo : *repos) {
-    if (strcmp(repo.name.c_str(), config.targetrepo) == 0) {
-      int r;
-
-      auto result = load_repo(&repo);
-      r = result.lines.empty();
-
-      result_print(&result, config.raw ? 0 : result.max_prefixlen, config.eol);
-
-      return r;
+    if (repo.name != wanted_repo) {
+      continue;
     }
+
+    auto result = load_repo(&repo, filter);
+    result_print(&result, config.raw ? 0 : result.max_prefixlen, config.eol);
+
+    return result.lines.empty();
   }
 
   // repo not found
@@ -558,13 +486,14 @@ static int search_single_repo(std::vector<repo_t>* repos, char* searchstring) {
   return 1;
 }
 
-static std::vector<result_t> search_all_repos(std::vector<repo_t>* repos) {
+static std::vector<result_t> search_all_repos(std::vector<repo_t>* repos,
+                                              const pkgfile::filter::Filter& filter) {
   std::vector<result_t> results;
   std::vector<std::future<result_t>> futures;
 
   for (auto& repo : *repos) {
-    futures.push_back(
-        std::async(std::launch::async, [&repo] { return load_repo(&repo); }));
+    futures.push_back(std::async(std::launch::async,
+                                 [&] { return load_repo(&repo, filter); }));
   }
 
   for (auto& fu : futures) {
@@ -574,28 +503,61 @@ static std::vector<result_t> search_all_repos(std::vector<repo_t>* repos) {
   return results;
 }
 
-static int filter_setup(char* arg) {
-  config.filter.glob.globlen = static_cast<size_t>(strlen(arg));
+std::unique_ptr<pkgfile::filter::Filter> BuildFilterFromOptions(
+    const config_t& config, const std::string& match) {
+  std::unique_ptr<pkgfile::filter::Filter> filter;
+
+  bool case_sensitive = !config.icase;
 
   switch (config.filterby) {
     case FILTER_EXACT:
-      config.matchflags = config.icase;
-      config.filter.glob.glob = arg;
-      config.filterfunc = strchr(arg, '/') ? match_exact : match_exact_basename;
+      if (config.mode == MODE_SEARCH) {
+        if (match.find('/') != std::string::npos) {
+          filter =
+              std::make_unique<pkgfile::filter::Exact>(match, case_sensitive);
+        } else {
+          filter =
+              std::make_unique<pkgfile::filter::Basename>(match, case_sensitive);
+        }
+      } else if (config.mode == MODE_LIST) {
+        auto pos = match.find('/');
+        if (pos != std::string::npos) {
+          filter = std::make_unique<pkgfile::filter::Exact>(match.substr(pos + 1),
+                                                          case_sensitive);
+        } else {
+          filter =
+              std::make_unique<pkgfile::filter::Exact>(match, case_sensitive);
+        }
+      }
       break;
     case FILTER_GLOB:
-      config.matchflags = FNM_PATHNAME | (config.icase ? FNM_CASEFOLD : 0);
-      config.filter.glob.glob = arg;
-      config.filterfunc = match_glob;
+      filter = std::make_unique<pkgfile::filter::Glob>(match, case_sensitive);
       break;
     case FILTER_REGEX:
-      config.matchflags = config.icase ? PCRE_CASELESS : 0;
-      config.filterfunc = match_regex;
-      config.filterfree = free_regex;
-      return compile_pcre_expr(&config.filter.re, arg, config.matchflags);
+      filter = pkgfile::filter::Regex::Compile(match, case_sensitive);
+      if (filter == nullptr) {
+        return nullptr;
+      }
+      break;
   }
 
-  return 0;
+  if (config.mode == MODE_SEARCH) {
+    if (config.binaries) {
+      filter = std::make_unique<pkgfile::filter::And>(
+          std::make_unique<pkgfile::filter::Bin>(), std::move(filter));
+    }
+
+    std::unique_ptr<pkgfile::filter::Filter> dir_filter =
+        std::make_unique<pkgfile::filter::Directory>();
+    if (!config.directories) {
+      dir_filter = std::make_unique<pkgfile::filter::Not>(std::move(dir_filter));
+    }
+
+    filter = std::make_unique<pkgfile::filter::And>(std::move(dir_filter),
+                                                  std::move(filter));
+  }
+
+  return filter;
 }
 
 int main(int argc, char* argv[]) {
@@ -621,27 +583,26 @@ int main(int argc, char* argv[]) {
   }
 
   if (config.doupdate) {
-    ret = !!pkgfile_update(&alpm_config, &config);
-    goto cleanup;
+    return !!pkgfile_update(&alpm_config, &config);
   }
 
   if (optind == argc) {
     fputs("error: no target specified (use -h for help)\n", stderr);
-    goto cleanup;
+    return 1;
   }
 
-  if (filter_setup(argv[optind]) != 0) {
-    goto cleanup;
+  auto filter = BuildFilterFromOptions(config, argv[optind]);
+  if (filter == nullptr) {
+    return 1;
   }
 
   // override behavior on $repo/$pkg syntax or --repo
-  if ((config.filefunc == list_metafile && config.filterby == FILTER_EXACT &&
-       strchr(argv[optind], '/')) ||
+  if ((config.mode == MODE_LIST && strchr(argv[optind], '/')) ||
       config.targetrepo) {
-    ret = search_single_repo(repos, argv[optind]);
+    ret = search_single_repo(repos, *filter, argv[optind]);
   } else {
     int prefixlen;
-    results = search_all_repos(&alpm_config.repos);
+    results = search_all_repos(&alpm_config.repos, *filter);
 
     prefixlen = config.raw ? 0 : results_get_prefixlen(results);
     for (size_t i = 0; i < alpm_config.repos.size(); ++i) {
@@ -657,11 +618,6 @@ int main(int argc, char* argv[]) {
     ret = ret > 0 ? 0 : 1;
   }
 
-  if (config.filterfree) {
-    config.filterfree(&config.filter);
-  }
-
-cleanup:
   return ret;
 }
 

@@ -28,13 +28,15 @@ libarchive = dependency('libarchive', version : '>= 3.2.0')
 libcurl = dependency('libcurl')
 pthreads = dependency('threads')
 stdcppfs = cpp.find_library('stdc++fs')
+gtest = dependency('gtest', required : false)
+gmock = dependency('gmock', required : false)
 
 pod2man = find_program('pod2man')
 pkgconfig = find_program('pkg-config')
 mkdir_p = 'mkdir -p $DESTDIR/@0@'
 
 pkgfile_sources = files('''
-  src/match.cc src/match.hh
+  src/filter.cc src/filter.hh
   src/pkgfile.cc src/pkgfile.hh
   src/repo.cc src/repo.hh
   src/result.cc src/result.hh
@@ -42,7 +44,10 @@ pkgfile_sources = files('''
 '''.split())
 
 run_target(
-  'fmt', command : ['clang-format', '-i', '--style=Google' ] + pkgfile_sources)
+  'fmt',
+  command : [
+    join_paths(meson.source_root(), 'build-aux/clang-format')
+  ])
 
 executable(
   'pkgfile',
@@ -106,6 +111,26 @@ install_data(
 install_data(
   'LICENSE',
   install_dir : join_paths(get_option('datadir'), 'licenses/pkgfile'))
+
+if gtest.found() and gmock.found()
+  gtest_main = static_library(
+    'gtest_main',
+    'src/test/gtest_main.cc')
+
+  test(
+    'filter_test',
+    executable(
+      'filter_test',
+      files('''
+        src/filter_test.cc
+        src/filter.cc
+        src/filter.hh
+      '''.split()),
+      link_with : [gtest_main],
+      dependencies : [gmock, gtest, libpcre]))
+else
+  message('Skipping unit tests, gtest or gmock not found')
+endif
 
 python = import('python')
 py3 = python.find_installation('python3')
