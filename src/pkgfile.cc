@@ -23,7 +23,7 @@ static struct config_t config;
 
 static const char* filtermethods[2] = {"glob", "regex"};
 
-static size_t format_search_result(std::string* result, const char* repo,
+static size_t format_search_result(std::string* result, const std::string& repo,
                                    const Package& pkg) {
   std::stringstream ss;
 
@@ -43,7 +43,7 @@ static size_t format_search_result(std::string* result, const char* repo,
   return result->size();
 }
 
-static int search_metafile(const char* repo,
+static int search_metafile(const std::string& repo,
                            const pkgfile::filter::Filter& filter,
                            const Package& pkg, result_t* result,
                            pkgfile::ArchiveReader* reader) {
@@ -66,7 +66,7 @@ static int search_metafile(const char* repo,
   return 0;
 }
 
-static int list_metafile(const char* repo,
+static int list_metafile(const std::string& repo,
                          const pkgfile::filter::Filter& filter,
                          const Package& pkg, result_t* result,
                          pkgfile::ArchiveReader* reader) {
@@ -163,11 +163,6 @@ static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
   while (reader.Next(&e) == ARCHIVE_OK) {
     const char* entryname = archive_entry_pathname(e);
 
-    if (entryname == nullptr) {
-      // libarchive error
-      continue;
-    }
-
     Package pkg;
     int r = parse_pkgname(&pkg, entryname);
     if (r < 0) {
@@ -176,7 +171,7 @@ static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
       continue;
     }
 
-    r = config.filefunc(repo->name.c_str(), filter, pkg, &result, &reader);
+    r = config.filefunc(repo->name, filter, pkg, &result, &reader);
     if (r < 0) {
       break;
     }

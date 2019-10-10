@@ -21,9 +21,9 @@ struct config_t {
   const char* cfgfile;
   const char* cachedir;
   filterstyle_t filterby;
-  int (*filefunc)(const char* repo, const pkgfile::filter::Filter& filter,
-                  const Package& pkg, result_t* result,
-                  pkgfile::ArchiveReader* reader);
+  int (*filefunc)(const std::string& repo,
+                  const pkgfile::filter::Filter& filter, const Package& pkg,
+                  result_t* result, pkgfile::ArchiveReader* reader);
   Mode mode;
   int doupdate;
   char* targetrepo;
