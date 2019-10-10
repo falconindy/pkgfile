@@ -65,9 +65,9 @@ static void StrReplace(std::string* str, const std::string& needle,
   }
 }
 
-static std::string prepare_url(const std::string& url_template,
-                               const std::string& repo,
-                               const std::string& arch) {
+static std::string PrepareUrl(const std::string& url_template,
+                              const std::string& repo,
+                              const std::string& arch) {
   std::string url = url_template;
 
   StrReplace(&url, "$arch", arch);
@@ -276,13 +276,14 @@ static int download_queue_request(CURLM* multi, struct repo_t* repo) {
   struct stat st;
 
   if (repo->curl == nullptr) {
-    // it's my first time, be gentle
     if (repo->servers.empty()) {
       fprintf(stderr, "error: no servers configured for repo %s\n",
               repo->name.c_str());
       return -1;
     }
     repo->curl = curl_easy_init();
+    repo->server_iter = repo->servers.begin();
+
     snprintf(repo->diskfile, sizeof(repo->diskfile), "%s/%s.files",
              repo->config->cachedir, repo->name.c_str());
     curl_easy_setopt(repo->curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -305,16 +306,15 @@ static int download_queue_request(CURLM* multi, struct repo_t* repo) {
     curl_multi_remove_handle(multi, repo->curl);
     lseek(repo->tmpfile.fd, 0, SEEK_SET);
     ftruncate(repo->tmpfile.fd, 0);
-    repo->server_idx++;
+    repo->server_iter++;
   }
 
-  if (repo->server_idx >= repo->servers.size()) {
+  if (repo->server_iter == repo->servers.end()) {
     fprintf(stderr, "error: failed to update repo: %s\n", repo->name.c_str());
     return -1;
   }
 
-  std::string url =
-      prepare_url(repo->servers[repo->server_idx], repo->name, repo->arch);
+  std::string url = PrepareUrl(*repo->server_iter, repo->name, repo->arch);
 
   curl_easy_setopt(repo->curl, CURLOPT_URL, url.c_str());
 

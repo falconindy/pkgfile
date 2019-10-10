@@ -38,8 +38,8 @@ struct repo_t {
   CURL* curl = nullptr;
   // destination
   char diskfile[PATH_MAX];
-  // index to currently in-use server
-  size_t server_idx = 0;
+  // iterator to currently in-use server
+  decltype(servers)::iterator server_iter;
   // error buffer
   char errmsg[CURL_ERROR_SIZE];
   // numeric err for determining success
