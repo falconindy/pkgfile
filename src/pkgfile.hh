@@ -1,23 +1,8 @@
 #pragma once
 
-#include <archive.h>
-#include <archive_entry.h>
-
+#include "archive_reader.hh"
 #include "filter.hh"
 #include "result.hh"
-
-struct memblock_t {
-  char* base;
-  char* offset;
-  size_t size;
-};
-
-struct archive_line_reader {
-  struct memblock_t line;
-  struct memblock_t block;
-
-  long ret;
-};
 
 enum filterstyle_t { FILTER_EXACT = 0, FILTER_GLOB, FILTER_REGEX };
 
@@ -37,8 +22,8 @@ struct config_t {
   const char* cachedir;
   filterstyle_t filterby;
   int (*filefunc)(const char* repo, const pkgfile::filter::Filter& filter,
-                  const Package& pkg, archive* a, result_t* result,
-                  archive_line_reader* buf);
+                  const Package& pkg, result_t* result,
+                  pkgfile::ArchiveReader* reader);
   Mode mode;
   int doupdate;
   char* targetrepo;
@@ -51,7 +36,5 @@ struct config_t {
   char eol;
   int compress;
 };
-
-int reader_getline(struct archive_line_reader* b, struct archive* a);
 
 // vim: set ts=2 sw=2 et:

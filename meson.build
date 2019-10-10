@@ -12,9 +12,6 @@ conf.set_quoted('PACKAGE_NAME', meson.project_name())
 conf.set_quoted('PACKAGE_VERSION', meson.project_version())
 conf.set_quoted('DEFAULT_CACHEPATH', get_option('cachedir'))
 
-# TODO: get rid of this
-conf.set('MAX_LINE_SIZE', '(size_t) (1024 * 10)')
-
 cpp = meson.get_compiler('cpp')
 
 configure_file(
@@ -36,6 +33,7 @@ pkgconfig = find_program('pkg-config')
 mkdir_p = 'mkdir -p $DESTDIR/@0@'
 
 pkgfile_sources = files('''
+  src/archive_reader.cc src/archive_reader.hh
   src/filter.cc src/filter.hh
   src/pkgfile.cc src/pkgfile.hh
   src/repo.cc src/repo.hh

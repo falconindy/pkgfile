@@ -7,12 +7,15 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 
+#include <archive.h>
+#include <archive_entry.h>
 #include <curl/curl.h>
 
 #include <algorithm>
 #include <filesystem>
 #include <sstream>
 
+#include "archive_reader.hh"
 #include "pkgfile.hh"
 #include "repo.hh"
 #include "update.hh"
@@ -78,19 +81,16 @@ static std::string prepare_url(const std::string& url_template,
 
 static int write_cpio_entry(struct archive_conv* conv,
                             std::filesystem::path& entryname) {
-  struct archive_line_reader reader = {};
-
-  std::array<char, MAX_LINE_SIZE> line;
-  reader.line.base = line.data();
+  pkgfile::ArchiveReader reader(conv->in);
+  std::string line;
 
   // discard the first line
-  reader_getline(&reader, conv->in);
+  reader.GetLine(&line);
 
   std::stringstream entry_data;
-  while (reader_getline(&reader, conv->in) == ARCHIVE_OK) {
+  while (reader.GetLine(&line) == ARCHIVE_OK) {
     // do the copy, with a slash prepended
-    entry_data << "/" << std::string_view(reader.line.base, reader.line.size)
-               << '\n';
+    entry_data << "/" << line << '\n';
   }
 
   const auto entry = entry_data.str();

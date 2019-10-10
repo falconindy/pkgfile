@@ -7,6 +7,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <archive_entry.h>
+
 #include <future>
 #include <sstream>
 #include <vector>
@@ -20,87 +22,6 @@
 static struct config_t config;
 
 static const char* filtermethods[2] = {"glob", "regex"};
-
-static int reader_block_consume(archive_line_reader* reader, archive* a) {
-  int64_t offset;
-
-  // end of the archive
-  if (reader->ret == ARCHIVE_EOF) {
-    return ARCHIVE_EOF;
-  }
-
-  // there's still more that reader_line_consume can use
-  if (reader->block.offset < reader->block.base + reader->block.size) {
-    return ARCHIVE_OK;
-  }
-
-  // grab a new block of data from the archive
-  reader->ret = archive_read_data_block(a, (const void**)&reader->block.base,
-                                        &reader->block.size, &offset);
-  reader->block.offset = reader->block.base;
-
-  return reader->ret;
-}
-
-static char* reader_block_find_eol(struct archive_line_reader* reader) {
-  size_t n = reader->block.base + reader->block.size - reader->block.offset;
-
-  return static_cast<char*>(memchr(reader->block.offset, '\n', n));
-}
-
-static bool reader_line_would_overflow(archive_line_reader* b, size_t append) {
-  return append >= MAX_LINE_SIZE - (b->line.offset - b->line.base);
-}
-
-static int reader_line_consume(struct archive_line_reader* reader) {
-  size_t copylen;
-  bool found_eol;
-  char* endp = reader_block_find_eol(reader);
-
-  found_eol = endp != NULL;
-
-  if (!found_eol) {
-    endp = reader->block.base + reader->block.size;
-  }
-
-  copylen = endp - reader->block.offset;
-
-  if (reader_line_would_overflow(reader, copylen)) {
-    return ENOBUFS;
-  }
-
-  // do a real copy from the block to the line buffer
-  reader->line.offset =
-      (char*)mempcpy(reader->line.offset, reader->block.offset, copylen);
-  *reader->line.offset = '\0';
-  reader->line.size += copylen;
-  reader->block.offset += copylen + 1;
-
-  // return EAGAIN if we don't yet have a full line
-  return found_eol ? 0 : EAGAIN;
-}
-
-int reader_getline(archive_line_reader* reader, archive* a) {
-  // Reset the line
-  reader->line.offset = reader->line.base;
-  reader->line.size = 0;
-
-  for (;;) {
-    int r;
-
-    r = reader_block_consume(reader, a);
-    if (r != ARCHIVE_OK) {
-      return r;
-    }
-
-    r = reader_line_consume(reader);
-    if (r == EAGAIN) {
-      continue;
-    }
-
-    return r;
-  }
-}
 
 static size_t format_search_result(std::string* result, const char* repo,
                                    const Package& pkg) {
@@ -122,19 +43,19 @@ static size_t format_search_result(std::string* result, const char* repo,
   return result->size();
 }
 
-static int search_metafile(const char* repo, const pkgfile::filter::Filter& filter,
-                           const Package& pkg, archive* a, result_t* result,
-                           archive_line_reader* buf) {
-  while (reader_getline(buf, a) == ARCHIVE_OK) {
-    std::string_view line(buf->line.base, buf->line.size);
-
+static int search_metafile(const char* repo,
+                           const pkgfile::filter::Filter& filter,
+                           const Package& pkg, result_t* result,
+                           pkgfile::ArchiveReader* reader) {
+  std::string line;
+  while (reader->GetLine(&line) == ARCHIVE_OK) {
     if (line.empty() || !filter.Matches(line)) {
       continue;
     }
 
     std::string out;
     size_t prefixlen = format_search_result(&out, repo, pkg);
-    result_add(result, out, config.verbose ? buf->line.base : std::string(),
+    result_add(result, out, config.verbose ? line : std::string(),
                config.verbose ? prefixlen : 0);
 
     if (!config.verbose) {
@@ -145,32 +66,34 @@ static int search_metafile(const char* repo, const pkgfile::filter::Filter& filt
   return 0;
 }
 
-static int list_metafile(const char* repo, const pkgfile::filter::Filter& filter,
-                         const Package& pkg, archive* a, result_t* result,
-                         archive_line_reader* buf) {
+static int list_metafile(const char* repo,
+                         const pkgfile::filter::Filter& filter,
+                         const Package& pkg, result_t* result,
+                         pkgfile::ArchiveReader* reader) {
   if (!filter.Matches(pkg.name)) {
     return 0;
   }
 
   pkgfile::filter::Bin is_bin;
-  while (reader_getline(buf, a) == ARCHIVE_OK) {
+  std::string line;
+  while (reader->GetLine(&line) == ARCHIVE_OK) {
     size_t prefixlen = 0;
 
-    std::string_view sv(buf->line.base, buf->line.size);
+    std::string_view sv(line);
     if (config.binaries && !is_bin.Matches(sv)) {
       continue;
     }
 
-    std::string line;
+    std::string out;
     if (config.quiet) {
-      line.assign(buf->line.base, buf->line.size);
+      out.assign(sv);
     } else {
       std::stringstream ss;
       ss << repo << '/' << pkg.name;
-      line.assign(ss.str());
-      prefixlen = line.size();
+      out.assign(ss.str());
+      prefixlen = out.size();
     }
-    result_add(result, line, config.quiet ? "" : buf->line.base, prefixlen);
+    result_add(result, out, config.quiet ? "" : line, prefixlen);
   }
 
   // When we encounter a match with fixed string matching, we know we're done.
@@ -198,7 +121,6 @@ static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
   archive_entry* e;
   struct stat st;
   void* repodata = MAP_FAILED;
-  archive_line_reader read_buffer = {};
 
   result_t result(repo->name);
 
@@ -216,7 +138,7 @@ static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
       fprintf(stderr, "error: failed to open repo: %s: %s\n", repofile,
               strerror(errno));
     }
-    goto cleanup;
+    // goto cleanup;
   }
 
   fstat(repo->fd, &st);
@@ -225,17 +147,20 @@ static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
   if (repodata == MAP_FAILED) {
     fprintf(stderr, "error: failed to map pages for %s: %s\n", repofile,
             strerror(errno));
-    goto cleanup;
+    return result;
+    // goto cleanup;
   }
 
   if (archive_read_open_memory(a, repodata, st.st_size) != ARCHIVE_OK) {
     fprintf(stderr, "error: failed to load repo: %s: %s\n", repofile,
             archive_error_string(a));
-    goto cleanup;
+    return result;
+    // goto cleanup;
   }
 
-  line.resize(MAX_LINE_SIZE);
-  while (archive_read_next_header(a, &e) == ARCHIVE_OK) {
+  pkgfile::ArchiveReader reader(a);
+
+  while (reader.Next(&e) == ARCHIVE_OK) {
     const char* entryname = archive_entry_pathname(e);
 
     if (entryname == nullptr) {
@@ -251,10 +176,7 @@ static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
       continue;
     }
 
-    memset(&read_buffer, 0, sizeof(archive_line_reader));
-    read_buffer.line.base = line.data();
-    r = config.filefunc(repo->name.c_str(), filter, pkg, a, &result,
-                        &read_buffer);
+    r = config.filefunc(repo->name.c_str(), filter, pkg, &result, &reader);
     if (r < 0) {
       break;
     }
@@ -262,7 +184,7 @@ static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
 
   archive_read_close(a);
 
-cleanup:
+  // cleanup:
   archive_read_free(a);
   if (repo->fd >= 0) {
     close(repo->fd);
@@ -486,8 +408,8 @@ static int search_single_repo(std::vector<repo_t>* repos,
   return 1;
 }
 
-static std::vector<result_t> search_all_repos(std::vector<repo_t>* repos,
-                                              const pkgfile::filter::Filter& filter) {
+static std::vector<result_t> search_all_repos(
+    std::vector<repo_t>* repos, const pkgfile::filter::Filter& filter) {
   std::vector<result_t> results;
   std::vector<std::future<result_t>> futures;
 
@@ -516,14 +438,14 @@ std::unique_ptr<pkgfile::filter::Filter> BuildFilterFromOptions(
           filter =
               std::make_unique<pkgfile::filter::Exact>(match, case_sensitive);
         } else {
-          filter =
-              std::make_unique<pkgfile::filter::Basename>(match, case_sensitive);
+          filter = std::make_unique<pkgfile::filter::Basename>(match,
+                                                               case_sensitive);
         }
       } else if (config.mode == MODE_LIST) {
         auto pos = match.find('/');
         if (pos != std::string::npos) {
-          filter = std::make_unique<pkgfile::filter::Exact>(match.substr(pos + 1),
-                                                          case_sensitive);
+          filter = std::make_unique<pkgfile::filter::Exact>(
+              match.substr(pos + 1), case_sensitive);
         } else {
           filter =
               std::make_unique<pkgfile::filter::Exact>(match, case_sensitive);
@@ -550,11 +472,12 @@ std::unique_ptr<pkgfile::filter::Filter> BuildFilterFromOptions(
     std::unique_ptr<pkgfile::filter::Filter> dir_filter =
         std::make_unique<pkgfile::filter::Directory>();
     if (!config.directories) {
-      dir_filter = std::make_unique<pkgfile::filter::Not>(std::move(dir_filter));
+      dir_filter =
+          std::make_unique<pkgfile::filter::Not>(std::move(dir_filter));
     }
 
     filter = std::make_unique<pkgfile::filter::And>(std::move(dir_filter),
-                                                  std::move(filter));
+                                                    std::move(filter));
   }
 
   return filter;
