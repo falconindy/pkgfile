@@ -16,6 +16,15 @@ class TestUpdate(pkgfile_test.TestCase):
         ''').lstrip('\n'))
 
 
+    def testSearchExact(self):
+        r = self.Pkgfile(['-s', '/usr/lib/dhcpcd/dhcpcd-hooks/01-test'])
+        self.assertEqual(r.returncode, 0)
+
+        self.assertEqual(r.stdout.decode(), textwrap.dedent('''
+            testing/dhcpcd
+        ''').lstrip('\n'))
+
+
     def testSearchVerbose(self):
         r = self.Pkgfile(['-s', '-v', 'javafx-src.zip'])
         self.assertEqual(r.returncode, 0)
@@ -35,7 +44,7 @@ class TestUpdate(pkgfile_test.TestCase):
         ''').lstrip('\n'))
 
 
-    def testSearchGlobVerboe(self):
+    def testSearchGlobVerbose(self):
         r = self.Pkgfile(['-s', '-v', '-g', '/usr/lib/dhcpcd/dhcpcd-hooks/*'])
         self.assertEqual(r.returncode, 0)
 
