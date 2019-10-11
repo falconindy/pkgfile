@@ -1,35 +1,45 @@
 #pragma once
 
-#include <sys/types.h>
-
 #include <string>
 #include <vector>
 
-struct line_t {
-  line_t(std::string prefix, std::string entry)
-      : prefix(std::move(prefix)), entry(std::move(entry)) {}
+namespace pkgfile {
 
-  line_t(line_t&&) = default;
-  line_t& operator=(line_t&&) = default;
+class Result {
+ public:
+  Result(std::string name) : name_(std::move(name)) {}
 
-  std::string prefix;
-  std::string entry;
+  Result(const Result&) = delete;
+  Result& operator=(const Result&) = delete;
+
+  Result(Result&&) = default;
+  Result& operator=(Result&&) = default;
+
+  bool Empty() const { return lines_.empty(); }
+
+  void Add(std::string prefix, std::string entry);
+  size_t Print(size_t prefixlen, char eol);
+  size_t MaxPrefixlen() const { return max_prefixlen_; }
+
+ private:
+  struct Line {
+    Line(std::string prefix, std::string entry)
+        : prefix(std::move(prefix)), entry(std::move(entry)) {}
+
+    std::string prefix;
+    std::string entry;
+  };
+
+  std::string name_;
+  std::vector<Line> lines_;
+  size_t max_prefixlen_ = 0;
+
+  void PrintOneColumn(char eol) const;
+  void PrintTwoColumns(size_t prefixlen, char eol) const;
 };
 
-struct result_t {
-  result_t(const std::string& name) : name(name) {}
+size_t MaxPrefixlen(const std::vector<Result>& results);
 
-  result_t(result_t&&) = default;
-  result_t& operator=(result_t&&) = default;
-
-  std::string name;
-  std::vector<line_t> lines;
-  int max_prefixlen = 0;
-};
-
-int result_add(struct result_t* result, std::string prefix, std::string entry,
-               int prefixlen);
-size_t result_print(struct result_t* result, int prefixlen, char eol);
-size_t results_get_prefixlen(const std::vector<result_t>& results);
+}  // namespace pkgfile
 
 // vim: set ts=2 sw=2 et:

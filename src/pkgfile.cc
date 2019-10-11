@@ -4,8 +4,6 @@
 #include <locale.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <sys/time.h>
-#include <unistd.h>
 
 #include <archive_entry.h>
 
@@ -23,40 +21,35 @@ static struct config_t config;
 
 static const char* filtermethods[2] = {"glob", "regex"};
 
-static size_t format_search_result(std::string* result, const std::string& repo,
-                                   const Package& pkg) {
+static std::string format_search_result(const std::string& repo,
+                                        const Package& pkg) {
   std::stringstream ss;
 
   if (config.verbose) {
     ss << repo << '/' << pkg.name << ' ' << pkg.version;
-    result->assign(ss.str());
-    return result->size();
+    return ss.str();
   }
 
   if (config.quiet) {
-    result->assign(pkg.name);
-    return pkg.name.size();
+    return std::string(pkg.name);
   }
 
   ss << repo << '/' << pkg.name;
-  result->assign(ss.str());
-  return result->size();
+  return ss.str();
 }
 
 static int search_metafile(const std::string& repo,
                            const pkgfile::filter::Filter& filter,
-                           const Package& pkg, result_t* result,
+                           const Package& pkg, pkgfile::Result* result,
                            pkgfile::ArchiveReader* reader) {
   std::string line;
   while (reader->GetLine(&line) == ARCHIVE_OK) {
-    if (line.empty() || !filter.Matches(line)) {
+    if (!filter.Matches(line)) {
       continue;
     }
 
-    std::string out;
-    size_t prefixlen = format_search_result(&out, repo, pkg);
-    result_add(result, out, config.verbose ? line : std::string(),
-               config.verbose ? prefixlen : 0);
+    result->Add(format_search_result(repo, pkg),
+                config.verbose ? line : std::string());
 
     if (!config.verbose) {
       return 0;
@@ -68,7 +61,7 @@ static int search_metafile(const std::string& repo,
 
 static int list_metafile(const std::string& repo,
                          const pkgfile::filter::Filter& filter,
-                         const Package& pkg, result_t* result,
+                         const Package& pkg, pkgfile::Result* result,
                          pkgfile::ArchiveReader* reader) {
   if (!filter.Matches(pkg.name)) {
     return 0;
@@ -77,23 +70,19 @@ static int list_metafile(const std::string& repo,
   pkgfile::filter::Bin is_bin;
   std::string line;
   while (reader->GetLine(&line) == ARCHIVE_OK) {
-    size_t prefixlen = 0;
-
-    std::string_view sv(line);
-    if (config.binaries && !is_bin.Matches(sv)) {
+    if (config.binaries && !is_bin.Matches(line)) {
       continue;
     }
 
     std::string out;
     if (config.quiet) {
-      out.assign(sv);
+      out.assign(line);
     } else {
       std::stringstream ss;
       ss << repo << '/' << pkg.name;
-      out.assign(ss.str());
-      prefixlen = out.size();
+      out = ss.str();
     }
-    result_add(result, out, config.quiet ? "" : line, prefixlen);
+    result->Add(out, config.quiet ? std::string() : line);
   }
 
   // When we encounter a match with fixed string matching, we know we're done.
@@ -114,7 +103,8 @@ static int parse_pkgname(Package* pkg, std::string_view entryname) {
   return 0;
 }
 
-static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
+static pkgfile::Result load_repo(repo_t* repo,
+                                 const pkgfile::filter::Filter& filter) {
   char repofile[FILENAME_MAX];
   std::string line;
   archive* a;
@@ -122,7 +112,7 @@ static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
   struct stat st;
   void* repodata = MAP_FAILED;
 
-  result_t result(repo->name);
+  pkgfile::Result result(repo->name);
 
   snprintf(repofile, sizeof(repofile), "%s/%s.files", config.cachedir,
            repo->name.c_str());
@@ -191,20 +181,20 @@ static result_t load_repo(repo_t* repo, const pkgfile::filter::Filter& filter) {
   return result;
 }
 
-static int validate_compression(const char* compress) {
-  if (strcmp(compress, "none") == 0) {
+static int validate_compression(std::string_view compress) {
+  if (compress == "none") {
     return ARCHIVE_FILTER_NONE;
-  } else if (strcmp(compress, "gzip") == 0) {
+  } else if (compress == "gzip") {
     return ARCHIVE_FILTER_GZIP;
-  } else if (strcmp(compress, "bzip2") == 0) {
+  } else if (compress == "bzip2") {
     return ARCHIVE_FILTER_BZIP2;
-  } else if (strcmp(compress, "lzma") == 0) {
+  } else if (compress == "lzma") {
     return ARCHIVE_FILTER_LZMA;
-  } else if (strcmp(compress, "lzop") == 0) {
+  } else if (compress == "lzop") {
     return ARCHIVE_FILTER_LZOP;
-  } else if (strcmp(compress, "lz4") == 0) {
+  } else if (compress == "lz4") {
     return ARCHIVE_FILTER_LZ4;
-  } else if (strcmp(compress, "xz") == 0) {
+  } else if (compress == "xz") {
     return ARCHIVE_FILTER_XZ;
   } else {
     return -1;
@@ -392,9 +382,9 @@ static int search_single_repo(std::vector<repo_t>* repos,
     }
 
     auto result = load_repo(&repo, filter);
-    result_print(&result, config.raw ? 0 : result.max_prefixlen, config.eol);
+    result.Print(config.raw ? 0 : result.MaxPrefixlen(), config.eol);
 
-    return result.lines.empty();
+    return result.Empty();
   }
 
   // repo not found
@@ -403,10 +393,10 @@ static int search_single_repo(std::vector<repo_t>* repos,
   return 1;
 }
 
-static std::vector<result_t> search_all_repos(
+static std::vector<pkgfile::Result> search_all_repos(
     std::vector<repo_t>* repos, const pkgfile::filter::Filter& filter) {
-  std::vector<result_t> results;
-  std::vector<std::future<result_t>> futures;
+  std::vector<pkgfile::Result> results;
+  std::vector<std::future<pkgfile::Result>> futures;
 
   for (auto& repo : *repos) {
     futures.push_back(std::async(std::launch::async,
@@ -481,7 +471,7 @@ std::unique_ptr<pkgfile::filter::Filter> BuildFilterFromOptions(
 int main(int argc, char* argv[]) {
   int reposfound = 0, ret = 0;
   AlpmConfig alpm_config;
-  std::vector<result_t> results;
+  std::vector<pkgfile::Result> results;
 
   setlocale(LC_ALL, "");
 
@@ -519,13 +509,12 @@ int main(int argc, char* argv[]) {
       config.targetrepo) {
     ret = search_single_repo(repos, *filter, argv[optind]);
   } else {
-    int prefixlen;
     results = search_all_repos(&alpm_config.repos, *filter);
 
-    prefixlen = config.raw ? 0 : results_get_prefixlen(results);
+    size_t prefixlen = config.raw ? 0 : MaxPrefixlen(results);
     for (size_t i = 0; i < alpm_config.repos.size(); ++i) {
       reposfound += alpm_config.repos[i].fd >= 0;
-      ret += (int)result_print(&results[i], prefixlen, config.eol);
+      ret += (int)results[i].Print(prefixlen, config.eol);
     }
 
     if (!reposfound) {

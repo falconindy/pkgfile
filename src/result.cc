@@ -1,65 +1,62 @@
-#include <string.h>
+#include "result.hh"
 
 #include <algorithm>
 
-#include "result.hh"
+namespace pkgfile {
 
-int result_add(struct result_t* result, std::string prefix, std::string entry,
-               int prefixlen) {
-  if (prefixlen > result->max_prefixlen) {
-    result->max_prefixlen = prefixlen;
-  }
-
-  result->lines.emplace_back(std::move(prefix), std::move(entry));
-
-  return 0;
-}
-
-static int linecmp(const struct line_t& line1, const struct line_t& line2) {
-  if (line1.prefix == line2.prefix && !line1.prefix.empty()) {
-    return line1.entry < line2.entry;
-  }
-
-  return line1.prefix < line2.prefix;
-}
-
-static void result_print_two_columns(struct result_t* result, int prefixlen,
-                                     char eol) {
-  for (const auto& line : result->lines) {
-    printf("%-*s\t%s%c", prefixlen, line.prefix.c_str(), line.entry.c_str(),
-           eol);
+void Result::PrintTwoColumns(size_t prefixlen, char eol) const {
+  for (const auto& line : lines_) {
+    printf("%-*s\t%s%c", static_cast<int>(prefixlen), line.prefix.c_str(),
+           line.entry.c_str(), eol);
   }
 }
 
-static void result_print_one_column(struct result_t* result, char eol) {
-  for (const auto& line : result->lines) {
+void Result::PrintOneColumn(char eol) const {
+  for (const auto& line : lines_) {
     printf("%s%c", line.prefix.c_str(), eol);
   }
 }
 
-size_t result_print(struct result_t* result, int prefixlen, char eol) {
-  if (result->lines.empty()) {
+void Result::Add(std::string prefix, std::string entry) {
+  if (prefix.size() > max_prefixlen_) {
+    max_prefixlen_ = prefix.size();
+  }
+
+  lines_.emplace_back(std::move(prefix), std::move(entry));
+}
+
+size_t Result::Print(size_t prefixlen, char eol) {
+  if (lines_.empty()) {
     return 0;
   }
 
-  std::sort(result->lines.begin(), result->lines.end(), linecmp);
+  std::sort(lines_.begin(), lines_.end(),
+            [](const struct Line& a, const struct Line& b) {
+              if (a.prefix == b.prefix && !b.prefix.empty()) {
+                return a.entry < b.entry;
+              }
+
+              return a.prefix < b.prefix;
+            });
 
   // It's expected that results are homogenous, so we can trust the first line.
-  if (!result->lines[0].entry.empty()) {
-    result_print_two_columns(result, prefixlen, eol);
+  if (!lines_[0].entry.empty()) {
+    PrintTwoColumns(prefixlen, eol);
   } else {
-    result_print_one_column(result, eol);
+    PrintOneColumn(eol);
   }
 
-  return result->lines.size();
+  return lines_.size();
 }
 
-size_t results_get_prefixlen(const std::vector<result_t>& results) {
+size_t MaxPrefixlen(const std::vector<Result>& results) {
   return std::max_element(results.begin(), results.end(),
-                          [](const result_t& a, const result_t& b) {
-                            return a.max_prefixlen < b.max_prefixlen;
+                          [](const Result& a, const Result& b) {
+                            return a.MaxPrefixlen() < b.MaxPrefixlen();
                           })
-      ->max_prefixlen;
+      ->MaxPrefixlen();
 }
+
+}  // namespace pkgfile
 
 // vim: set ts=2 sw=2 et:

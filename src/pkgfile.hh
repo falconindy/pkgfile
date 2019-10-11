@@ -23,7 +23,7 @@ struct config_t {
   filterstyle_t filterby;
   int (*filefunc)(const std::string& repo,
                   const pkgfile::filter::Filter& filter, const Package& pkg,
-                  result_t* result, pkgfile::ArchiveReader* reader);
+                  pkgfile::Result* result, pkgfile::ArchiveReader* reader);
   Mode mode;
   int doupdate;
   char* targetrepo;

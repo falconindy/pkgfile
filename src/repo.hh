@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-enum download_result_t {
+enum download_Result {
   RESULT_UNKNOWN,
   RESULT_OK,
   RESULT_UPTODATE,
@@ -43,7 +43,7 @@ struct repo_t {
   // error buffer
   char errmsg[CURL_ERROR_SIZE];
   // numeric err for determining success
-  enum download_result_t dl_result = RESULT_UNKNOWN;
+  enum download_Result dl_result = RESULT_UNKNOWN;
   // force update repos
   short force = false;
   // start time for download
