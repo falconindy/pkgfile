@@ -248,9 +248,9 @@ static void print_version(void) {
 }
 
 static int parse_opts(int argc, char** argv) {
-  int opt;
-  static const char* shortopts = "0bC:D:dghilqR:rsuVvwz::";
-  static const struct option longopts[] = {
+  static constexpr char kPacmanConfig[] = "/etc/pacman.conf";
+  static constexpr char kShortOpts[] = "0bC:D:dghilqR:rsuVvwz::";
+  static constexpr struct option kLongOpts[] = {
       {"binaries", no_argument, 0, 'b'},
       {"cachedir", required_argument, 0, 'D'},
       {"compress", optional_argument, 0, 'z'},
@@ -274,12 +274,12 @@ static int parse_opts(int argc, char** argv) {
   // defaults
   config.filefunc = search_metafile;
   config.eol = '\n';
-  config.cfgfile = PACMANCONFIG;
+  config.cfgfile = kPacmanConfig;
   config.cachedir = DEFAULT_CACHEPATH;
   config.mode = MODE_SEARCH;
 
   for (;;) {
-    opt = getopt_long(argc, argv, shortopts, longopts, nullptr);
+    int opt = getopt_long(argc, argv, kShortOpts, kLongOpts, nullptr);
     if (opt < 0) {
       break;
     }

@@ -2,8 +2,6 @@
 
 #include <curl/curl.h>
 
-#define PACMANCONFIG "/etc/pacman.conf"
-
 struct config_t;
 class AlpmConfig;
 
