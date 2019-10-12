@@ -7,14 +7,11 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 
-#include <archive.h>
-#include <archive_entry.h>
 #include <curl/curl.h>
 
-#include <algorithm>
-#include <filesystem>
 #include <sstream>
 
+#include "archive_converter.hh"
 #include "archive_reader.hh"
 #include "pkgfile.hh"
 #include "repo.hh"
@@ -22,23 +19,17 @@
 
 namespace chrono = std::chrono;
 
-struct archive_conv {
-  struct archive* in;
-  struct archive* out;
-  struct archive_entry* ae;
-  const char* reponame;
-  char tmpfile[PATH_MAX];
-};
-
 auto now = chrono::system_clock::now;
 
-static std::pair<double, const char*> Humanize(off_t bytes) {
-  std::array<const char*, 9> labels{"B",   "KiB", "MiB", "GiB", "TiB",
-                                    "PiB", "EiB", "ZiB", "YiB"};
+namespace {
+
+std::pair<double, const char*> Humanize(off_t bytes) {
+  static constexpr std::array<const char*, 9> labels{
+      "B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"};
 
   double val = static_cast<double>(bytes);
 
-  decltype(labels)::iterator iter;
+  decltype(labels)::const_iterator iter;
   for (iter = labels.begin(); iter != labels.end(); ++iter) {
     if (val <= 2048.0 && val >= -2048.0) {
       break;
@@ -53,8 +44,8 @@ static std::pair<double, const char*> Humanize(off_t bytes) {
   return {val, *iter};
 }
 
-static void StrReplace(std::string* str, const std::string& needle,
-                       const std::string& replace) {
+void StrReplace(std::string* str, const std::string& needle,
+                const std::string& replace) {
   for (;;) {
     auto pos = str->find(needle);
     if (pos == std::string::npos) {
@@ -65,9 +56,8 @@ static void StrReplace(std::string* str, const std::string& needle,
   }
 }
 
-static std::string PrepareUrl(const std::string& url_template,
-                              const std::string& repo,
-                              const std::string& arch) {
+std::string PrepareUrl(const std::string& url_template, const std::string& repo,
+                       const std::string& arch) {
   std::string url = url_template;
 
   StrReplace(&url, "$arch", arch);
@@ -79,137 +69,19 @@ static std::string PrepareUrl(const std::string& url_template,
   return ss.str();
 }
 
-static int write_cpio_entry(struct archive_conv* conv,
-                            std::filesystem::path& entryname) {
-  pkgfile::ArchiveReader reader(conv->in);
-  std::string line;
-
-  // discard the first line
-  reader.GetLine(&line);
-
-  std::stringstream entry_data;
-  while (reader.GetLine(&line) == ARCHIVE_OK) {
-    // do the copy, with a slash prepended
-    entry_data << "/" << line << '\n';
-  }
-
-  const auto entry = entry_data.str();
-
-  // adjust the entry size for removing the first line and adding slashes
-  archive_entry_set_size(conv->ae, entry.size());
-
-  // inodes in cpio archives are dumb.
-  archive_entry_set_ino64(conv->ae, 0);
-
-  // store the metadata as simply $pkgname-$pkgver-$pkgrel
-  archive_entry_update_pathname_utf8(conv->ae,
-                                     entryname.parent_path().string().c_str());
-
-  if (archive_write_header(conv->out, conv->ae) != ARCHIVE_OK) {
-    fprintf(stderr, "error: failed to write entry header: %s/%s: %s\n",
-            conv->reponame, archive_entry_pathname(conv->ae), strerror(errno));
-    return -errno;
-  }
-
-  if (archive_write_data(conv->out, entry.c_str(), entry.size()) !=
-      static_cast<ssize_t>(entry.size())) {
-    fprintf(stderr, "error: failed to write entry: %s/%s: %s\n", conv->reponame,
-            archive_entry_pathname(conv->ae), strerror(errno));
-    return -errno;
-  }
-
-  return 0;
-}
-
-static void archive_conv_close(struct archive_conv* conv) {
-  archive_write_close(conv->out);
-  archive_write_free(conv->out);
-  archive_read_close(conv->in);
-  archive_read_free(conv->in);
-}
-
-static int archive_conv_open(struct archive_conv* conv,
-                             const struct repo_t* repo) {
-  int r;
-
-  // generally, repo files are gzip compressed, but there's no guarantee of
-  // this. in order to be compression-agnostic, use libarchive's reader/writer
-  // methods. this also gives us an opportunity to rewrite the archive as CPIO,
-  // which is marginally faster given our staunch sequential access.
-
-  conv->reponame = repo->name.c_str();
-  stpcpy(stpcpy(conv->tmpfile, repo->diskfile), "~");
-
-  conv->in = archive_read_new();
-  conv->out = archive_write_new();
-
-  if (conv->in == nullptr || conv->out == nullptr) {
-    fputs("error: failed to allocate memory for archive objects\n", stderr);
-    return -ENOMEM;
-  }
-
-  archive_read_support_format_tar(conv->in);
-  archive_read_support_filter_all(conv->in);
-  r = archive_read_open_fd(conv->in, repo->tmpfile.fd, BUFSIZ);
-  if (r != ARCHIVE_OK) {
-    fprintf(stderr, "error: failed to create archive reader for %s: %s\n",
-            repo->name.c_str(), strerror(archive_errno(conv->in)));
-    r = archive_errno(conv->in);
-    goto open_error;
-  }
-
-  archive_write_set_format_cpio_newc(conv->out);
-  archive_write_add_filter(conv->out, repo->config->compress);
-  r = archive_write_open_filename(conv->out, conv->tmpfile);
-  if (r != ARCHIVE_OK) {
-    fprintf(stderr, "error: failed to open file for writing: %s: %s\n",
-            conv->tmpfile, strerror(archive_errno(conv->out)));
-    r = archive_errno(conv->out);
-    goto open_error;
-  }
-
-  return 0;
-
-open_error:
-  archive_write_free(conv->out);
-  archive_read_free(conv->in);
-
-  return -r;
-}
+}  // namespace
 
 static int repack_repo_data(const struct repo_t* repo) {
-  struct archive_conv conv = {};
-  int r = 0;
-
-  if (archive_conv_open(&conv, repo) < 0) {
+  auto converter = pkgfile::ArchiveConverter::New(repo);
+  if (converter == nullptr) {
     return -1;
   }
 
-  while (archive_read_next_header(conv.in, &conv.ae) == ARCHIVE_OK) {
-    std::filesystem::path entryname = archive_entry_pathname(conv.ae);
-    // ignore everything but the /files metadata
-    if (entryname.filename() == "files") {
-      r = write_cpio_entry(&conv, entryname);
-      if (r < 0) {
-        break;
-      }
-    }
-  }
-
-  archive_conv_close(&conv);
-
-  if (r < 0) {
-    // oh noes!
-    if (unlink(conv.tmpfile) < 0 && errno != ENOENT) {
-      fprintf(stderr, "error: failed to unlink temporary file: %s: %s\n",
-              conv.tmpfile, strerror(errno));
-    }
+  if (!converter->RewriteArchive()) {
     return -1;
   }
 
-  if (rename(conv.tmpfile, repo->diskfile) != 0) {
-    fprintf(stderr, "error: failed to rotate new repo for %s into place: %s\n",
-            repo->name.c_str(), strerror(errno));
+  if (!converter->Finalize(repo->diskfile)) {
     return -1;
   }
 
@@ -284,8 +156,8 @@ static int download_queue_request(CURLM* multi, struct repo_t* repo) {
     repo->curl = curl_easy_init();
     repo->server_iter = repo->servers.begin();
 
-    snprintf(repo->diskfile, sizeof(repo->diskfile), "%s/%s.files",
-             repo->config->cachedir, repo->name.c_str());
+    repo->diskfile =
+        std::string(repo->config->cachedir) + "/" + repo->name + ".files";
     curl_easy_setopt(repo->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(repo->curl, CURLOPT_WRITEFUNCTION, write_handler);
     curl_easy_setopt(repo->curl, CURLOPT_WRITEDATA, repo);
@@ -318,7 +190,7 @@ static int download_queue_request(CURLM* multi, struct repo_t* repo) {
 
   curl_easy_setopt(repo->curl, CURLOPT_URL, url.c_str());
 
-  if (repo->force == 0 && stat(repo->diskfile, &st) == 0) {
+  if (repo->force == 0 && stat(repo->diskfile.c_str(), &st) == 0) {
     curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
     curl_easy_setopt(repo->curl, CURLOPT_TIMECONDITION,
                      CURL_TIMECOND_IFMODSINCE);

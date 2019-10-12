@@ -37,7 +37,7 @@ struct repo_t {
   // curl easy handle
   CURL* curl = nullptr;
   // destination
-  char diskfile[PATH_MAX];
+  std::string diskfile;
   // iterator to currently in-use server
   decltype(servers)::iterator server_iter;
   // error buffer

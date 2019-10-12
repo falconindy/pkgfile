@@ -33,6 +33,7 @@ pkgconfig = find_program('pkg-config')
 mkdir_p = 'mkdir -p $DESTDIR/@0@'
 
 pkgfile_sources = files('''
+  src/archive_converter.cc src/archive_converter.hh
   src/archive_reader.cc src/archive_reader.hh
   src/filter.cc src/filter.hh
   src/pkgfile.cc src/pkgfile.hh
