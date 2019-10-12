@@ -49,7 +49,7 @@ struct repo_t {
   // start time for download
   std::chrono::time_point<std::chrono::system_clock> dl_time_start;
 
-  std::future<int> worker;
+  std::future<bool> worker;
 
   struct {
     int fd = -1;

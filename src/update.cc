@@ -71,21 +71,21 @@ std::string PrepareUrl(const std::string& url_template, const std::string& repo,
 
 }  // namespace
 
-static int repack_repo_data(const struct repo_t* repo) {
+static bool repack_repo_data(const struct repo_t* repo) {
   auto converter = pkgfile::ArchiveConverter::New(repo);
   if (converter == nullptr) {
-    return -1;
+    return false;
   }
 
   if (!converter->RewriteArchive()) {
-    return -1;
+    return false;
   }
 
   if (!converter->Finalize(repo->diskfile)) {
-    return -1;
+    return false;
   }
 
-  return 0;
+  return true;
 }
 
 static size_t write_handler(void* ptr, size_t size, size_t nmemb, void* data) {
@@ -319,31 +319,25 @@ static void download_wait_loop(CURLM* multi) {
 }
 
 static int wait_for_repacking(std::vector<repo_t>* repos) {
-  int running = 0;
-  for (auto& repo : *repos) {
-    // The future won't be valid if the repo was up to date.
-    if (!repo.worker.valid()) {
-      continue;
-    }
+  int running =
+      std::count_if(repos->begin(), repos->end(), [](const repo_t& repo) {
+        // The future won't be valid if the repo was up to date.
+        if (!repo.worker.valid()) {
+          return false;
+        }
 
-    if (repo.worker.wait_for(chrono::seconds(0)) != std::future_status::ready) {
-      ++running;
-    }
-  }
+        return repo.worker.wait_for(chrono::seconds::zero()) !=
+               std::future_status::ready;
+      });
 
   if (running > 0) {
-    printf(":: waiting for %d process%s to finish repacking repos...\n",
-           running, running == 1 ? "" : "es");
+    printf(":: waiting for %d repo%s to finish repacking...\n", running,
+           running == 1 ? "" : "s");
   }
 
-  int r = 0;
-  for (auto& repo : *repos) {
-    if (repo.worker.valid()) {
-      r += repo.worker.get();
-    }
-  }
-
-  return r;
+  return std::count_if(repos->begin(), repos->end(), [](repo_t& repo) {
+    return repo.worker.valid() && !repo.worker.get();
+  });
 }
 
 int pkgfile_update(AlpmConfig* alpm_config, struct config_t* config) {

@@ -1,3 +1,5 @@
+#include "repo.hh"
+
 #include <ctype.h>
 #include <errno.h>
 #include <glob.h>
@@ -5,8 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#include "repo.hh"
 
 repo_t::~repo_t() {
   if (tmpfile.fd >= 0) {
