@@ -39,6 +39,16 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertMatchesGolden('multilib')
         self.assertMatchesGolden('testing')
 
+        for repo in ('multilib', 'testing'):
+            original_repo = '{}/x86_64/{repo}/{repo}.files'.format(self.alpmcachedir, repo=repo)
+            converted_repo = '{}/{}.files'.format(self.cachedir, repo)
+
+            # Only compare the integer portion of the mtime. we'll only ever
+            # get back second precision from a remote server, so any fractional
+            # second that's present on our golden repo can be ignored.
+            self.assertEqual(int(os.stat(original_repo).st_mtime),
+                    int(os.stat(converted_repo).st_mtime))
+
 
     def testUpdateForcesUpdates(self):
         r = self.Pkgfile(['-u'])

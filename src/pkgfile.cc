@@ -491,7 +491,8 @@ int main(int argc, char* argv[]) {
   }
 
   if (config.doupdate) {
-    return !!pkgfile_update(&alpm_config, &config);
+    pkgfile::Updater updater;
+    return !!updater.Update(&alpm_config, &config);
   }
 
   if (optind == argc) {

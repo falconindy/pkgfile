@@ -49,6 +49,8 @@ class TestCase(unittest.TestCase):
         self.tempdir = self._tempdir.name
         self.cachedir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                 'golden/pkgfile')
+        self.alpmcachedir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                'golden/alpm')
 
         q = multiprocessing.Queue()
         self.server = multiprocessing.Process(

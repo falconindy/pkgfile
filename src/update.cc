@@ -1,3 +1,5 @@
+#include "update.hh"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <float.h>
@@ -7,15 +9,12 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 
-#include <curl/curl.h>
-
 #include <sstream>
 
 #include "archive_converter.hh"
 #include "archive_reader.hh"
 #include "pkgfile.hh"
 #include "repo.hh"
-#include "update.hh"
 
 namespace chrono = std::chrono;
 
@@ -69,26 +68,14 @@ std::string PrepareUrl(const std::string& url_template, const std::string& repo,
   return ss.str();
 }
 
-}  // namespace
+bool repack_repo_data(const struct repo_t* repo) {
+  auto converter = pkgfile::ArchiveConverter::New(
+      repo->name, repo->tmpfile.fd, repo->diskfile, repo->config->compress);
 
-static bool repack_repo_data(const struct repo_t* repo) {
-  auto converter = pkgfile::ArchiveConverter::New(repo);
-  if (converter == nullptr) {
-    return false;
-  }
-
-  if (!converter->RewriteArchive()) {
-    return false;
-  }
-
-  if (!converter->Finalize(repo->diskfile)) {
-    return false;
-  }
-
-  return true;
+  return converter != nullptr && converter->RewriteArchive();
 }
 
-static size_t write_handler(void* ptr, size_t size, size_t nmemb, void* data) {
+size_t write_handler(void* ptr, size_t size, size_t nmemb, void* data) {
   struct repo_t* repo = (repo_t*)data;
   const uint8_t* p = (uint8_t*)ptr;
   size_t nbytes = size * nmemb;
@@ -114,7 +101,7 @@ static size_t write_handler(void* ptr, size_t size, size_t nmemb, void* data) {
   return n;
 }
 
-static int open_tmpfile(int flags) {
+int open_tmpfile(int flags) {
   const char* tmpdir;
   int fd;
 
@@ -144,7 +131,7 @@ static int open_tmpfile(int flags) {
   return fd;
 }
 
-static int download_queue_request(CURLM* multi, struct repo_t* repo) {
+int download_queue_request(CURLM* multi, struct repo_t* repo) {
   struct stat st;
 
   if (repo->curl == nullptr) {
@@ -159,6 +146,7 @@ static int download_queue_request(CURLM* multi, struct repo_t* repo) {
     repo->diskfile =
         std::string(repo->config->cachedir) + "/" + repo->name + ".files";
     curl_easy_setopt(repo->curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(repo->curl, CURLOPT_FILETIME, 1L);
     curl_easy_setopt(repo->curl, CURLOPT_WRITEFUNCTION, write_handler);
     curl_easy_setopt(repo->curl, CURLOPT_WRITEDATA, repo);
     curl_easy_setopt(repo->curl, CURLOPT_PRIVATE, repo);
@@ -202,8 +190,8 @@ static int download_queue_request(CURLM* multi, struct repo_t* repo) {
   return 0;
 }
 
-static int print_rate(double xfer, const char* xfer_label, double rate,
-                      const char rate_label) {
+int print_rate(double xfer, const char* xfer_label, double rate,
+               const char rate_label) {
   // We will show 1.62M/s, 11.6M/s, but 116K/s and 1116K/s
   if (rate < 9.995) {
     return printf("%8.1f %3s  %4.2f%c/s", xfer, xfer_label, rate, rate_label);
@@ -214,7 +202,7 @@ static int print_rate(double xfer, const char* xfer_label, double rate,
   }
 }
 
-static void print_download_success(struct repo_t* repo, int remaining) {
+void print_download_success(struct repo_t* repo, int remaining) {
   double rate = repo->tmpfile.size /
                 chrono::duration<double>(now() - repo->dl_time_start).count();
   auto [xfered_human, xfered_label] = Humanize(repo->tmpfile.size);
@@ -231,7 +219,7 @@ static void print_download_success(struct repo_t* repo, int remaining) {
   printf(" %*d remaining]\n", 23 - width, remaining);
 }
 
-static void print_total_dl_stats(int count, double duration, off_t total_xfer) {
+void print_total_dl_stats(int count, double duration, off_t total_xfer) {
   double rate = total_xfer / duration;
   auto [xfered_human, xfered_label] = Humanize(total_xfer);
   auto [rate_human, rate_label] = Humanize(rate);
@@ -242,7 +230,7 @@ static void print_total_dl_stats(int count, double duration, off_t total_xfer) {
   printf(" %2d file%c    >\n", count, count == 1 ? ' ' : 's');
 }
 
-static int download_check_complete(CURLM* multi, int remaining) {
+int download_check_complete(CURLM* multi, int remaining) {
   int msgs_left;
 
   CURLMsg* msg = curl_multi_info_read(multi, &msgs_left);
@@ -254,11 +242,13 @@ static int download_check_complete(CURLM* multi, int remaining) {
     long uptodate, resp;
     char* effective_url;
     struct repo_t* repo;
+    time_t remote_mtime;
 
     curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &repo);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_CONDITION_UNMET, &uptodate);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &resp);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL, &effective_url);
+    curl_easy_getinfo(msg->easy_handle, CURLINFO_FILETIME_T, &remote_mtime);
 
     if (uptodate) {
       printf("  %s is up to date\n", repo->name.c_str());
@@ -283,6 +273,12 @@ static int download_check_complete(CURLM* multi, int remaining) {
     repo->tmpfile.size = lseek(repo->tmpfile.fd, 0, SEEK_CUR);
     lseek(repo->tmpfile.fd, 0, SEEK_SET);
 
+    struct timeval times[2] = {
+        {remote_mtime, 0},
+        {remote_mtime, 0},
+    };
+    futimes(repo->tmpfile.fd, times);
+
     print_download_success(repo, remaining);
     repo->worker = std::async(std::launch::async,
                               [repo] { return repack_repo_data(repo); });
@@ -292,7 +288,7 @@ static int download_check_complete(CURLM* multi, int remaining) {
   return 0;
 }
 
-static void download_wait_loop(CURLM* multi) {
+void download_wait_loop(CURLM* multi) {
   int active_handles;
 
   do {
@@ -318,7 +314,7 @@ static void download_wait_loop(CURLM* multi) {
   } while (active_handles > 0);
 }
 
-static int wait_for_repacking(std::vector<repo_t>* repos) {
+int wait_for_repacking(std::vector<repo_t>* repos) {
   int running =
       std::count_if(repos->begin(), repos->end(), [](const repo_t& repo) {
         // The future won't be valid if the repo was up to date.
@@ -340,9 +336,12 @@ static int wait_for_repacking(std::vector<repo_t>* repos) {
   });
 }
 
-int pkgfile_update(AlpmConfig* alpm_config, struct config_t* config) {
+}  // namespace
+
+namespace pkgfile {
+
+int Updater::Update(AlpmConfig* alpm_config, struct config_t* config) {
   int r, xfer_count = 0, ret = 0;
-  CURLM* curl_multi;
   off_t total_xfer = 0;
 
   if (access(config->cachedir, W_OK)) {
@@ -352,14 +351,6 @@ int pkgfile_update(AlpmConfig* alpm_config, struct config_t* config) {
   }
 
   printf(":: Updating %zd repos...\n", alpm_config->repos.size());
-
-  curl_global_init(CURL_GLOBAL_ALL);
-  curl_multi = curl_multi_init();
-  if (curl_multi == nullptr) {
-    // this can only fail due to out an OOM condition
-    fprintf(stderr, "error: failed to initialize curl: %s\n", strerror(ENOMEM));
-    return 1;
-  }
 
   if (alpm_config->architecture.empty()) {
     struct utsname un;
@@ -377,19 +368,19 @@ int pkgfile_update(AlpmConfig* alpm_config, struct config_t* config) {
     repo.arch = alpm_config->architecture;
     repo.force = config->doupdate > 1;
     repo.config = config;
-    r = download_queue_request(curl_multi, &repo);
+    r = download_queue_request(curl_multi_, &repo);
     if (r != 0) {
       ret = r;
     }
   }
 
   auto t_start = now();
-  download_wait_loop(curl_multi);
+  download_wait_loop(curl_multi_);
   chrono::duration<double> dur = now() - t_start;
 
   // remove handles, aggregate results
   for (auto& repo : repos) {
-    curl_multi_remove_handle(curl_multi, repo.curl);
+    curl_multi_remove_handle(curl_multi_, repo.curl);
     curl_easy_cleanup(repo.curl);
 
     total_xfer += repo.tmpfile.size;
@@ -418,10 +409,19 @@ int pkgfile_update(AlpmConfig* alpm_config, struct config_t* config) {
     ret = 1;
   }
 
-  curl_multi_cleanup(curl_multi);
-  curl_global_cleanup();
-
   return ret;
 }
+
+Updater::Updater() {
+  curl_global_init(CURL_GLOBAL_ALL);
+  curl_multi_ = curl_multi_init();
+}
+
+Updater::~Updater() {
+  curl_multi_cleanup(curl_multi_);
+  curl_global_cleanup();
+}
+
+}  // namespace pkgfile
 
 // vim: set ts=2 sw=2 et:

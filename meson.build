@@ -23,6 +23,7 @@ add_project_arguments('-include', 'config.hh', language : 'cpp')
 libpcre = dependency('libpcre', version : '>= 8.30')
 libarchive = dependency('libarchive', version : '>= 3.2.0')
 libcurl = dependency('libcurl')
+libsystemd = dependency('libsystemd')
 pthreads = dependency('threads')
 stdcppfs = cpp.find_library('stdc++fs')
 gtest = dependency('gtest', required : false)
@@ -32,15 +33,18 @@ pod2man = find_program('pod2man')
 pkgconfig = find_program('pkg-config')
 mkdir_p = 'mkdir -p $DESTDIR/@0@'
 
-pkgfile_sources = files('''
-  src/archive_converter.cc src/archive_converter.hh
-  src/archive_reader.cc src/archive_reader.hh
-  src/filter.cc src/filter.hh
-  src/pkgfile.cc src/pkgfile.hh
-  src/repo.cc src/repo.hh
-  src/result.cc src/result.hh
-  src/update.cc src/update.hh
-'''.split())
+libcommon = static_library(
+  'pkgfile',
+  files('''
+    src/archive_converter.cc src/archive_converter.hh
+    src/archive_reader.cc src/archive_reader.hh
+    src/filter.cc src/filter.hh
+    src/repo.cc src/repo.hh
+    src/result.cc src/result.hh
+    src/update.cc src/update.hh
+  '''.split()),
+  dependencies : [libpcre, libarchive, libcurl, pthreads, stdcppfs],
+  install : false)
 
 run_target(
   'fmt',
@@ -50,8 +54,17 @@ run_target(
 
 executable(
   'pkgfile',
-  pkgfile_sources,
-  dependencies : [libpcre, libarchive, libcurl, pthreads, stdcppfs],
+  files('''
+    src/pkgfile.cc src/pkgfile.hh
+  '''.split()),
+  link_with : [libcommon],
+  install : true)
+
+executable(
+  'pkgfiled',
+  'src/pkgfiled.cc',
+  link_with : [libcommon],
+  dependencies : [libsystemd, stdcppfs],
   install : true)
 
 man = custom_target(
@@ -122,10 +135,8 @@ if gtest.found() and gmock.found()
       'filter_test',
       files('''
         src/filter_test.cc
-        src/filter.cc
-        src/filter.hh
       '''.split()),
-      link_with : [gtest_main],
+      link_with : [libcommon, gtest_main],
       dependencies : [gmock, gtest, libpcre]))
 else
   message('Skipping unit tests, gtest or gmock not found')

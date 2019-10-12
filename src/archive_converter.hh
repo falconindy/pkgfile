@@ -5,9 +5,9 @@
 #include <string.h>
 
 #include <filesystem>
+#include <string>
 
 #include "pkgfile.hh"
-#include "repo.hh"
 
 namespace pkgfile {
 
@@ -23,20 +23,20 @@ class ReadArchive {
   ReadArchive(ReadArchive&&) = default;
   ReadArchive& operator=(ReadArchive&&) = default;
 
-  static std::unique_ptr<ReadArchive> New(int fd);
+  static std::unique_ptr<ReadArchive> New(int fd, const char** error);
 
+  int fd() const { return fd_; }
   archive* read_archive() { return a_; }
-
-  const char* archive_error() const { return strerror(archive_errno(a_)); }
 
   void Close();
 
  private:
-  ReadArchive() {
+  ReadArchive(int fd) : fd_(fd) {
     archive_read_support_format_tar(a_);
     archive_read_support_filter_all(a_);
   }
 
+  int fd_;
   archive* a_ = archive_read_new();
   bool opened_ = false;
 };
@@ -52,13 +52,11 @@ class WriteArchive {
   WriteArchive& operator=(WriteArchive&&) = default;
 
   static std::unique_ptr<WriteArchive> New(const std::string& path,
-                                           int compress);
+                                           int compress, const char** error);
 
   const std::string& path() const { return path_; }
 
   archive* write_archive() { return a_; }
-
-  const char* archive_error() const { return strerror(archive_errno(a_)); }
 
   bool Close();
 
@@ -69,6 +67,7 @@ class WriteArchive {
   }
 
   archive* a_ = archive_write_new();
+  std::string tmppath_;
   std::string path_;
   bool opened_ = false;
 };
@@ -90,15 +89,19 @@ class ArchiveConverter {
   ArchiveConverter(ArchiveConverter&&) = default;
   ArchiveConverter& operator=(ArchiveConverter&&) = default;
 
-  static std::unique_ptr<ArchiveConverter> New(const repo_t* repo);
+  static std::unique_ptr<ArchiveConverter> New(const std::string& reponame,
+                                               int fd_in,
+                                               const std::string& filename_out,
+                                               int compress);
 
   bool RewriteArchive();
-  bool Finalize(const std::string& dest);
 
  private:
   int WriteCpioEntry(archive_entry* ae, const std::filesystem::path& entryname);
+  bool Finalize();
 
   std::string reponame_;
+  std::string destfile_;
   std::unique_ptr<internal::ReadArchive> in_;
   std::unique_ptr<internal::WriteArchive> out_;
 };

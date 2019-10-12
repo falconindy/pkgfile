@@ -1,17 +1,23 @@
 #include "archive_converter.hh"
 
+#include <sys/stat.h>
+#include <sys/time.h>
+
+#include <filesystem>
 #include <sstream>
 
-namespace pkgfile {
+namespace fs = std::filesystem;
 
+namespace pkgfile {
 namespace internal {
 
 // static
-std::unique_ptr<ReadArchive> ReadArchive::New(int fd) {
-  std::unique_ptr<ReadArchive> a(new ReadArchive());
+std::unique_ptr<ReadArchive> ReadArchive::New(int fd, const char** error) {
+  std::unique_ptr<ReadArchive> a(new ReadArchive(fd));
 
   int r = archive_read_open_fd(a->a_, fd, BUFSIZ);
   if (r != ARCHIVE_OK) {
+    *error = strerror(archive_errno(a->a_));
     return nullptr;
   }
 
@@ -33,11 +39,13 @@ void ReadArchive::Close() {
 
 // static
 std::unique_ptr<WriteArchive> WriteArchive::New(const std::string& path,
-                                                int compress) {
+                                                int compress,
+                                                const char** error) {
   std::unique_ptr<WriteArchive> a(new WriteArchive(path, compress));
 
   int r = archive_write_open_filename(a->a_, path.c_str());
   if (r != ARCHIVE_OK) {
+    *error = strerror(archive_errno(a->a_));
     return nullptr;
   }
 
@@ -64,22 +72,24 @@ WriteArchive::~WriteArchive() {
 }  // namespace internal
 
 // static
-std::unique_ptr<ArchiveConverter> ArchiveConverter::New(const repo_t* repo) {
-  std::string tmpfile_path = repo->diskfile;
+std::unique_ptr<ArchiveConverter> ArchiveConverter::New(
+    const std::string& reponame, int fd_in, const std::string& filename_out,
+    int compress) {
+  std::string tmpfile_path = filename_out;
   tmpfile_path.append("~");
+  const char* error;
 
-  auto reader = internal::ReadArchive::New(repo->tmpfile.fd);
+  auto reader = internal::ReadArchive::New(fd_in, &error);
   if (reader == nullptr) {
     fprintf(stderr, "error: failed to create archive reader for %s: %s\n",
-            repo->name.c_str(), reader->archive_error());
+            reponame.c_str(), error);
     return nullptr;
   }
 
-  auto writer =
-      internal::WriteArchive::New(tmpfile_path, repo->config->compress);
+  auto writer = internal::WriteArchive::New(tmpfile_path, compress, &error);
   if (writer == nullptr) {
     fprintf(stderr, "error: failed to open file for writing: %s: %s\n",
-            tmpfile_path.c_str(), writer->archive_error());
+            tmpfile_path.c_str(), error);
     return nullptr;
   }
 
@@ -128,16 +138,32 @@ int ArchiveConverter::WriteCpioEntry(archive_entry* ae,
   return 0;
 }
 
-bool ArchiveConverter::Finalize(const std::string& dest) {
+bool ArchiveConverter::Finalize() {
   in_->Close();
 
   if (!out_->Close()) {
     return false;
   }
 
-  if (rename(out_->path().c_str(), dest.c_str()) < 0) {
+  struct stat st;
+  fstat(in_->fd(), &st);
+
+  struct timeval times[] = {
+      {st.st_atim.tv_sec, 0},
+      {st.st_mtim.tv_sec, 0},
+  };
+
+  if (utimes(out_->path().c_str(), times) < 0) {
+    fprintf(stderr, "warning: failed to set filetimes on %s: %s\n",
+            out_->path().c_str(), strerror(errno));
+  }
+
+  auto dest = out_->path().substr(0, out_->path().size() - 1);
+
+  std::error_code ec;
+  if (fs::rename(out_->path(), dest, ec); ec.value() != 0) {
     fprintf(stderr, "error: renaming tmpfile to %s failed: %s\n", dest.c_str(),
-            strerror(errno));
+            ec.message().c_str());
     return false;
   }
 
@@ -146,19 +172,17 @@ bool ArchiveConverter::Finalize(const std::string& dest) {
 
 bool ArchiveConverter::RewriteArchive() {
   archive_entry* ae;
-
   while (archive_read_next_header(in_->read_archive(), &ae) == ARCHIVE_OK) {
     fs::path entryname = archive_entry_pathname(ae);
     // ignore everything but the /files metadata
     if (entryname.filename() == "files") {
-      int r = WriteCpioEntry(ae, entryname);
-      if (r < 0) {
+      if (WriteCpioEntry(ae, entryname) < 0) {
         return false;
       }
     }
   }
 
-  return true;
+  return Finalize();
 }
 
 }  // namespace pkgfile
