@@ -1,0 +1,74 @@
+=head1 NAME
+
+pkgfiled - automatically syncs pacman .files DBs to the pkgfile cache
+
+=head1 SYNOPSIS
+
+Usage: I<pkgfiled> [options] pacman_dbpath pkgfile_cache
+
+=head1 DESCRIPTION
+
+pkgfiled is a tiny daemon which watches for changes to B<pacman>(8)'s .files
+databases (typically under I</var/lib/pacman/sync>) and repackages these for
+consumption by pkgfile. This allows data to remain in sync between pacman and
+pkgfile.
+
+Upon starting, pkgfiled will compare the contents of the pacman database with
+the pkgfile cache and catch up with anything out of sync. After this, it will
+only wake up when changes occur to the pacman database.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-f>, B<--force>
+
+On the initial sync, ignore timestamp comparisons and rewrite all found databases.
+
+=item B<-o>, B<--oneshot>
+
+Exit after pkgfiled's initial sync, rather than continuing to listen for changes.
+
+=item B<-z>, B<--compress>[B<=>I<COMPRESSION>]
+
+Repack repos with the optionally supplied compression method, which may be one
+of B<none>, B<gzip>, B<bzip2>, B<lzop>, B<lz4>, B<lzma>, B<xz>, or B<zstd>. If
+this flag is passed without a compression method, this defaults to B<gzip>. If
+this flag is not passed at all, no compression will be applied. Applying any
+form of compression will decrease performance, but may be desirable for disk
+space concerns.
+
+=item B<-h>, B<--help>
+
+Print help and exit.
+
+=item B<-V>, B<--version>
+
+Print the version and exit.
+
+=back
+
+=head1 SIGNALS
+
+=over 4
+
+=item B<SIGINT>, B<SIGTERM>
+
+When run interactively, pkgfiled will gracefully shutdown on receipt of
+B<SIGINT>. Otherwise, B<SIGTERM> is used to indicate a graceful shutdown.
+
+=item B<SIGUSR1>, B<SIGUSR2>
+
+Upon receipt of these signals, pkgfiled will rescan the pacman database
+directory for changes and update as needed. Unlike B<SIGUSR1>, B<SIGUSR2>
+will ignore timestamps checks and rewrite all found database.
+
+=back
+
+=head1 SEE ALSO
+
+B<pkgfile>(8)
+
+=head1 AUTHOR
+
+Dave Reisner E<lt>dreisner@archlinux.orgE<gt>

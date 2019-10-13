@@ -38,6 +38,7 @@ libcommon = static_library(
   files('''
     src/archive_converter.cc src/archive_converter.hh
     src/archive_reader.cc src/archive_reader.hh
+    src/compress.cc src/compress.hh
     src/filter.cc src/filter.hh
     src/repo.cc src/repo.hh
     src/result.cc src/result.hh
@@ -82,6 +83,21 @@ man = custom_target(
     install : true,
     install_dir : join_paths(get_option('mandir'), 'man1'))
 
+custom_target(
+    'pkgfiled.1',
+    output : 'pkgfiled.1',
+    input : 'man/pkgfiled.pod',
+    command : [
+      pod2man,
+      '--section=1',
+      '--center=pkgfiled Manual',
+      '--name=PKGFILED',
+      '--release=pkgfiled @0@'.format(meson.project_version()),
+      '@INPUT@', '@OUTPUT@'
+    ],
+    install : true,
+    install_dir : join_paths(get_option('mandir'), 'man1'))
+
 if get_option('systemd_units')
   systemd = dependency(
     'systemd', not_found_message : 'systemd not found but systemd_units=true')
@@ -94,6 +110,12 @@ if get_option('systemd_units')
   configure_file(
     input : 'systemd/pkgfile-update.service.in',
     output : 'pkgfile-update.service',
+    configuration : conf,
+    install_dir : systemunitdir)
+
+  configure_file(
+    input : 'systemd/pkgfiled.service.in',
+    output : 'pkgfiled.service',
     configuration : conf,
     install_dir : systemunitdir)
 endif

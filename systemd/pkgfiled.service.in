@@ -1,0 +1,15 @@
+[Unit]
+Description=pkgfile database sync daemon
+RequiresMountsFor=@DEFAULT_CACHEPATH@
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/pkgfiled /var/lib/pacman/sync @DEFAULT_CACHEPATH@
+Nice=19
+ProtectSystem=full
+PrivateDevices=yes
+ReadWritePaths=@DEFAULT_CACHEPATH@
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

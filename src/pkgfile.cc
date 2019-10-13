@@ -12,6 +12,7 @@
 #include <sstream>
 #include <vector>
 
+#include "compress.hh"
 #include "filter.hh"
 #include "repo.hh"
 #include "result.hh"
@@ -181,26 +182,6 @@ static pkgfile::Result load_repo(repo_t* repo,
   return result;
 }
 
-static int validate_compression(std::string_view compress) {
-  if (compress == "none") {
-    return ARCHIVE_FILTER_NONE;
-  } else if (compress == "gzip") {
-    return ARCHIVE_FILTER_GZIP;
-  } else if (compress == "bzip2") {
-    return ARCHIVE_FILTER_BZIP2;
-  } else if (compress == "lzma") {
-    return ARCHIVE_FILTER_LZMA;
-  } else if (compress == "lzop") {
-    return ARCHIVE_FILTER_LZOP;
-  } else if (compress == "lz4") {
-    return ARCHIVE_FILTER_LZ4;
-  } else if (compress == "xz") {
-    return ARCHIVE_FILTER_XZ;
-  } else {
-    return -1;
-  }
-}
-
 static void usage(void) {
   fputs("pkgfile " PACKAGE_VERSION "\nUsage: pkgfile [options] target\n\n",
         stdout);
@@ -353,11 +334,12 @@ static int parse_opts(int argc, char** argv) {
         break;
       case 'z':
         if (optarg != nullptr) {
-          config.compress = validate_compression(optarg);
-          if (config.compress < 0) {
+          auto compress = pkgfile::ValidateCompression(optarg);
+          if (compress == std::nullopt) {
             fprintf(stderr, "error: invalid compression option %s\n", optarg);
             return 1;
           }
+          config.compress = compress.value();
         } else {
           config.compress = ARCHIVE_FILTER_GZIP;
         }
