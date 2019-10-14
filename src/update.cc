@@ -366,7 +366,7 @@ int Updater::Update(AlpmConfig* alpm_config, struct config_t* config) {
   // prime the handle by adding a URL from each repo
   for (auto& repo : repos) {
     repo.arch = alpm_config->architecture;
-    repo.force = config->doupdate > 1;
+    repo.force = config->mode == MODE_UPDATE_FORCE;
     repo.config = config;
     r = download_queue_request(curl_multi_, &repo);
     if (r != 0) {

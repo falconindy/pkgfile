@@ -12,9 +12,15 @@ struct Package {
 };
 
 enum Mode {
-  MODE_UNSPECIFIED,
-  MODE_SEARCH,
-  MODE_LIST,
+  MODE_UNSPECIFIED = 0x0,
+
+  MODE_QUERY = 0x10,
+  MODE_SEARCH = 0x11,
+  MODE_LIST = 0x12,
+
+  MODE_UPDATE = 0x20,
+  MODE_UPDATE_ASNEEDED = 0x21,
+  MODE_UPDATE_FORCE = 0x22
 };
 
 struct config_t {
@@ -25,8 +31,7 @@ struct config_t {
                   const pkgfile::filter::Filter& filter, const Package& pkg,
                   pkgfile::Result* result, pkgfile::ArchiveReader* reader);
   Mode mode;
-  int doupdate;
-  char* targetrepo;
+  const char* targetrepo;
   bool binaries;
   bool directories;
   bool icase;

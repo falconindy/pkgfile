@@ -1,3 +1,6 @@
+#include "pkgfile.hh"
+
+#include <archive_entry.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -5,14 +8,11 @@
 #include <string.h>
 #include <sys/mman.h>
 
-#include <archive_entry.h>
-
 #include <future>
 #include <sstream>
 #include <vector>
 
 #include "filter.hh"
-#include "pkgfile.hh"
 #include "repo.hh"
 #include "result.hh"
 #include "update.hh"
@@ -336,7 +336,11 @@ static int parse_opts(int argc, char** argv) {
         config.filefunc = search_metafile;
         break;
       case 'u':
-        config.doupdate++;
+        if (config.mode & MODE_UPDATE) {
+          config.mode = MODE_UPDATE_FORCE;
+        } else {
+          config.mode = MODE_UPDATE_ASNEEDED;
+        }
         break;
       case 'V':
         print_version();
@@ -490,7 +494,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  if (config.doupdate) {
+  if (config.mode & MODE_UPDATE) {
     pkgfile::Updater updater;
     return !!updater.Update(&alpm_config, &config);
   }
