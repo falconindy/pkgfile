@@ -107,7 +107,8 @@ static int parse_pkgname(Package* pkg, std::string_view entryname) {
 }
 
 static std::optional<pkgfile::Result> load_repo(
-    const repo_t& repo, const pkgfile::filter::Filter& filter) {
+    const Repo& repo, const pkgfile::ArchiveEntryCallback& entry_callback,
+    const pkgfile::filter::Filter& filter) {
   char repofile[FILENAME_MAX];
   snprintf(repofile, sizeof(repofile), "%s/%s.files", config.cachedir,
            repo.name.c_str());
@@ -144,7 +145,7 @@ static std::optional<pkgfile::Result> load_repo(
       continue;
     }
 
-    r = config.filefunc(repo.name, filter, pkg, &result, &reader);
+    r = entry_callback(repo.name, filter, pkg, &result, &reader);
     if (r < 0) {
       break;
     }
@@ -323,9 +324,10 @@ static int parse_opts(int argc, char** argv) {
   return 0;
 }
 
-static int search_single_repo(const std::vector<repo_t>& repos,
-                              const pkgfile::filter::Filter& filter,
-                              std::string_view searchstring) {
+static int search_single_repo(
+    const std::vector<Repo>& repos,
+    const pkgfile::ArchiveEntryCallback& entry_callback,
+    const pkgfile::filter::Filter& filter, std::string_view searchstring) {
   std::string_view wanted_repo;
   if (config.targetrepo) {
     wanted_repo = config.targetrepo;
@@ -338,13 +340,12 @@ static int search_single_repo(const std::vector<repo_t>& repos,
       continue;
     }
 
-    auto result = load_repo(repo, filter);
-    if (!result.has_value() || result.value().Empty()) {
+    auto result = load_repo(repo, entry_callback, filter);
+    if (!result.has_value() || result->Empty()) {
       return 1;
     }
 
-    result.value().Print(config.raw ? 0 : result.value().MaxPrefixlen(),
-                         config.eol);
+    result->Print(config.raw ? 0 : result->MaxPrefixlen(), config.eol);
     return 0;
   }
 
@@ -355,13 +356,16 @@ static int search_single_repo(const std::vector<repo_t>& repos,
 }
 
 static std::vector<pkgfile::Result> search_all_repos(
-    const std::vector<repo_t>& repos, const pkgfile::filter::Filter& filter) {
+    const std::vector<Repo>& repos,
+    const pkgfile::ArchiveEntryCallback& entry_callback,
+    const pkgfile::filter::Filter& filter) {
   std::vector<pkgfile::Result> results;
   std::vector<std::future<std::optional<pkgfile::Result>>> futures;
 
   for (const auto& repo : repos) {
-    futures.push_back(std::async(std::launch::async,
-                                 [&] { return load_repo(repo, filter); }));
+    futures.push_back(std::async(std::launch::async, [&] {
+      return load_repo(repo, entry_callback, filter);
+    }));
   }
 
   for (auto& fu : futures) {
@@ -471,9 +475,10 @@ int main(int argc, char* argv[]) {
   // override behavior on $repo/$pkg syntax or --repo
   if ((config.mode == MODE_LIST && strchr(argv[optind], '/')) ||
       config.targetrepo) {
-    ret = search_single_repo(alpm_config.repos, *filter, argv[optind]);
+    ret = search_single_repo(alpm_config.repos, config.filefunc, *filter,
+                             argv[optind]);
   } else {
-    results = search_all_repos(alpm_config.repos, *filter);
+    results = search_all_repos(alpm_config.repos, config.filefunc, *filter);
 
     size_t prefixlen = config.raw ? 0 : MaxPrefixlen(results);
     for (auto& result : results) {

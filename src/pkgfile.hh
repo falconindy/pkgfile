@@ -23,13 +23,21 @@ enum Mode {
   MODE_UPDATE_FORCE = 0x22
 };
 
+namespace pkgfile {
+
+using ArchiveEntryCallback = int (*)(const std::string& repo,
+                                     const pkgfile::filter::Filter& filter,
+                                     const Package& pkg,
+                                     pkgfile::Result* result,
+                                     pkgfile::ArchiveReader* reader);
+
+}
+
 struct config_t {
   const char* cfgfile;
   const char* cachedir;
   filterstyle_t filterby;
-  int (*filefunc)(const std::string& repo,
-                  const pkgfile::filter::Filter& filter, const Package& pkg,
-                  pkgfile::Result* result, pkgfile::ArchiveReader* reader);
+  pkgfile::ArchiveEntryCallback filefunc;
   Mode mode;
   const char* targetrepo;
   bool binaries;

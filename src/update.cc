@@ -68,7 +68,7 @@ std::string PrepareUrl(const std::string& url_template, const std::string& repo,
   return ss.str();
 }
 
-bool repack_repo_data(const struct repo_t* repo) {
+bool repack_repo_data(const struct Repo* repo) {
   auto converter = pkgfile::ArchiveConverter::New(
       repo->name, repo->tmpfile.fd, repo->diskfile, repo->config->compress);
 
@@ -76,7 +76,7 @@ bool repack_repo_data(const struct repo_t* repo) {
 }
 
 size_t write_handler(void* ptr, size_t size, size_t nmemb, void* data) {
-  struct repo_t* repo = (repo_t*)data;
+  struct Repo* repo = (Repo*)data;
   const uint8_t* p = (uint8_t*)ptr;
   size_t nbytes = size * nmemb;
   ssize_t n = 0;
@@ -131,7 +131,7 @@ int open_tmpfile(int flags) {
   return fd;
 }
 
-int download_queue_request(CURLM* multi, struct repo_t* repo) {
+int download_queue_request(CURLM* multi, struct Repo* repo) {
   struct stat st;
 
   if (repo->curl == nullptr) {
@@ -202,7 +202,7 @@ int print_rate(double xfer, const char* xfer_label, double rate,
   }
 }
 
-void print_download_success(struct repo_t* repo, int remaining) {
+void print_download_success(struct Repo* repo, int remaining) {
   double rate = repo->tmpfile.size /
                 chrono::duration<double>(now() - repo->dl_time_start).count();
   auto [xfered_human, xfered_label] = Humanize(repo->tmpfile.size);
@@ -241,7 +241,7 @@ int download_check_complete(CURLM* multi, int remaining) {
   if (msg->msg == CURLMSG_DONE) {
     long uptodate, resp;
     char* effective_url;
-    struct repo_t* repo;
+    struct Repo* repo;
     time_t remote_mtime;
 
     curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &repo);
@@ -252,13 +252,13 @@ int download_check_complete(CURLM* multi, int remaining) {
 
     if (uptodate) {
       printf("  %s is up to date\n", repo->name.c_str());
-      repo->dl_result = RESULT_UPTODATE;
+      repo->dl_result = DownloadResult::UPTODATE;
       return 0;
     }
 
     // was it a success?
     if (msg->data.result != CURLE_OK || resp >= 400) {
-      repo->dl_result = RESULT_ERROR;
+      repo->dl_result = DownloadResult::ERROR;
       if (*repo->errmsg) {
         fprintf(stderr, "warning: download failed: %s: %s\n", effective_url,
                 repo->errmsg);
@@ -282,7 +282,7 @@ int download_check_complete(CURLM* multi, int remaining) {
     print_download_success(repo, remaining);
     repo->worker = std::async(std::launch::async,
                               [repo] { return repack_repo_data(repo); });
-    repo->dl_result = RESULT_OK;
+    repo->dl_result = DownloadResult::OK;
   }
 
   return 0;
@@ -314,9 +314,9 @@ void download_wait_loop(CURLM* multi) {
   } while (active_handles > 0);
 }
 
-int wait_for_repacking(std::vector<repo_t>* repos) {
+int wait_for_repacking(std::vector<Repo>* repos) {
   int running =
-      std::count_if(repos->begin(), repos->end(), [](const repo_t& repo) {
+      std::count_if(repos->begin(), repos->end(), [](const Repo& repo) {
         // The future won't be valid if the repo was up to date.
         if (!repo.worker.valid()) {
           return false;
@@ -331,7 +331,7 @@ int wait_for_repacking(std::vector<repo_t>* repos) {
            running == 1 ? "" : "s");
   }
 
-  return std::count_if(repos->begin(), repos->end(), [](repo_t& repo) {
+  return std::count_if(repos->begin(), repos->end(), [](Repo& repo) {
     return repo.worker.valid() && !repo.worker.get();
   });
 }
@@ -386,16 +386,17 @@ int Updater::Update(AlpmConfig* alpm_config, struct config_t* config) {
     total_xfer += repo.tmpfile.size;
 
     switch (repo.dl_result) {
-      case RESULT_OK:
+      case DownloadResult::OK:
         xfer_count++;
         break;
-      case RESULT_UPTODATE:
+      case DownloadResult::UPTODATE:
         break;
-      case RESULT_ERROR:
+      case DownloadResult::ERROR:
         ret = 1;
         break;
       default:
-        fprintf(stderr, "BUG: unhandled repo->dl_result=%d\n", repo.dl_result);
+        fprintf(stderr, "BUG: unhandled repo->dl_result=%d\n",
+                static_cast<int>(repo.dl_result));
         break;
     }
   }

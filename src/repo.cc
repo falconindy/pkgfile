@@ -8,7 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 
-repo_t::~repo_t() {
+Repo::~Repo() {
   if (tmpfile.fd >= 0) {
     close(tmpfile.fd);
   }

@@ -7,22 +7,22 @@
 #include <string>
 #include <vector>
 
-enum download_Result {
-  RESULT_UNKNOWN,
-  RESULT_OK,
-  RESULT_UPTODATE,
-  RESULT_ERROR,
+enum class DownloadResult {
+  UNKNOWN,
+  OK,
+  UPTODATE,
+  ERROR,
 };
 
-struct repo_t {
-  explicit repo_t(std::string name) : name(std::move(name)) {}
-  ~repo_t();
+struct Repo {
+  explicit Repo(std::string name) : name(std::move(name)) {}
+  ~Repo();
 
-  repo_t(const repo_t&) = delete;
-  repo_t& operator=(const repo_t&) = delete;
+  Repo(const Repo&) = delete;
+  Repo& operator=(const Repo&) = delete;
 
-  repo_t(repo_t&&) = default;
-  repo_t& operator=(repo_t&&) = default;
+  Repo(Repo&&) = default;
+  Repo& operator=(Repo&&) = default;
 
   std::string name;
   std::vector<std::string> servers;
@@ -42,7 +42,7 @@ struct repo_t {
   // error buffer
   char errmsg[CURL_ERROR_SIZE];
   // numeric err for determining success
-  enum download_Result dl_result = RESULT_UNKNOWN;
+  DownloadResult dl_result = DownloadResult::UNKNOWN;
   // force update repos
   short force = false;
   // start time for download
@@ -61,7 +61,7 @@ struct AlpmConfig {
 
   static int LoadFromFile(const char* filename, AlpmConfig* config);
 
-  std::vector<repo_t> repos;
+  std::vector<Repo> repos;
   std::string architecture;
 };
 
