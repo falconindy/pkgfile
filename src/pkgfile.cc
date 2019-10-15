@@ -24,8 +24,9 @@ static struct config_t config;
 
 static const char* filtermethods[2] = {"glob", "regex"};
 
-static std::string format_search_result(const std::string& repo,
-                                        const Package& pkg) {
+namespace {
+
+std::string FormatSearchResult(const std::string& repo, const Package& pkg) {
   std::stringstream ss;
 
   if (config.verbose) {
@@ -41,17 +42,16 @@ static std::string format_search_result(const std::string& repo,
   return ss.str();
 }
 
-static int search_metafile(const std::string& repo,
-                           const pkgfile::filter::Filter& filter,
-                           const Package& pkg, pkgfile::Result* result,
-                           pkgfile::ArchiveReader* reader) {
+int SearchMetafile(const std::string& repo,
+                   const pkgfile::filter::Filter& filter, const Package& pkg,
+                   pkgfile::Result* result, pkgfile::ArchiveReader* reader) {
   std::string line;
   while (reader->GetLine(&line) == ARCHIVE_OK) {
     if (!filter.Matches(line)) {
       continue;
     }
 
-    result->Add(format_search_result(repo, pkg),
+    result->Add(FormatSearchResult(repo, pkg),
                 config.verbose ? line : std::string());
 
     if (!config.verbose) {
@@ -62,10 +62,9 @@ static int search_metafile(const std::string& repo,
   return 0;
 }
 
-static int list_metafile(const std::string& repo,
-                         const pkgfile::filter::Filter& filter,
-                         const Package& pkg, pkgfile::Result* result,
-                         pkgfile::ArchiveReader* reader) {
+int ListMetafile(const std::string& repo, const pkgfile::filter::Filter& filter,
+                 const Package& pkg, pkgfile::Result* result,
+                 pkgfile::ArchiveReader* reader) {
   if (!filter.Matches(pkg.name)) {
     return 0;
   }
@@ -94,7 +93,7 @@ static int list_metafile(const std::string& repo,
   return config.filterby == FILTER_EXACT ? -1 : 0;
 }
 
-static int parse_pkgname(Package* pkg, std::string_view entryname) {
+int ParsePkgname(Package* pkg, std::string_view entryname) {
   pkg->name = entryname;
 
   // handle errors
@@ -106,7 +105,7 @@ static int parse_pkgname(Package* pkg, std::string_view entryname) {
   return 0;
 }
 
-static std::optional<pkgfile::Result> load_repo(
+std::optional<pkgfile::Result> ProcessRepo(
     const Repo& repo, const pkgfile::ArchiveEntryCallback& entry_callback,
     const pkgfile::filter::Filter& filter) {
   char repofile[FILENAME_MAX];
@@ -138,7 +137,7 @@ static std::optional<pkgfile::Result> load_repo(
     const char* entryname = archive_entry_pathname(e);
 
     Package pkg;
-    int r = parse_pkgname(&pkg, entryname);
+    int r = ParsePkgname(&pkg, entryname);
     if (r < 0) {
       fprintf(stderr, "error parsing pkgname from: %s: %s\n", entryname,
               strerror(-r));
@@ -154,7 +153,7 @@ static std::optional<pkgfile::Result> load_repo(
   return result;
 }
 
-static void usage(void) {
+void Usage(void) {
   fputs("pkgfile " PACKAGE_VERSION "\nUsage: pkgfile [options] target\n\n",
         stdout);
   fputs(
@@ -196,11 +195,9 @@ static void usage(void) {
       stdout);
 }
 
-static void print_version(void) {
-  fputs(PACKAGE_NAME " v" PACKAGE_VERSION "\n", stdout);
-}
+void Version(void) { fputs(PACKAGE_NAME " v" PACKAGE_VERSION "\n", stdout); }
 
-static int parse_opts(int argc, char** argv) {
+int ParseOpts(int argc, char** argv) {
   static constexpr char kPacmanConfig[] = "/etc/pacman.conf";
   static constexpr char kShortOpts[] = "0bC:D:dghilqR:rsuVvwz::";
   static constexpr struct option kLongOpts[] = {
@@ -225,7 +222,7 @@ static int parse_opts(int argc, char** argv) {
       {0, 0, 0, 0}};
 
   // defaults
-  config.filefunc = search_metafile;
+  config.filefunc = SearchMetafile;
   config.eol = '\n';
   config.cfgfile = kPacmanConfig;
   config.cachedir = DEFAULT_CACHEPATH;
@@ -261,14 +258,14 @@ static int parse_opts(int argc, char** argv) {
         config.filterby = FILTER_GLOB;
         break;
       case 'h':
-        usage();
+        Usage();
         exit(EXIT_SUCCESS);
       case 'i':
         config.icase = true;
         break;
       case 'l':
         config.mode = MODE_LIST;
-        config.filefunc = list_metafile;
+        config.filefunc = ListMetafile;
         break;
       case 'q':
         config.quiet = true;
@@ -286,7 +283,7 @@ static int parse_opts(int argc, char** argv) {
         break;
       case 's':
         config.mode = MODE_SEARCH;
-        config.filefunc = search_metafile;
+        config.filefunc = SearchMetafile;
         break;
       case 'u':
         if (config.mode & MODE_UPDATE) {
@@ -296,7 +293,7 @@ static int parse_opts(int argc, char** argv) {
         }
         break;
       case 'V':
-        print_version();
+        Version();
         exit(EXIT_SUCCESS);
       case 'v':
         config.verbose = true;
@@ -324,10 +321,10 @@ static int parse_opts(int argc, char** argv) {
   return 0;
 }
 
-static int search_single_repo(
-    const std::vector<Repo>& repos,
-    const pkgfile::ArchiveEntryCallback& entry_callback,
-    const pkgfile::filter::Filter& filter, std::string_view searchstring) {
+int SearchSingleRepo(const std::vector<Repo>& repos,
+                     const pkgfile::ArchiveEntryCallback& entry_callback,
+                     const pkgfile::filter::Filter& filter,
+                     std::string_view searchstring) {
   std::string_view wanted_repo;
   if (config.targetrepo) {
     wanted_repo = config.targetrepo;
@@ -340,7 +337,7 @@ static int search_single_repo(
       continue;
     }
 
-    auto result = load_repo(repo, entry_callback, filter);
+    auto result = ProcessRepo(repo, entry_callback, filter);
     if (!result.has_value() || result->Empty()) {
       return 1;
     }
@@ -355,7 +352,7 @@ static int search_single_repo(
   return 1;
 }
 
-static std::vector<pkgfile::Result> search_all_repos(
+std::vector<pkgfile::Result> SearchAllRepos(
     const std::vector<Repo>& repos,
     const pkgfile::ArchiveEntryCallback& entry_callback,
     const pkgfile::filter::Filter& filter) {
@@ -364,7 +361,7 @@ static std::vector<pkgfile::Result> search_all_repos(
 
   for (const auto& repo : repos) {
     futures.push_back(std::async(std::launch::async, [&] {
-      return load_repo(repo, entry_callback, filter);
+      return ProcessRepo(repo, entry_callback, filter);
     }));
   }
 
@@ -436,6 +433,8 @@ std::unique_ptr<pkgfile::filter::Filter> BuildFilterFromOptions(
   return filter;
 }
 
+}  // namespace
+
 int main(int argc, char* argv[]) {
   int reposfound = 0, ret = 0;
   AlpmConfig alpm_config;
@@ -443,7 +442,7 @@ int main(int argc, char* argv[]) {
 
   setlocale(LC_ALL, "");
 
-  if (parse_opts(argc, argv) != 0) {
+  if (ParseOpts(argc, argv) != 0) {
     return 2;
   }
 
@@ -475,10 +474,10 @@ int main(int argc, char* argv[]) {
   // override behavior on $repo/$pkg syntax or --repo
   if ((config.mode == MODE_LIST && strchr(argv[optind], '/')) ||
       config.targetrepo) {
-    ret = search_single_repo(alpm_config.repos, config.filefunc, *filter,
-                             argv[optind]);
+    ret = SearchSingleRepo(alpm_config.repos, config.filefunc, *filter,
+                           argv[optind]);
   } else {
-    results = search_all_repos(alpm_config.repos, config.filefunc, *filter);
+    results = SearchAllRepos(alpm_config.repos, config.filefunc, *filter);
 
     size_t prefixlen = config.raw ? 0 : MaxPrefixlen(results);
     for (auto& result : results) {
