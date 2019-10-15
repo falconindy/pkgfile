@@ -9,9 +9,11 @@
 #include <sys/mman.h>
 
 #include <future>
+#include <optional>
 #include <sstream>
 #include <vector>
 
+#include "archive_io.hh"
 #include "compress.hh"
 #include "filter.hh"
 #include "repo.hh"
@@ -104,53 +106,33 @@ static int parse_pkgname(Package* pkg, std::string_view entryname) {
   return 0;
 }
 
-static pkgfile::Result load_repo(repo_t* repo,
-                                 const pkgfile::filter::Filter& filter) {
+static std::optional<pkgfile::Result> load_repo(
+    const repo_t& repo, const pkgfile::filter::Filter& filter) {
   char repofile[FILENAME_MAX];
-  std::string line;
-  archive* a;
-  archive_entry* e;
-  struct stat st;
-  void* repodata = MAP_FAILED;
-
-  pkgfile::Result result(repo->name);
-
   snprintf(repofile, sizeof(repofile), "%s/%s.files", config.cachedir,
-           repo->name.c_str());
+           repo.name.c_str());
 
-  a = archive_read_new();
-  archive_read_support_format_all(a);
-  archive_read_support_filter_all(a);
-
-  repo->fd = open(repofile, O_RDONLY);
-  if (repo->fd < 0) {
-    // fail silently if the file doesn't exist
+  auto fd = pkgfile::ReadOnlyFile::Open(repofile);
+  if (fd == nullptr) {
     if (errno != ENOENT) {
-      fprintf(stderr, "error: failed to open repo: %s: %s\n", repofile,
+      fprintf(stderr, "failed to open %s for reading: %s\n", repofile,
               strerror(errno));
     }
-    // goto cleanup;
+    return std::nullopt;
   }
 
-  fstat(repo->fd, &st);
-  repodata =
-      mmap(0, st.st_size, PROT_READ, MAP_SHARED | MAP_POPULATE, repo->fd, 0);
-  if (repodata == MAP_FAILED) {
-    fprintf(stderr, "error: failed to map pages for %s: %s\n", repofile,
-            strerror(errno));
-    return result;
-    // goto cleanup;
+  const char* err;
+  auto read_archive = pkgfile::ReadArchive::New(fd->fd(), &err);
+  if (read_archive == nullptr) {
+    fprintf(stderr, "failed to create new archive for reading: %s: %s\n",
+            repofile, err);
+    return std::nullopt;
   }
 
-  if (archive_read_open_memory(a, repodata, st.st_size) != ARCHIVE_OK) {
-    fprintf(stderr, "error: failed to load repo: %s: %s\n", repofile,
-            archive_error_string(a));
-    return result;
-    // goto cleanup;
-  }
+  pkgfile::Result result(repo.name);
+  pkgfile::ArchiveReader reader(read_archive->read_archive());
 
-  pkgfile::ArchiveReader reader(a);
-
+  archive_entry* e;
   while (reader.Next(&e) == ARCHIVE_OK) {
     const char* entryname = archive_entry_pathname(e);
 
@@ -162,21 +144,10 @@ static pkgfile::Result load_repo(repo_t* repo,
       continue;
     }
 
-    r = config.filefunc(repo->name, filter, pkg, &result, &reader);
+    r = config.filefunc(repo.name, filter, pkg, &result, &reader);
     if (r < 0) {
       break;
     }
-  }
-
-  archive_read_close(a);
-
-  // cleanup:
-  archive_read_free(a);
-  if (repo->fd >= 0) {
-    close(repo->fd);
-  }
-  if (repodata != MAP_FAILED) {
-    munmap(repodata, st.st_size);
   }
 
   return result;
@@ -352,7 +323,7 @@ static int parse_opts(int argc, char** argv) {
   return 0;
 }
 
-static int search_single_repo(std::vector<repo_t>* repos,
+static int search_single_repo(const std::vector<repo_t>& repos,
                               const pkgfile::filter::Filter& filter,
                               std::string_view searchstring) {
   std::string_view wanted_repo;
@@ -362,15 +333,19 @@ static int search_single_repo(std::vector<repo_t>* repos,
     wanted_repo = searchstring.substr(0, searchstring.find('/'));
   }
 
-  for (auto& repo : *repos) {
+  for (const auto& repo : repos) {
     if (repo.name != wanted_repo) {
       continue;
     }
 
-    auto result = load_repo(&repo, filter);
-    result.Print(config.raw ? 0 : result.MaxPrefixlen(), config.eol);
+    auto result = load_repo(repo, filter);
+    if (!result.has_value() || result.value().Empty()) {
+      return 1;
+    }
 
-    return result.Empty();
+    result.value().Print(config.raw ? 0 : result.value().MaxPrefixlen(),
+                         config.eol);
+    return 0;
   }
 
   // repo not found
@@ -380,17 +355,20 @@ static int search_single_repo(std::vector<repo_t>* repos,
 }
 
 static std::vector<pkgfile::Result> search_all_repos(
-    std::vector<repo_t>* repos, const pkgfile::filter::Filter& filter) {
+    const std::vector<repo_t>& repos, const pkgfile::filter::Filter& filter) {
   std::vector<pkgfile::Result> results;
-  std::vector<std::future<pkgfile::Result>> futures;
+  std::vector<std::future<std::optional<pkgfile::Result>>> futures;
 
-  for (auto& repo : *repos) {
+  for (const auto& repo : repos) {
     futures.push_back(std::async(std::launch::async,
-                                 [&] { return load_repo(&repo, filter); }));
+                                 [&] { return load_repo(repo, filter); }));
   }
 
   for (auto& fu : futures) {
-    results.emplace_back(fu.get());
+    auto result = fu.get();
+    if (result.has_value()) {
+      results.emplace_back(std::move(result.value()));
+    }
   }
 
   return results;
@@ -470,8 +448,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  auto* repos = &alpm_config.repos;
-  if (repos->empty()) {
+  if (alpm_config.repos.empty()) {
     fprintf(stderr, "error: no repos found in %s\n", config.cfgfile);
     return 1;
   }
@@ -494,14 +471,14 @@ int main(int argc, char* argv[]) {
   // override behavior on $repo/$pkg syntax or --repo
   if ((config.mode == MODE_LIST && strchr(argv[optind], '/')) ||
       config.targetrepo) {
-    ret = search_single_repo(repos, *filter, argv[optind]);
+    ret = search_single_repo(alpm_config.repos, *filter, argv[optind]);
   } else {
-    results = search_all_repos(&alpm_config.repos, *filter);
+    results = search_all_repos(alpm_config.repos, *filter);
 
     size_t prefixlen = config.raw ? 0 : MaxPrefixlen(results);
-    for (size_t i = 0; i < alpm_config.repos.size(); ++i) {
-      reposfound += alpm_config.repos[i].fd >= 0;
-      ret += (int)results[i].Print(prefixlen, config.eol);
+    for (auto& result : results) {
+      ++reposfound;
+      ret += (int)result.Print(prefixlen, config.eol);
     }
 
     if (!reposfound) {

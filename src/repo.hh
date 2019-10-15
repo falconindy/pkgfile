@@ -27,7 +27,6 @@ struct repo_t {
   std::string name;
   std::vector<std::string> servers;
 
-  int fd;
   std::string arch;
 
   const struct config_t* config;

@@ -1,4 +1,3 @@
-#include <fcntl.h>
 #include <getopt.h>
 #include <systemd/sd-event.h>
 #include <utime.h>
@@ -16,27 +15,6 @@
 namespace fs = std::filesystem;
 
 namespace {
-
-class ReadOnlyFile {
- public:
-  ~ReadOnlyFile() { close(fd_); }
-
-  int fd() const { return fd_; }
-
-  static std::unique_ptr<ReadOnlyFile> Open(const std::string& path) {
-    int fd = open(path.c_str(), O_RDONLY);
-    if (fd < 0) {
-      return nullptr;
-    }
-
-    return std::unique_ptr<ReadOnlyFile>(new ReadOnlyFile(fd));
-  }
-
- private:
-  ReadOnlyFile(int fd) : fd_(fd) {}
-
-  int fd_;
-};
 
 void BlockSignals(std::initializer_list<int> signums, sigset_t* saved) {
   sigset_t ss;

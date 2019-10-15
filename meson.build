@@ -37,6 +37,7 @@ libcommon = static_library(
   'pkgfile',
   files('''
     src/archive_converter.cc src/archive_converter.hh
+    src/archive_io.cc src/archive_io.hh
     src/archive_reader.cc src/archive_reader.hh
     src/compress.cc src/compress.hh
     src/filter.cc src/filter.hh
