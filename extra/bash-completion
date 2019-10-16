@@ -23,7 +23,7 @@ _pkgfile() {
   local longoptsarg=(--compress --config --cachedir --repo)
   local allopts=("${shortopts[@]}" "${longopts[@]}" "${longoptsarg[@]}")
 
-  local compressopts=(none gzip bzip2 lz4 lzma lzop xz)
+  local compressopts=(none gzip bzip2 lz4 lzma lzop xz zstd)
 
   # maybe mangle the arguments in case we're looking at a --longopt=$val
   [[ $cur = '=' ]] && cur=

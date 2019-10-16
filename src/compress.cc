@@ -16,6 +16,7 @@ std::optional<int> ValidateCompression(std::string_view compress) {
       { "lzop",  ARCHIVE_FILTER_LZOP  },
       { "lz4",   ARCHIVE_FILTER_LZ4   },
       { "xz",    ARCHIVE_FILTER_XZ    },
+      { "zstd",  ARCHIVE_FILTER_ZSTD  },
       // clang-format on
   };
 
