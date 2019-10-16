@@ -177,4 +177,3 @@ B<repo-add>(8), B<pcre>(3), B<glob>(7), B<pacman.conf>(5)
 =head1 AUTHOR
 
 Dave Reisner E<lt>dreisner@archlinux.orgE<gt>
-

@@ -69,10 +69,10 @@ executable(
   dependencies : [libsystemd, stdcppfs],
   install : true)
 
-man = custom_target(
-    'man',
+custom_target(
+    'pkgfile.1',
     output : 'pkgfile.1',
-    input : 'README.pod',
+    input : 'man/pkgfile.pod',
     command : [
       pod2man,
       '--section=1',
