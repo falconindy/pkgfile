@@ -18,7 +18,7 @@ class Result {
   bool Empty() const { return lines_.empty(); }
 
   void Add(std::string prefix, std::string entry);
-  size_t Print(size_t prefixlen, char eol);
+  void Print(size_t prefixlen, char eol);
   size_t MaxPrefixlen() const { return max_prefixlen_; }
 
  private:

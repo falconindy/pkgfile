@@ -359,18 +359,21 @@ int SearchAllRepos(const RepoMap& repos,
   std::vector<pkgfile::Result> results;
   for (auto& fu : futures) {
     auto result = fu.get();
-    if (result.has_value()) {
+    if (result.has_value() && !result->Empty()) {
       results.emplace_back(std::move(result.value()));
     }
   }
 
-  int ret = 0;
-  size_t prefixlen = config.raw ? 0 : MaxPrefixlen(results);
-  for (auto& result : results) {
-    ret += (int)result.Print(prefixlen, config.eol);
+  if (results.empty()) {
+    return 1;
   }
 
-  return ret > 0 ? 0 : 1;
+  size_t prefixlen = config.raw ? 0 : MaxPrefixlen(results);
+  for (auto& result : results) {
+    result.Print(prefixlen, config.eol);
+  }
+
+  return 0;
 }
 
 std::unique_ptr<pkgfile::filter::Filter> BuildFilterFromOptions(

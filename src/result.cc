@@ -25,9 +25,9 @@ void Result::Add(std::string prefix, std::string entry) {
   lines_.emplace_back(std::move(prefix), std::move(entry));
 }
 
-size_t Result::Print(size_t prefixlen, char eol) {
+void Result::Print(size_t prefixlen, char eol) {
   if (lines_.empty()) {
-    return 0;
+    return;
   }
 
   std::sort(lines_.begin(), lines_.end(),
@@ -45,8 +45,6 @@ size_t Result::Print(size_t prefixlen, char eol) {
   } else {
     PrintOneColumn(eol);
   }
-
-  return lines_.size();
 }
 
 size_t MaxPrefixlen(const std::vector<Result>& results) {
