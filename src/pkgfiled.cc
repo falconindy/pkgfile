@@ -282,7 +282,7 @@ std::optional<pkgfile::Pkgfiled::Options> ParseOpts(int* argc, char*** argv) {
   return opts;
 }
 
-}
+}  // namespace
 
 int main(int argc, char** argv) {
   auto options = ParseOpts(&argc, &argv);

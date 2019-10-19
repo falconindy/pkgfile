@@ -31,8 +31,6 @@ struct Repo {
 
   const struct config_t* config;
 
-  // download stuff, should be moved to a separate class
-
   // curl easy handle
   CURL* curl = nullptr;
   // destination

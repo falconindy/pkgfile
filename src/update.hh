@@ -12,7 +12,7 @@ class Updater {
   Updater();
   ~Updater();
 
-  int Update(AlpmConfig* alpm_config, struct config_t* config);
+  int Update(struct config_t* config);
 
  private:
   CURLM* curl_multi_;

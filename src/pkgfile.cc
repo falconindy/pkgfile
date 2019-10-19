@@ -6,9 +6,10 @@
 #include <getopt.h>
 #include <locale.h>
 #include <string.h>
-#include <sys/mman.h>
 
+#include <filesystem>
 #include <future>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -16,13 +17,16 @@
 #include "archive_io.hh"
 #include "compress.hh"
 #include "filter.hh"
-#include "repo.hh"
 #include "result.hh"
 #include "update.hh"
 
 static struct config_t config;
 
 static const char* filtermethods[2] = {"glob", "regex"};
+
+namespace fs = std::filesystem;
+
+using RepoMap = std::map<std::string, fs::path>;
 
 namespace {
 
@@ -106,16 +110,12 @@ int ParsePkgname(Package* pkg, std::string_view entryname) {
 }
 
 std::optional<pkgfile::Result> ProcessRepo(
-    const Repo& repo, const pkgfile::ArchiveEntryCallback& entry_callback,
+    const fs::path repo, const pkgfile::ArchiveEntryCallback& entry_callback,
     const pkgfile::filter::Filter& filter) {
-  char repofile[FILENAME_MAX];
-  snprintf(repofile, sizeof(repofile), "%s/%s.files", config.cachedir,
-           repo.name.c_str());
-
-  auto fd = pkgfile::ReadOnlyFile::Open(repofile);
+  auto fd = pkgfile::ReadOnlyFile::Open(repo);
   if (fd == nullptr) {
     if (errno != ENOENT) {
-      fprintf(stderr, "failed to open %s for reading: %s\n", repofile,
+      fprintf(stderr, "failed to open %s for reading: %s\n", repo.c_str(),
               strerror(errno));
     }
     return std::nullopt;
@@ -125,11 +125,11 @@ std::optional<pkgfile::Result> ProcessRepo(
   auto read_archive = pkgfile::ReadArchive::New(fd->fd(), &err);
   if (read_archive == nullptr) {
     fprintf(stderr, "failed to create new archive for reading: %s: %s\n",
-            repofile, err);
+            repo.c_str(), err);
     return std::nullopt;
   }
 
-  pkgfile::Result result(repo.name);
+  pkgfile::Result result(repo.stem());
   pkgfile::ArchiveReader reader(read_archive->read_archive());
 
   archive_entry* e;
@@ -144,7 +144,7 @@ std::optional<pkgfile::Result> ProcessRepo(
       continue;
     }
 
-    r = entry_callback(repo.name, filter, pkg, &result, &reader);
+    r = entry_callback(repo.stem(), filter, pkg, &result, &reader);
     if (r < 0) {
       break;
     }
@@ -321,50 +321,42 @@ int ParseOpts(int argc, char** argv) {
   return 0;
 }
 
-int SearchSingleRepo(const std::vector<Repo>& repos,
+int SearchSingleRepo(const RepoMap& repos,
                      const pkgfile::ArchiveEntryCallback& entry_callback,
                      const pkgfile::filter::Filter& filter,
                      std::string_view searchstring) {
-  std::string_view wanted_repo;
+  std::string wanted_repo;
   if (config.targetrepo) {
     wanted_repo = config.targetrepo;
   } else {
     wanted_repo = searchstring.substr(0, searchstring.find('/'));
   }
 
-  for (const auto& repo : repos) {
-    if (repo.name != wanted_repo) {
-      continue;
-    }
-
-    auto result = ProcessRepo(repo, entry_callback, filter);
-    if (!result.has_value() || result->Empty()) {
-      return 1;
-    }
-
-    result->Print(config.raw ? 0 : result->MaxPrefixlen(), config.eol);
-    return 0;
+  auto iter = repos.find(wanted_repo);
+  if (iter == repos.end()) {
+    fprintf(stderr, "error: repo not available: %s\n", wanted_repo.c_str());
   }
 
-  // repo not found
-  fprintf(stderr, "error: repo not available: %s\n", config.targetrepo);
+  auto result = ProcessRepo(iter->second, entry_callback, filter);
+  if (!result.has_value() || result->Empty()) {
+    return 1;
+  }
 
-  return 1;
+  result->Print(config.raw ? 0 : result->MaxPrefixlen(), config.eol);
+  return 0;
 }
 
-std::vector<pkgfile::Result> SearchAllRepos(
-    const std::vector<Repo>& repos,
-    const pkgfile::ArchiveEntryCallback& entry_callback,
-    const pkgfile::filter::Filter& filter) {
-  std::vector<pkgfile::Result> results;
+int SearchAllRepos(const RepoMap& repos,
+                   const pkgfile::ArchiveEntryCallback& entry_callback,
+                   const pkgfile::filter::Filter& filter) {
   std::vector<std::future<std::optional<pkgfile::Result>>> futures;
-
   for (const auto& repo : repos) {
     futures.push_back(std::async(std::launch::async, [&] {
-      return ProcessRepo(repo, entry_callback, filter);
+      return ProcessRepo(repo.second, entry_callback, filter);
     }));
   }
 
+  std::vector<pkgfile::Result> results;
   for (auto& fu : futures) {
     auto result = fu.get();
     if (result.has_value()) {
@@ -372,7 +364,13 @@ std::vector<pkgfile::Result> SearchAllRepos(
     }
   }
 
-  return results;
+  int ret = 0;
+  size_t prefixlen = config.raw ? 0 : MaxPrefixlen(results);
+  for (auto& result : results) {
+    ret += (int)result.Print(prefixlen, config.eol);
+  }
+
+  return ret > 0 ? 0 : 1;
 }
 
 std::unique_ptr<pkgfile::filter::Filter> BuildFilterFromOptions(
@@ -433,32 +431,32 @@ std::unique_ptr<pkgfile::filter::Filter> BuildFilterFromOptions(
   return filter;
 }
 
+RepoMap DiscoverRepos(std::string_view cachedir) {
+  RepoMap repos;
+
+  for (const auto& p : fs::directory_iterator(cachedir)) {
+    if (!p.is_regular_file() || p.path().extension() != ".files") {
+      continue;
+    }
+
+    repos.emplace(p.path().stem(), p.path());
+  }
+
+  return repos;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  int reposfound = 0, ret = 0;
-  AlpmConfig alpm_config;
-  std::vector<pkgfile::Result> results;
-
   setlocale(LC_ALL, "");
 
   if (ParseOpts(argc, argv) != 0) {
     return 2;
   }
 
-  ret = AlpmConfig::LoadFromFile(config.cfgfile, &alpm_config);
-  if (ret < 0) {
-    return 1;
-  }
-
-  if (alpm_config.repos.empty()) {
-    fprintf(stderr, "error: no repos found in %s\n", config.cfgfile);
-    return 1;
-  }
-
   if (config.mode & MODE_UPDATE) {
     pkgfile::Updater updater;
-    return !!updater.Update(&alpm_config, &config);
+    return !!updater.Update(&config);
   }
 
   if (optind == argc) {
@@ -471,29 +469,18 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  auto repos = DiscoverRepos(config.cachedir);
+  if (repos.empty()) {
+    fputs("error: No repo files found. Please run `pkgfiled -o'.\n", stderr);
+  }
+
   // override behavior on $repo/$pkg syntax or --repo
   if ((config.mode == MODE_LIST && strchr(argv[optind], '/')) ||
       config.targetrepo) {
-    ret = SearchSingleRepo(alpm_config.repos, config.filefunc, *filter,
-                           argv[optind]);
-  } else {
-    results = SearchAllRepos(alpm_config.repos, config.filefunc, *filter);
-
-    size_t prefixlen = config.raw ? 0 : MaxPrefixlen(results);
-    for (auto& result : results) {
-      ++reposfound;
-      ret += (int)result.Print(prefixlen, config.eol);
-    }
-
-    if (!reposfound) {
-      fputs("error: No repo files found. Please run `pkgfile --update'.\n",
-            stderr);
-    }
-
-    ret = ret > 0 ? 0 : 1;
+    return SearchSingleRepo(repos, config.filefunc, *filter, argv[optind]);
   }
 
-  return ret;
+  return SearchAllRepos(repos, config.filefunc, *filter);
 }
 
 // vim: set ts=2 sw=2 et:

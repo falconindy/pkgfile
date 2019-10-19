@@ -340,9 +340,20 @@ int WaitForRepacking(std::vector<Repo>* repos) {
 
 namespace pkgfile {
 
-int Updater::Update(AlpmConfig* alpm_config, struct config_t* config) {
+int Updater::Update(struct config_t* config) {
   int r, xfer_count = 0, ret = 0;
   off_t total_xfer = 0;
+
+  AlpmConfig alpm_config;
+  ret = AlpmConfig::LoadFromFile(config->cfgfile, &alpm_config);
+  if (ret < 0) {
+    return 1;
+  }
+
+  if (alpm_config.repos.empty()) {
+    fprintf(stderr, "error: no repos found in %s\n", config->cfgfile);
+    return 1;
+  }
 
   if (access(config->cachedir, W_OK)) {
     fprintf(stderr, "error: unable to write to %s: %s\n", config->cachedir,
@@ -350,22 +361,22 @@ int Updater::Update(AlpmConfig* alpm_config, struct config_t* config) {
     return 1;
   }
 
-  printf(":: Updating %zd repos...\n", alpm_config->repos.size());
+  printf(":: Updating %zd repos...\n", alpm_config.repos.size());
 
-  if (alpm_config->architecture.empty()) {
+  if (alpm_config.architecture.empty()) {
     struct utsname un;
     uname(&un);
-    alpm_config->architecture = un.machine;
+    alpm_config.architecture = un.machine;
   }
 
   // ensure all our DBs are 0644
   umask(0022);
 
-  auto& repos = alpm_config->repos;
+  auto& repos = alpm_config.repos;
 
   // prime the handle by adding a URL from each repo
   for (auto& repo : repos) {
-    repo.arch = alpm_config->architecture;
+    repo.arch = alpm_config.architecture;
     repo.force = config->mode == MODE_UPDATE_FORCE;
     repo.config = config;
     r = DownloadQueueRequest(curl_multi_, &repo);
