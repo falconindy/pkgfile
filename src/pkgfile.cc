@@ -460,8 +460,8 @@ int main(int argc, char* argv[]) {
   }
 
   if (config.mode & MODE_UPDATE) {
-    pkgfile::Updater updater;
-    return !!updater.Update(&config);
+    return pkgfile::Updater(config.cachedir, config.compress)
+        .Update(config.cfgfile, config.mode == MODE_UPDATE_FORCE);
   }
 
   if (optind == argc) {

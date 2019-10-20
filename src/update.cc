@@ -68,13 +68,6 @@ std::string PrepareUrl(const std::string& url_template, const std::string& repo,
   return ss.str();
 }
 
-bool RepackRepoData(const struct Repo* repo) {
-  auto converter = pkgfile::ArchiveConverter::New(
-      repo->name, repo->tmpfile.fd, repo->diskfile, repo->config->compress);
-
-  return converter != nullptr && converter->RewriteArchive();
-}
-
 size_t WriteHandler(void* ptr, size_t size, size_t nmemb, void* data) {
   struct Repo* repo = (Repo*)data;
   const uint8_t* p = (uint8_t*)ptr;
@@ -131,7 +124,73 @@ int OpenTmpfile(int flags) {
   return fd;
 }
 
-int DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
+int PrintRate(double xfer, const char* xfer_label, double rate,
+              const char rate_label) {
+  // We will show 1.62M/s, 11.6M/s, but 116K/s and 1116K/s
+  if (rate < 9.995) {
+    return printf("%8.1f %3s  %4.2f%c/s", xfer, xfer_label, rate, rate_label);
+  } else if (rate < 99.95) {
+    return printf("%8.1f %3s  %4.1f%c/s", xfer, xfer_label, rate, rate_label);
+  } else {
+    return printf("%8.1f %3s  %4.f%c/s", xfer, xfer_label, rate, rate_label);
+  }
+}
+
+void PrintDownloadSuccess(struct Repo* repo, int remaining) {
+  double rate = repo->tmpfile.size /
+                chrono::duration<double>(now() - repo->dl_time_start).count();
+  auto [xfered_human, xfered_label] = Humanize(repo->tmpfile.size);
+
+  printf("  download complete: %-20s [", repo->name.c_str());
+
+  int width;
+  if (fabs(rate - INFINITY) < DBL_EPSILON) {
+    width = printf(" [%6.1f %3s  %7s ", xfered_human, xfered_label, "----");
+  } else {
+    auto [rate_human, rate_label] = Humanize(rate);
+    width = PrintRate(xfered_human, xfered_label, rate_human, rate_label[0]);
+  }
+  printf(" %*d remaining]\n", 23 - width, remaining);
+}
+
+void PrintTotalDlStats(int count, double duration, off_t total_xfer) {
+  double rate = total_xfer / duration;
+  auto [xfered_human, xfered_label] = Humanize(total_xfer);
+  auto [rate_human, rate_label] = Humanize(rate);
+
+  int width = printf(":: download complete in %.2fs", duration);
+  printf("%*s<", 42 - width, "");
+  PrintRate(xfered_human, xfered_label, rate_human, rate_label[0]);
+  printf(" %2d file%c    >\n", count, count == 1 ? ' ' : 's');
+}
+
+int WaitForRepacking(std::vector<Repo>* repos) {
+  int running =
+      std::count_if(repos->begin(), repos->end(), [](const Repo& repo) {
+        // The future won't be valid if the repo was up to date.
+        if (!repo.worker.valid()) {
+          return false;
+        }
+
+        return repo.worker.wait_for(chrono::seconds::zero()) !=
+               std::future_status::ready;
+      });
+
+  if (running > 0) {
+    printf(":: waiting for %d repo%s to finish repacking...\n", running,
+           running == 1 ? "" : "s");
+  }
+
+  return std::count_if(repos->begin(), repos->end(), [](Repo& repo) {
+    return repo.worker.valid() && !repo.worker.get();
+  });
+}
+
+}  // namespace
+
+namespace pkgfile {
+
+int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
   struct stat st;
 
   if (repo->curl == nullptr) {
@@ -143,8 +202,7 @@ int DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
     repo->curl = curl_easy_init();
     repo->server_iter = repo->servers.begin();
 
-    repo->diskfile =
-        std::string(repo->config->cachedir) + "/" + repo->name + ".files";
+    repo->diskfile = cachedir_ + "/" + repo->name + ".files";
     curl_easy_setopt(repo->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(repo->curl, CURLOPT_FILETIME, 1L);
     curl_easy_setopt(repo->curl, CURLOPT_WRITEFUNCTION, WriteHandler);
@@ -190,47 +248,40 @@ int DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
   return 0;
 }
 
-int PrintRate(double xfer, const char* xfer_label, double rate,
-              const char rate_label) {
-  // We will show 1.62M/s, 11.6M/s, but 116K/s and 1116K/s
-  if (rate < 9.995) {
-    return printf("%8.1f %3s  %4.2f%c/s", xfer, xfer_label, rate, rate_label);
-  } else if (rate < 99.95) {
-    return printf("%8.1f %3s  %4.1f%c/s", xfer, xfer_label, rate, rate_label);
-  } else {
-    return printf("%8.1f %3s  %4.f%c/s", xfer, xfer_label, rate, rate_label);
-  }
+bool Updater::RepackRepoData(const struct Repo* repo) {
+  auto converter = pkgfile::ArchiveConverter::New(repo->name, repo->tmpfile.fd,
+                                                  repo->diskfile, compress_);
+
+  return converter != nullptr && converter->RewriteArchive();
 }
 
-void PrintDownloadSuccess(struct Repo* repo, int remaining) {
-  double rate = repo->tmpfile.size /
-                chrono::duration<double>(now() - repo->dl_time_start).count();
-  auto [xfered_human, xfered_label] = Humanize(repo->tmpfile.size);
+void Updater::DownloadWaitLoop(CURLM* multi) {
+  int active_handles;
 
-  printf("  download complete: %-20s [", repo->name.c_str());
+  do {
+    int nfd, rc = curl_multi_wait(multi, nullptr, 0, 1000, &nfd);
+    if (rc != CURLM_OK) {
+      fprintf(stderr, "error: curl_multi_wait failed (%d)\n", rc);
+      break;
+    }
 
-  int width;
-  if (fabs(rate - INFINITY) < DBL_EPSILON) {
-    width = printf(" [%6.1f %3s  %7s ", xfered_human, xfered_label, "----");
-  } else {
-    auto [rate_human, rate_label] = Humanize(rate);
-    width = PrintRate(xfered_human, xfered_label, rate_human, rate_label[0]);
-  }
-  printf(" %*d remaining]\n", 23 - width, remaining);
+    if (nfd < 0) {
+      fprintf(stderr, "error: poll error, possible network problem\n");
+      break;
+    }
+
+    rc = curl_multi_perform(multi, &active_handles);
+    if (rc != CURLM_OK) {
+      fprintf(stderr, "error: curl_multi_perform failed (%d)\n", rc);
+      break;
+    }
+
+    while (DownloadCheckComplete(multi, active_handles) == 0)
+      ;
+  } while (active_handles > 0);
 }
 
-void PrintTotalDlStats(int count, double duration, off_t total_xfer) {
-  double rate = total_xfer / duration;
-  auto [xfered_human, xfered_label] = Humanize(total_xfer);
-  auto [rate_human, rate_label] = Humanize(rate);
-
-  int width = printf(":: download complete in %.2fs", duration);
-  printf("%*s<", 42 - width, "");
-  PrintRate(xfered_human, xfered_label, rate_human, rate_label[0]);
-  printf(" %2d file%c    >\n", count, count == 1 ? ' ' : 's');
-}
-
-int DownloadCheckComplete(CURLM* multi, int remaining) {
+int Updater::DownloadCheckComplete(CURLM* multi, int remaining) {
   int msgs_left;
 
   CURLMsg* msg = curl_multi_info_read(multi, &msgs_left);
@@ -280,83 +331,31 @@ int DownloadCheckComplete(CURLM* multi, int remaining) {
     futimes(repo->tmpfile.fd, times);
 
     PrintDownloadSuccess(repo, remaining);
-    repo->worker =
-        std::async(std::launch::async, [repo] { return RepackRepoData(repo); });
+    repo->worker = std::async(std::launch::async,
+                              [this, repo] { return RepackRepoData(repo); });
     repo->dl_result = DownloadResult::OK;
   }
 
   return 0;
 }
 
-void DownloadWaitLoop(CURLM* multi) {
-  int active_handles;
-
-  do {
-    int nfd, rc = curl_multi_wait(multi, nullptr, 0, 1000, &nfd);
-    if (rc != CURLM_OK) {
-      fprintf(stderr, "error: curl_multi_wait failed (%d)\n", rc);
-      break;
-    }
-
-    if (nfd < 0) {
-      fprintf(stderr, "error: poll error, possible network problem\n");
-      break;
-    }
-
-    rc = curl_multi_perform(multi, &active_handles);
-    if (rc != CURLM_OK) {
-      fprintf(stderr, "error: curl_multi_perform failed (%d)\n", rc);
-      break;
-    }
-
-    while (DownloadCheckComplete(multi, active_handles) == 0)
-      ;
-  } while (active_handles > 0);
-}
-
-int WaitForRepacking(std::vector<Repo>* repos) {
-  int running =
-      std::count_if(repos->begin(), repos->end(), [](const Repo& repo) {
-        // The future won't be valid if the repo was up to date.
-        if (!repo.worker.valid()) {
-          return false;
-        }
-
-        return repo.worker.wait_for(chrono::seconds::zero()) !=
-               std::future_status::ready;
-      });
-
-  if (running > 0) {
-    printf(":: waiting for %d repo%s to finish repacking...\n", running,
-           running == 1 ? "" : "s");
-  }
-
-  return std::count_if(repos->begin(), repos->end(), [](Repo& repo) {
-    return repo.worker.valid() && !repo.worker.get();
-  });
-}
-
-}  // namespace
-
-namespace pkgfile {
-
-int Updater::Update(struct config_t* config) {
+int Updater::Update(const std::string& alpm_config_file, bool force) {
   int r, xfer_count = 0, ret = 0;
   off_t total_xfer = 0;
 
   AlpmConfig alpm_config;
-  ret = AlpmConfig::LoadFromFile(config->cfgfile, &alpm_config);
+  ret = AlpmConfig::LoadFromFile(alpm_config_file.c_str(), &alpm_config);
   if (ret < 0) {
     return 1;
   }
 
   if (alpm_config.repos.empty()) {
-    fprintf(stderr, "error: no repos found in %s\n", config->cfgfile);
+    fprintf(stderr, "error: no repos found in %s\n", alpm_config_file.c_str());
     return 1;
   }
 
-  if (access(config->cachedir, W_OK)) {
-    fprintf(stderr, "error: unable to write to %s: %s\n", config->cachedir,
+  if (access(cachedir_.c_str(), W_OK)) {
+    fprintf(stderr, "error: unable to write to %s: %s\n", cachedir_.c_str(),
             strerror(errno));
     return 1;
   }
@@ -377,8 +376,7 @@ int Updater::Update(struct config_t* config) {
   // prime the handle by adding a URL from each repo
   for (auto& repo : repos) {
     repo.arch = alpm_config.architecture;
-    repo.force = config->mode == MODE_UPDATE_FORCE;
-    repo.config = config;
+    repo.force = force;
     r = DownloadQueueRequest(curl_multi_, &repo);
     if (r != 0) {
       ret = r;
@@ -424,7 +422,8 @@ int Updater::Update(struct config_t* config) {
   return ret;
 }
 
-Updater::Updater() {
+Updater::Updater(std::string cachedir, int compress)
+    : cachedir_(cachedir), compress_(compress) {
   curl_global_init(CURL_GLOBAL_ALL);
   curl_multi_ = curl_multi_init();
 }

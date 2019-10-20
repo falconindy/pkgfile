@@ -34,8 +34,8 @@ using ArchiveEntryCallback = int (*)(const std::string& repo,
 }
 
 struct config_t {
-  const char* cfgfile;
-  const char* cachedir;
+  std::string cfgfile;
+  std::string cachedir;
   filterstyle_t filterby;
   pkgfile::ArchiveEntryCallback filefunc;
   Mode mode;

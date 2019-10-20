@@ -29,8 +29,6 @@ struct Repo {
 
   std::string arch;
 
-  const struct config_t* config;
-
   // curl easy handle
   CURL* curl = nullptr;
   // destination
