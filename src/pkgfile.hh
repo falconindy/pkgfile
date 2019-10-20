@@ -1,14 +1,18 @@
 #pragma once
 
+#include <filesystem>
+#include <map>
+
 #include "archive_reader.hh"
 #include "filter.hh"
 #include "result.hh"
 
-enum filterstyle_t { FILTER_EXACT = 0, FILTER_GLOB, FILTER_REGEX };
+namespace pkgfile {
 
-struct Package {
-  std::string_view name;
-  std::string_view version;
+enum class FilterStyle {
+  EXACT,
+  GLOB,
+  REGEX,
 };
 
 enum Mode {
@@ -23,31 +27,70 @@ enum Mode {
   MODE_UPDATE_FORCE = 0x22
 };
 
-namespace pkgfile {
+class Pkgfile {
+ public:
+  struct Options {
+    Options() {}
 
-using ArchiveEntryCallback = int (*)(const std::string& repo,
-                                     const pkgfile::filter::Filter& filter,
-                                     const Package& pkg,
-                                     pkgfile::Result* result,
-                                     pkgfile::ArchiveReader* reader);
+    std::string cfgfile = DEFAULT_PACMAN_CONF;
+    std::string cachedir = DEFAULT_CACHEPATH;
+    std::string targetrepo;
 
-}
+    FilterStyle filterby = FilterStyle::EXACT;
+    Mode mode = MODE_SEARCH;
 
-struct config_t {
-  std::string cfgfile;
-  std::string cachedir;
-  filterstyle_t filterby;
-  pkgfile::ArchiveEntryCallback filefunc;
-  Mode mode;
-  const char* targetrepo;
-  bool binaries;
-  bool directories;
-  bool icase;
-  bool quiet;
-  bool verbose;
-  bool raw;
-  char eol;
-  int compress;
+    bool binaries = false;
+    bool directories = false;
+    bool icase = false;
+    bool quiet = false;
+    bool verbose = false;
+    bool raw = false;
+    char eol = '\n';
+    int compress = ARCHIVE_FILTER_NONE;
+  };
+
+  Pkgfile(Options options);
+  ~Pkgfile() {}
+
+  int Run(const std::vector<std::string>& args);
+
+ private:
+  struct Package {
+    std::string_view name;
+    std::string_view version;
+  };
+
+  using RepoMap = std::map<std::string, std::filesystem::path>;
+
+  using ArchiveEntryCallback = std::function<int(
+      const std::string& repo, const filter::Filter& filter, const Package& pkg,
+      Result* result, ArchiveReader* reader)>;
+
+  static RepoMap DiscoverRepos(std::string_view cachedir);
+
+  static std::unique_ptr<filter::Filter> BuildFilterFromOptions(
+      const Options& config, const std::string& match);
+
+  static bool ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname);
+
+  std::optional<pkgfile::Result> ProcessRepo(const std::filesystem::path repo,
+                                             const filter::Filter& filter);
+
+  std::string FormatSearchResult(const std::string& repo, const Package& pkg);
+
+  int SearchAllRepos(const RepoMap& repos, const filter::Filter& filter);
+  int SearchSingleRepo(const RepoMap& repos, const filter::Filter& filter,
+                       std::string_view searchstring);
+
+  int SearchMetafile(const std::string& repo, const filter::Filter& filter,
+                     const Package& pkg, Result* result, ArchiveReader* reader);
+  int ListMetafile(const std::string& repo, const filter::Filter& filter,
+                   const Package& pkg, Result* result, ArchiveReader* reader);
+
+  Options options_;
+  ArchiveEntryCallback entry_callback_;
 };
+
+}  // namespace pkgfile
 
 // vim: set ts=2 sw=2 et:

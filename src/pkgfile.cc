@@ -7,9 +7,7 @@
 #include <locale.h>
 #include <string.h>
 
-#include <filesystem>
 #include <future>
-#include <map>
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -20,25 +18,41 @@
 #include "result.hh"
 #include "update.hh"
 
-static struct config_t config;
-
-static const char* filtermethods[2] = {"glob", "regex"};
-
 namespace fs = std::filesystem;
 
-using RepoMap = std::map<std::string, fs::path>;
+namespace pkgfile {
 
-namespace {
+Pkgfile::Pkgfile(Options options) : options_(options) {
+  switch (options_.mode) {
+    case MODE_SEARCH:
+      entry_callback_ = [this](const std::string& repo,
+                               const filter::Filter& filter, const Package& pkg,
+                               Result* result, ArchiveReader* reader) {
+        return SearchMetafile(repo, filter, pkg, result, reader);
+      };
+      break;
+    case MODE_LIST:
+      entry_callback_ = [this](const std::string& repo,
+                               const filter::Filter& filter, const Package& pkg,
+                               Result* result, ArchiveReader* reader) {
+        return ListMetafile(repo, filter, pkg, result, reader);
+      };
+      break;
+    default:
+      break;
+  }
+}
 
-std::string FormatSearchResult(const std::string& repo, const Package& pkg) {
+std::string Pkgfile::FormatSearchResult(const std::string& repo,
+                                        const Package& pkg) {
   std::stringstream ss;
 
-  if (config.verbose) {
+  if (options_.verbose) {
     ss << repo << '/' << pkg.name << ' ' << pkg.version;
     return ss.str();
   }
 
-  if (config.quiet) {
+  if (options_.quiet) {
     return std::string(pkg.name);
   }
 
@@ -46,9 +60,10 @@ std::string FormatSearchResult(const std::string& repo, const Package& pkg) {
   return ss.str();
 }
 
-int SearchMetafile(const std::string& repo,
-                   const pkgfile::filter::Filter& filter, const Package& pkg,
-                   pkgfile::Result* result, pkgfile::ArchiveReader* reader) {
+int Pkgfile::SearchMetafile(const std::string& repo,
+                            const pkgfile::filter::Filter& filter,
+                            const Package& pkg, pkgfile::Result* result,
+                            pkgfile::ArchiveReader* reader) {
   std::string line;
   while (reader->GetLine(&line) == ARCHIVE_OK) {
     if (!filter.Matches(line)) {
@@ -56,9 +71,9 @@ int SearchMetafile(const std::string& repo,
     }
 
     result->Add(FormatSearchResult(repo, pkg),
-                config.verbose ? line : std::string());
+                options_.verbose ? line : std::string());
 
-    if (!config.verbose) {
+    if (!options_.verbose) {
       return 0;
     }
   }
@@ -66,9 +81,10 @@ int SearchMetafile(const std::string& repo,
   return 0;
 }
 
-int ListMetafile(const std::string& repo, const pkgfile::filter::Filter& filter,
-                 const Package& pkg, pkgfile::Result* result,
-                 pkgfile::ArchiveReader* reader) {
+int Pkgfile::ListMetafile(const std::string& repo,
+                          const pkgfile::filter::Filter& filter,
+                          const Package& pkg, pkgfile::Result* result,
+                          pkgfile::ArchiveReader* reader) {
   if (!filter.Matches(pkg.name)) {
     return 0;
   }
@@ -76,28 +92,29 @@ int ListMetafile(const std::string& repo, const pkgfile::filter::Filter& filter,
   pkgfile::filter::Bin is_bin;
   std::string line;
   while (reader->GetLine(&line) == ARCHIVE_OK) {
-    if (config.binaries && !is_bin.Matches(line)) {
+    if (options_.binaries && !is_bin.Matches(line)) {
       continue;
     }
 
     std::string out;
-    if (config.quiet) {
+    if (options_.quiet) {
       out.assign(line);
     } else {
       std::stringstream ss;
       ss << repo << '/' << pkg.name;
       out = ss.str();
     }
-    result->Add(out, config.quiet ? std::string() : line);
+    result->Add(out, options_.quiet ? std::string() : line);
   }
 
   // When we encounter a match with fixed string matching, we know we're done.
   // However, for other filter methods, we can't be sure that our pattern won't
   // produce further matches, so we signal our caller to continue.
-  return config.filterby == FILTER_EXACT ? -1 : 0;
+  return options_.filterby == FilterStyle::EXACT ? -1 : 0;
 }
 
-bool ParsePkgname(Package* pkg, std::string_view entryname) {
+// static
+bool Pkgfile::ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname) {
   auto pkgrel = entryname.rfind('-');
   if (pkgrel == std::string_view::npos) {
     return false;
@@ -114,9 +131,8 @@ bool ParsePkgname(Package* pkg, std::string_view entryname) {
   return true;
 }
 
-std::optional<pkgfile::Result> ProcessRepo(
-    const fs::path repo, const pkgfile::ArchiveEntryCallback& entry_callback,
-    const pkgfile::filter::Filter& filter) {
+std::optional<pkgfile::Result> Pkgfile::ProcessRepo(
+    const fs::path repo, const pkgfile::filter::Filter& filter) {
   auto fd = pkgfile::ReadOnlyFile::Open(repo);
   if (fd == nullptr) {
     if (errno != ENOENT) {
@@ -147,13 +163,171 @@ std::optional<pkgfile::Result> ProcessRepo(
       continue;
     }
 
-    if (entry_callback(repo.stem(), filter, pkg, &result, &reader) < 0) {
+    if (entry_callback_(repo.stem(), filter, pkg, &result, &reader) < 0) {
       break;
     }
   }
 
   return result;
 }
+
+int Pkgfile::SearchSingleRepo(const RepoMap& repos,
+                              const filter::Filter& filter,
+                              std::string_view searchstring) {
+  std::string wanted_repo;
+  if (!options_.targetrepo.empty()) {
+    wanted_repo = options_.targetrepo;
+  } else {
+    wanted_repo = searchstring.substr(0, searchstring.find('/'));
+  }
+
+  auto iter = repos.find(wanted_repo);
+  if (iter == repos.end()) {
+    fprintf(stderr, "error: repo not available: %s\n", wanted_repo.c_str());
+  }
+
+  auto result = ProcessRepo(iter->second, filter);
+  if (!result.has_value() || result->Empty()) {
+    return 1;
+  }
+
+  result->Print(options_.raw ? 0 : result->MaxPrefixlen(), options_.eol);
+  return 0;
+}
+
+int Pkgfile::SearchAllRepos(const RepoMap& repos,
+                            const filter::Filter& filter) {
+  std::vector<std::future<std::optional<Result>>> futures;
+  for (const auto& repo : repos) {
+    futures.push_back(std::async(
+        std::launch::async, [&] { return ProcessRepo(repo.second, filter); }));
+  }
+
+  std::vector<Result> results;
+  for (auto& fu : futures) {
+    auto result = fu.get();
+    if (result.has_value() && !result->Empty()) {
+      results.emplace_back(std::move(result.value()));
+    }
+  }
+
+  if (results.empty()) {
+    return 1;
+  }
+
+  size_t prefixlen = options_.raw ? 0 : MaxPrefixlen(results);
+  for (auto& result : results) {
+    result.Print(prefixlen, options_.eol);
+  }
+
+  return 0;
+}
+
+// static
+std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
+    const Pkgfile::Options& options, const std::string& match) {
+  std::unique_ptr<filter::Filter> filter;
+
+  bool case_sensitive = !options.icase;
+
+  switch (options.filterby) {
+    case FilterStyle::EXACT:
+      if (options.mode == MODE_SEARCH) {
+        if (match.find('/') != std::string::npos) {
+          filter = std::make_unique<filter::Exact>(match, case_sensitive);
+        } else {
+          filter = std::make_unique<filter::Basename>(match, case_sensitive);
+        }
+      } else if (options.mode == MODE_LIST) {
+        auto pos = match.find('/');
+        if (pos != std::string::npos) {
+          filter = std::make_unique<filter::Exact>(match.substr(pos + 1),
+                                                   case_sensitive);
+        } else {
+          filter = std::make_unique<filter::Exact>(match, case_sensitive);
+        }
+      }
+      break;
+    case FilterStyle::GLOB:
+      filter = std::make_unique<filter::Glob>(match, case_sensitive);
+      break;
+    case FilterStyle::REGEX:
+      filter = filter::Regex::Compile(match, case_sensitive);
+      if (filter == nullptr) {
+        return nullptr;
+      }
+      break;
+  }
+
+  if (options.mode == MODE_SEARCH) {
+    if (options.binaries) {
+      filter = std::make_unique<filter::And>(std::make_unique<filter::Bin>(),
+                                             std::move(filter));
+    }
+
+    std::unique_ptr<filter::Filter> dir_filter =
+        std::make_unique<filter::Directory>();
+    if (!options.directories) {
+      dir_filter = std::make_unique<filter::Not>(std::move(dir_filter));
+    }
+
+    filter =
+        std::make_unique<filter::And>(std::move(dir_filter), std::move(filter));
+  }
+
+  return filter;
+}
+
+// static
+Pkgfile::RepoMap Pkgfile::DiscoverRepos(std::string_view cachedir) {
+  RepoMap repos;
+
+  for (const auto& p : fs::directory_iterator(cachedir)) {
+    if (!p.is_regular_file() || p.path().extension() != ".files") {
+      continue;
+    }
+
+    repos.emplace(p.path().stem(), p.path());
+  }
+
+  return repos;
+}
+
+int Pkgfile::Run(const std::vector<std::string>& args) {
+  if (options_.mode & MODE_UPDATE) {
+    return pkgfile::Updater(options_.cachedir, options_.compress)
+        .Update(options_.cfgfile, options_.mode == MODE_UPDATE_FORCE);
+  }
+
+  if (args.empty()) {
+    fputs("error: no target specified (use -h for help)\n", stderr);
+    return 1;
+  }
+
+  auto repos = DiscoverRepos(options_.cachedir);
+  if (repos.empty()) {
+    fputs("error: No repo files found. Please run `pkgfiled -o'.\n", stderr);
+  }
+
+  const std::string& input = args[0];
+
+  auto filter = pkgfile::Pkgfile::BuildFilterFromOptions(options_, input);
+  if (filter == nullptr) {
+    return 1;
+  }
+
+  // override behavior on $repo/$pkg syntax or --repo
+  if ((options_.mode == MODE_LIST && input.find('/') != std::string::npos) ||
+      !options_.targetrepo.empty()) {
+    return SearchSingleRepo(repos, *filter, input);
+  }
+
+  return SearchAllRepos(repos, *filter);
+}
+
+}  // namespace pkgfile
+
+namespace {
 
 void Usage(void) {
   fputs("pkgfile " PACKAGE_VERSION "\nUsage: pkgfile [options] target\n\n",
@@ -199,255 +373,116 @@ void Usage(void) {
 
 void Version(void) { fputs(PACKAGE_NAME " v" PACKAGE_VERSION "\n", stdout); }
 
-int ParseOpts(int argc, char** argv) {
-  static constexpr char kPacmanConfig[] = "/etc/pacman.conf";
+std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
   static constexpr char kShortOpts[] = "0bC:D:dghilqR:rsuVvwz::";
   static constexpr struct option kLongOpts[] = {
-      {"binaries", no_argument, 0, 'b'},
-      {"cachedir", required_argument, 0, 'D'},
-      {"compress", optional_argument, 0, 'z'},
-      {"config", required_argument, 0, 'C'},
-      {"directories", no_argument, 0, 'd'},
-      {"glob", no_argument, 0, 'g'},
-      {"help", no_argument, 0, 'h'},
-      {"ignorecase", no_argument, 0, 'i'},
-      {"list", no_argument, 0, 'l'},
-      {"quiet", no_argument, 0, 'q'},
-      {"repo", required_argument, 0, 'R'},
-      {"regex", no_argument, 0, 'r'},
-      {"search", no_argument, 0, 's'},
-      {"update", no_argument, 0, 'u'},
-      {"version", no_argument, 0, 'V'},
-      {"verbose", no_argument, 0, 'v'},
-      {"raw", no_argument, 0, 'w'},
-      {"null", no_argument, 0, '0'},
-      {0, 0, 0, 0}};
+      // clang-format off
+    { "binaries",      no_argument,        0, 'b' },
+    { "cachedir",      required_argument,  0, 'D' },
+    { "compress",      optional_argument,  0, 'z' },
+    { "config",        required_argument,  0, 'C' },
+    { "directories",   no_argument,        0, 'd' },
+    { "glob",          no_argument,        0, 'g' },
+    { "help",          no_argument,        0, 'h' },
+    { "ignorecase",    no_argument,        0, 'i' },
+    { "list",          no_argument,        0, 'l' },
+    { "quiet",         no_argument,        0, 'q' },
+    { "repo",          required_argument,  0, 'R' },
+    { "regex",         no_argument,        0, 'r' },
+    { "search",        no_argument,        0, 's' },
+    { "update",        no_argument,        0, 'u' },
+    { "version",       no_argument,        0, 'V' },
+    { "verbose",       no_argument,        0, 'v' },
+    { "raw",           no_argument,        0, 'w' },
+    { "null",          no_argument,        0, '0' },
+    { 0, 0, 0, 0 },
+    // clang-format pn
+  };
 
-  // defaults
-  config.filefunc = SearchMetafile;
-  config.eol = '\n';
-  config.cfgfile = kPacmanConfig;
-  config.cachedir = DEFAULT_CACHEPATH;
-  config.mode = MODE_SEARCH;
+  pkgfile::Pkgfile::Options options;
 
   for (;;) {
-    int opt = getopt_long(argc, argv, kShortOpts, kLongOpts, nullptr);
+    int opt = getopt_long(*argc, *argv, kShortOpts, kLongOpts, nullptr);
     if (opt < 0) {
       break;
     }
     switch (opt) {
       case '0':
-        config.eol = '\0';
+        options.eol = '\0';
         break;
       case 'b':
-        config.binaries = true;
+        options.binaries = true;
         break;
       case 'C':
-        config.cfgfile = optarg;
+        options.cfgfile = optarg;
         break;
       case 'D':
-        config.cachedir = optarg;
+        options.cachedir = optarg;
         break;
       case 'd':
-        config.directories = true;
+        options.directories = true;
         break;
       case 'g':
-        if (config.filterby != FILTER_EXACT) {
-          fprintf(stderr, "error: --glob cannot be used with --%s option\n",
-                  filtermethods[config.filterby]);
-          return 1;
-        }
-        config.filterby = FILTER_GLOB;
+        options.filterby = pkgfile::FilterStyle::GLOB;
         break;
       case 'h':
         Usage();
         exit(EXIT_SUCCESS);
       case 'i':
-        config.icase = true;
+        options.icase = true;
         break;
       case 'l':
-        config.mode = MODE_LIST;
-        config.filefunc = ListMetafile;
+        options.mode = pkgfile::MODE_LIST;
         break;
       case 'q':
-        config.quiet = true;
+        options.quiet = true;
         break;
       case 'R':
-        config.targetrepo = optarg;
+        options.targetrepo = optarg;
         break;
       case 'r':
-        if (config.filterby != FILTER_EXACT) {
-          fprintf(stderr, "error: --regex cannot be used with --%s option\n",
-                  filtermethods[config.filterby]);
-          return 1;
-        }
-        config.filterby = FILTER_REGEX;
+        options.filterby = pkgfile::FilterStyle::REGEX;
         break;
       case 's':
-        config.mode = MODE_SEARCH;
-        config.filefunc = SearchMetafile;
+        options.mode = pkgfile::MODE_SEARCH;
         break;
       case 'u':
-        if (config.mode & MODE_UPDATE) {
-          config.mode = MODE_UPDATE_FORCE;
+        if (options.mode & pkgfile::MODE_UPDATE) {
+          options.mode = pkgfile::MODE_UPDATE_FORCE;
         } else {
-          config.mode = MODE_UPDATE_ASNEEDED;
+          options.mode = pkgfile::MODE_UPDATE_ASNEEDED;
         }
         break;
       case 'V':
         Version();
         exit(EXIT_SUCCESS);
       case 'v':
-        config.verbose = true;
+        options.verbose = true;
         break;
       case 'w':
-        config.raw = true;
+        options.raw = true;
         break;
       case 'z':
         if (optarg != nullptr) {
           auto compress = pkgfile::ValidateCompression(optarg);
           if (compress == std::nullopt) {
             fprintf(stderr, "error: invalid compression option %s\n", optarg);
-            return 1;
+            return std::nullopt;
           }
-          config.compress = compress.value();
+          options.compress = compress.value();
         } else {
-          config.compress = ARCHIVE_FILTER_GZIP;
+          options.compress = ARCHIVE_FILTER_GZIP;
         }
         break;
       default:
-        return 1;
+        return std::nullopt;
     }
   }
 
-  return 0;
-}
+  *argc -= optind - 1;
+  *argv += optind - 1;
 
-int SearchSingleRepo(const RepoMap& repos,
-                     const pkgfile::ArchiveEntryCallback& entry_callback,
-                     const pkgfile::filter::Filter& filter,
-                     std::string_view searchstring) {
-  std::string wanted_repo;
-  if (config.targetrepo) {
-    wanted_repo = config.targetrepo;
-  } else {
-    wanted_repo = searchstring.substr(0, searchstring.find('/'));
-  }
-
-  auto iter = repos.find(wanted_repo);
-  if (iter == repos.end()) {
-    fprintf(stderr, "error: repo not available: %s\n", wanted_repo.c_str());
-  }
-
-  auto result = ProcessRepo(iter->second, entry_callback, filter);
-  if (!result.has_value() || result->Empty()) {
-    return 1;
-  }
-
-  result->Print(config.raw ? 0 : result->MaxPrefixlen(), config.eol);
-  return 0;
-}
-
-int SearchAllRepos(const RepoMap& repos,
-                   const pkgfile::ArchiveEntryCallback& entry_callback,
-                   const pkgfile::filter::Filter& filter) {
-  std::vector<std::future<std::optional<pkgfile::Result>>> futures;
-  for (const auto& repo : repos) {
-    futures.push_back(std::async(std::launch::async, [&] {
-      return ProcessRepo(repo.second, entry_callback, filter);
-    }));
-  }
-
-  std::vector<pkgfile::Result> results;
-  for (auto& fu : futures) {
-    auto result = fu.get();
-    if (result.has_value() && !result->Empty()) {
-      results.emplace_back(std::move(result.value()));
-    }
-  }
-
-  if (results.empty()) {
-    return 1;
-  }
-
-  size_t prefixlen = config.raw ? 0 : MaxPrefixlen(results);
-  for (auto& result : results) {
-    result.Print(prefixlen, config.eol);
-  }
-
-  return 0;
-}
-
-std::unique_ptr<pkgfile::filter::Filter> BuildFilterFromOptions(
-    const config_t& config, const std::string& match) {
-  std::unique_ptr<pkgfile::filter::Filter> filter;
-
-  bool case_sensitive = !config.icase;
-
-  switch (config.filterby) {
-    case FILTER_EXACT:
-      if (config.mode == MODE_SEARCH) {
-        if (match.find('/') != std::string::npos) {
-          filter =
-              std::make_unique<pkgfile::filter::Exact>(match, case_sensitive);
-        } else {
-          filter = std::make_unique<pkgfile::filter::Basename>(match,
-                                                               case_sensitive);
-        }
-      } else if (config.mode == MODE_LIST) {
-        auto pos = match.find('/');
-        if (pos != std::string::npos) {
-          filter = std::make_unique<pkgfile::filter::Exact>(
-              match.substr(pos + 1), case_sensitive);
-        } else {
-          filter =
-              std::make_unique<pkgfile::filter::Exact>(match, case_sensitive);
-        }
-      }
-      break;
-    case FILTER_GLOB:
-      filter = std::make_unique<pkgfile::filter::Glob>(match, case_sensitive);
-      break;
-    case FILTER_REGEX:
-      filter = pkgfile::filter::Regex::Compile(match, case_sensitive);
-      if (filter == nullptr) {
-        return nullptr;
-      }
-      break;
-  }
-
-  if (config.mode == MODE_SEARCH) {
-    if (config.binaries) {
-      filter = std::make_unique<pkgfile::filter::And>(
-          std::make_unique<pkgfile::filter::Bin>(), std::move(filter));
-    }
-
-    std::unique_ptr<pkgfile::filter::Filter> dir_filter =
-        std::make_unique<pkgfile::filter::Directory>();
-    if (!config.directories) {
-      dir_filter =
-          std::make_unique<pkgfile::filter::Not>(std::move(dir_filter));
-    }
-
-    filter = std::make_unique<pkgfile::filter::And>(std::move(dir_filter),
-                                                    std::move(filter));
-  }
-
-  return filter;
-}
-
-RepoMap DiscoverRepos(std::string_view cachedir) {
-  RepoMap repos;
-
-  for (const auto& p : fs::directory_iterator(cachedir)) {
-    if (!p.is_regular_file() || p.path().extension() != ".files") {
-      continue;
-    }
-
-    repos.emplace(p.path().stem(), p.path());
-  }
-
-  return repos;
+  return options;
 }
 
 }  // namespace
@@ -455,37 +490,13 @@ RepoMap DiscoverRepos(std::string_view cachedir) {
 int main(int argc, char* argv[]) {
   setlocale(LC_ALL, "");
 
-  if (ParseOpts(argc, argv) != 0) {
+  auto options = ParseOpts(&argc, &argv);
+  if (options == std::nullopt) {
     return 2;
   }
 
-  if (config.mode & MODE_UPDATE) {
-    return pkgfile::Updater(config.cachedir, config.compress)
-        .Update(config.cfgfile, config.mode == MODE_UPDATE_FORCE);
-  }
-
-  if (optind == argc) {
-    fputs("error: no target specified (use -h for help)\n", stderr);
-    return 1;
-  }
-
-  auto filter = BuildFilterFromOptions(config, argv[optind]);
-  if (filter == nullptr) {
-    return 1;
-  }
-
-  auto repos = DiscoverRepos(config.cachedir);
-  if (repos.empty()) {
-    fputs("error: No repo files found. Please run `pkgfiled -o'.\n", stderr);
-  }
-
-  // override behavior on $repo/$pkg syntax or --repo
-  if ((config.mode == MODE_LIST && strchr(argv[optind], '/')) ||
-      config.targetrepo) {
-    return SearchSingleRepo(repos, config.filefunc, *filter, argv[optind]);
-  }
-
-  return SearchAllRepos(repos, config.filefunc, *filter);
+  const std::vector<std::string> args(argv + 1, argv + argc);
+  return pkgfile::Pkgfile(*options).Run(args);
 }
 
 // vim: set ts=2 sw=2 et:

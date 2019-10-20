@@ -11,6 +11,7 @@ conf = configuration_data()
 conf.set_quoted('PACKAGE_NAME', meson.project_name())
 conf.set_quoted('PACKAGE_VERSION', meson.project_version())
 conf.set_quoted('DEFAULT_CACHEPATH', get_option('cachedir'))
+conf.set_quoted('DEFAULT_PACMAN_CONF', '/etc/pacman.conf')
 
 cpp = meson.get_compiler('cpp')
 
