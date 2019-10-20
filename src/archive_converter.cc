@@ -32,7 +32,7 @@ std::unique_ptr<ArchiveConverter> ArchiveConverter::New(
     return nullptr;
   }
 
-  return std::make_unique<ArchiveConverter>(std::move(reader),
+  return std::make_unique<ArchiveConverter>(reponame, std::move(reader),
                                             std::move(writer));
 }
 
@@ -47,7 +47,7 @@ int ArchiveConverter::WriteCpioEntry(archive_entry* ae,
   std::stringstream entry_data;
   while (reader.GetLine(&line) == ARCHIVE_OK) {
     // do the copy, with a slash prepended
-    entry_data << "/" << line << '\n';
+    entry_data << '/' << line << '\n';
   }
 
   const auto entry = entry_data.str();

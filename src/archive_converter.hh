@@ -17,9 +17,11 @@ namespace pkgfile {
 // packed in CPIO).
 class ArchiveConverter {
  public:
-  ArchiveConverter(std::unique_ptr<ReadArchive> in,
+  ArchiveConverter(std::string reponame, std::unique_ptr<ReadArchive> in,
                    std::unique_ptr<WriteArchive> out)
-      : in_(std::move(in)), out_(std::move(out)) {}
+      : reponame_(std::move(reponame)),
+        in_(std::move(in)),
+        out_(std::move(out)) {}
 
   ArchiveConverter(const ArchiveConverter&) = delete;
   ArchiveConverter& operator=(const ArchiveConverter&) = delete;
