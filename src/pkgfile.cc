@@ -228,31 +228,29 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
     const Pkgfile::Options& options, const std::string& match) {
   std::unique_ptr<filter::Filter> filter;
 
-  bool case_sensitive = !options.icase;
-
   switch (options.filterby) {
     case FilterStyle::EXACT:
       if (options.mode == MODE_SEARCH) {
         if (match.find('/') != std::string::npos) {
-          filter = std::make_unique<filter::Exact>(match, case_sensitive);
+          filter = std::make_unique<filter::Exact>(match, options.case_sensitive);
         } else {
-          filter = std::make_unique<filter::Basename>(match, case_sensitive);
+          filter = std::make_unique<filter::Basename>(match, options.case_sensitive);
         }
       } else if (options.mode == MODE_LIST) {
         auto pos = match.find('/');
         if (pos != std::string::npos) {
           filter = std::make_unique<filter::Exact>(match.substr(pos + 1),
-                                                   case_sensitive);
+                                                   options.case_sensitive);
         } else {
-          filter = std::make_unique<filter::Exact>(match, case_sensitive);
+          filter = std::make_unique<filter::Exact>(match, options.case_sensitive);
         }
       }
       break;
     case FilterStyle::GLOB:
-      filter = std::make_unique<filter::Glob>(match, case_sensitive);
+      filter = std::make_unique<filter::Glob>(match, options.case_sensitive);
       break;
     case FilterStyle::REGEX:
-      filter = filter::Regex::Compile(match, case_sensitive);
+      filter = filter::Regex::Compile(match, options.case_sensitive);
       if (filter == nullptr) {
         return nullptr;
       }
@@ -429,7 +427,7 @@ std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
         Usage();
         exit(EXIT_SUCCESS);
       case 'i':
-        options.icase = true;
+        options.case_sensitive = false;
         break;
       case 'l':
         options.mode = pkgfile::MODE_LIST;

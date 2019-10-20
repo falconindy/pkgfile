@@ -41,7 +41,7 @@ class Pkgfile {
 
     bool binaries = false;
     bool directories = false;
-    bool icase = false;
+    bool case_sensitive = true;
     bool quiet = false;
     bool verbose = false;
     bool raw = false;

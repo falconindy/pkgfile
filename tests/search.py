@@ -70,5 +70,19 @@ class TestUpdate(pkgfile_test.TestCase):
         ''').lstrip('\n'))
 
 
+    def testSearchCaseInsensitive(self):
+        r = self.Pkgfile(['-s', '-i', 'mKiNiTcPiO'])
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout.decode(), textwrap.dedent('''
+            testing/mkinitcpio
+        ''').lstrip('\n'))
+
+        r = self.Pkgfile(['-s', '-r', '-i', 'mK(i[NT]){2}cPiO'])
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout.decode(), textwrap.dedent('''
+            testing/mkinitcpio
+        ''').lstrip('\n'))
+
+
 if __name__ == '__main__':
     pkgfile_test.main()
