@@ -61,5 +61,14 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertNotEqual(r.returncode, 0)
 
 
+    def testSearchDirectories(self):
+        r = self.Pkgfile(['-s', '-d', '/usr/lib/dhcpcd/dhcpcd-hooks/'])
+        self.assertEqual(r.returncode, 0)
+
+        self.assertEqual(r.stdout.decode(), textwrap.dedent('''
+            testing/dhcpcd
+        ''').lstrip('\n'))
+
+
 if __name__ == '__main__':
     pkgfile_test.main()

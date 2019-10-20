@@ -10,6 +10,7 @@ TEST(DirectoryFilterTest, MatchesDirectories) {
 
   EXPECT_TRUE(filter.Matches("/bin/"));
   EXPECT_FALSE(filter.Matches("/bin"));
+  EXPECT_FALSE(filter.Matches(""));
 }
 
 TEST(BinaryFilterTest, MatchesBinaries) {
