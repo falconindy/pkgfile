@@ -97,16 +97,21 @@ int ListMetafile(const std::string& repo, const pkgfile::filter::Filter& filter,
   return config.filterby == FILTER_EXACT ? -1 : 0;
 }
 
-int ParsePkgname(Package* pkg, std::string_view entryname) {
-  pkg->name = entryname;
+bool ParsePkgname(Package* pkg, std::string_view entryname) {
+  auto pkgrel = entryname.rfind('-');
+  if (pkgrel == std::string_view::npos) {
+    return false;
+  }
 
-  // handle errors
-  pkg->name.remove_suffix(pkg->name.size() - pkg->name.rfind('-'));
-  pkg->name.remove_suffix(pkg->name.size() - pkg->name.rfind('-'));
+  auto pkgver = entryname.substr(0, pkgrel).rfind('-');
+  if (pkgver == std::string_view::npos) {
+    return false;
+  }
 
-  pkg->version = entryname.substr(pkg->name.size() + 1);
+  pkg->name = entryname.substr(0, pkgver);
+  pkg->version = entryname.substr(pkgver + 1);
 
-  return 0;
+  return true;
 }
 
 std::optional<pkgfile::Result> ProcessRepo(
@@ -137,15 +142,12 @@ std::optional<pkgfile::Result> ProcessRepo(
     const char* entryname = archive_entry_pathname(e);
 
     Package pkg;
-    int r = ParsePkgname(&pkg, entryname);
-    if (r < 0) {
-      fprintf(stderr, "error parsing pkgname from: %s: %s\n", entryname,
-              strerror(-r));
+    if (!ParsePkgname(&pkg, entryname)) {
+      fprintf(stderr, "error parsing pkgname from: %s\n", entryname);
       continue;
     }
 
-    r = entry_callback(repo.stem(), filter, pkg, &result, &reader);
-    if (r < 0) {
+    if (entry_callback(repo.stem(), filter, pkg, &result, &reader) < 0) {
       break;
     }
   }
