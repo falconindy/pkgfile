@@ -24,7 +24,6 @@ class ArchiveReader {
   int FillLine();
 
   archive* archive_;
-  archive_entry* entry_ = nullptr;
 
   long status_ = ARCHIVE_OK;
   std::string line_;
