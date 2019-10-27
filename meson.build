@@ -19,7 +19,7 @@ configure_file(
     output : 'config.hh',
     configuration : conf)
 
-add_project_arguments('-include', 'config.hh', language : 'cpp')
+add_project_arguments('-include', 'config.hh', '-fno-exceptions', language : 'cpp')
 
 libpcre = dependency('libpcre', version : '>= 8.30')
 libarchive = dependency('libarchive', version : '>= 3.2.0')
