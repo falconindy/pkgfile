@@ -15,6 +15,10 @@ conf.set_quoted('DEFAULT_PACMAN_CONF', '/etc/pacman.conf')
 
 cpp = meson.get_compiler('cpp')
 
+if cpp.get_define('ARCHIVE_FILTER_ZSTD', args: ['-include', 'archive.h']) == ''
+  conf.set('ARCHIVE_FILTER_ZSTD', 14)
+endif
+
 configure_file(
     output : 'config.hh',
     configuration : conf)

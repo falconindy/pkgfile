@@ -7,7 +7,7 @@ namespace pkgfile {
 namespace filter {
 
 bool Directory::Matches(std::string_view line) const {
-  return line.back() == '/';
+  return !line.empty() && line.back() == '/';
 }
 
 bool Bin::Matches(std::string_view line) const {

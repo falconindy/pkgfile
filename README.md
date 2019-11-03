@@ -1,3 +1,6 @@
+![GitHub Actions status | falconindy/pkgfile](https://github.com/falconindy/pkgfile/workflows/arch.x86_64/badge.svg)
+![GitHub Actions status | falconindy/pkgfile](https://github.com/falconindy/pkgfile/workflows/arch.x86_64.asan/badge.svg)
+
 ## pkgfile
 
 pkgfile answers the question of "what package owns this file?" or "what are the
