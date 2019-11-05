@@ -116,6 +116,14 @@ class TestUpdate(pkgfile_test.TestCase):
         ''').lstrip('\n'))
 
 
+    def testListWithPath(self):
+        # we should handle this case gracefully by basically failing. The trick
+        # is that our code wants to split on slashes to find the repo name, but
+        # this input results in a zero length repo name.
+        r = self.Pkgfile(['-l', '/usr/bin'])
+        self.assertNotEqual(r.returncode, 0)
+
+
     def testListRaw(self):
         r = self.Pkgfile(['-l', '-w', '-r', 'java.*-openjfx-src'])
         self.assertEqual(r.returncode, 0)

@@ -314,8 +314,15 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
     return 1;
   }
 
+  auto is_repo_package_syntax = [](std::string_view input) {
+    auto pos = input.find('/');
+
+    // Make sure we reject anything that starts with a slash.
+    return pos != std::string_view::npos && pos > 0;
+  };
+
   // override behavior on $repo/$pkg syntax or --repo
-  if ((options_.mode == MODE_LIST && input.find('/') != std::string::npos) ||
+  if ((options_.mode == MODE_LIST && is_repo_package_syntax(input)) ||
       !options_.targetrepo.empty()) {
     return SearchSingleRepo(repos, *filter, input);
   }
