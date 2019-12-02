@@ -199,7 +199,6 @@ class Pkgfiled {
   fs::path pkgfile_cache_;
   Options options_;
 
-  bool is_interactive_ = isatty(fileno(stdin));
   sd_event* sd_event_;
   sd_event_source* inotify_source_;
   sd_event_source* sigterm_source_;
