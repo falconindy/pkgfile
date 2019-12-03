@@ -16,6 +16,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
+constexpr std::string_view kFilesExt = ".files";
+
 void BlockSignals(std::initializer_list<int> signums, sigset_t* saved) {
   sigset_t ss;
   for (auto signum : signums) {
@@ -101,7 +103,7 @@ class Pkgfiled {
     std::vector<std::future<void>> repack_futures;
 
     for (auto& p : fs::directory_iterator(watch_path_)) {
-      if (!p.is_regular_file() || p.path().extension() != ".files") {
+      if (!p.is_regular_file() || p.path().extension() != kFilesExt) {
         continue;
       }
 
@@ -156,7 +158,7 @@ class Pkgfiled {
 
   int OnInotifyEvent(const struct inotify_event* event) {
     fs::path changed_path(event->name);
-    if (changed_path.extension() != ".files") {
+    if (changed_path.extension() != kFilesExt) {
       return 0;
     }
 
