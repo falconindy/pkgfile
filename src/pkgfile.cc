@@ -116,12 +116,12 @@ int Pkgfile::ListMetafile(const std::string& repo,
 // static
 bool Pkgfile::ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname) {
   auto pkgrel = entryname.rfind('-');
-  if (pkgrel == std::string_view::npos) {
+  if (pkgrel == entryname.npos) {
     return false;
   }
 
   auto pkgver = entryname.substr(0, pkgrel).rfind('-');
-  if (pkgver == std::string_view::npos) {
+  if (pkgver == entryname.npos) {
     return false;
   }
 
@@ -231,14 +231,14 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
   switch (options.filterby) {
     case FilterStyle::EXACT:
       if (options.mode == MODE_SEARCH) {
-        if (match.find('/') != std::string::npos) {
+        if (match.find('/') != match.npos) {
           filter = std::make_unique<filter::Exact>(match, options.case_sensitive);
         } else {
           filter = std::make_unique<filter::Basename>(match, options.case_sensitive);
         }
       } else if (options.mode == MODE_LIST) {
         auto pos = match.find('/');
-        if (pos != std::string::npos) {
+        if (pos != match.npos) {
           filter = std::make_unique<filter::Exact>(match.substr(pos + 1),
                                                    options.case_sensitive);
         } else {
@@ -318,7 +318,7 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
     auto pos = input.find('/');
 
     // Make sure we reject anything that starts with a slash.
-    return pos != std::string_view::npos && pos > 0;
+    return pos != input.npos && pos > 0;
   };
 
   // override behavior on $repo/$pkg syntax or --repo

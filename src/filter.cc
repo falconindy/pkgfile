@@ -15,8 +15,8 @@ bool Bin::Matches(std::string_view line) const {
     return false;
   }
 
-  return line.find("/bin/") != std::string_view::npos ||
-         line.find("/sbin/") != std::string_view::npos;
+  return line.find("/bin/") != line.npos ||
+         line.find("/sbin/") != line.npos;
 }
 
 Glob::Glob(std::string glob_pattern, bool case_sensitive)
@@ -87,7 +87,7 @@ Basename::Basename(std::string match, bool case_sensitive)
 
 bool Basename::Matches(std::string_view line) const {
   auto pos = line.rfind('/');
-  if (pos != std::string_view::npos) {
+  if (pos != line.npos) {
     line.remove_prefix(pos + 1);
   }
 

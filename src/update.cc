@@ -47,7 +47,7 @@ void StrReplace(std::string* str, const std::string& needle,
                 const std::string& replace) {
   for (;;) {
     auto pos = str->find(needle);
-    if (pos == std::string::npos) {
+    if (pos == str->npos) {
       break;
     }
 

@@ -35,7 +35,7 @@ int ArchiveReader::ConsumeBlock() {
 int ArchiveReader::FillLine() {
   auto pos = block_.find('\n');
 
-  if (pos == std::string_view::npos) {
+  if (pos == block_.npos) {
     // grab the entire block, and the caller will try again
     line_.append(block_);
     block_ = std::string_view();
