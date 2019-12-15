@@ -9,9 +9,13 @@ Usage: I<pkgfiled> [options] pacman_dbpath pkgfile_cache
 =head1 DESCRIPTION
 
 pkgfiled is a tiny daemon which watches for changes to B<pacman>(8)'s .files
-databases (typically under I</var/lib/pacman/sync>) and repackages these for
-consumption by pkgfile. This allows data to remain in sync between pacman and
-pkgfile.
+databases and repackages these for consumption by pkgfile. This allows data to
+remain in sync between pacman and pkgfile.
+
+Invoking I<pkgfiled> requires two arguments -- a source directory to read
+pacman database files from (typically under I</var/lib/pacman/sync>), and a
+destination directory which pkgfile will read from (typically
+I</var/cache/pkgfile>). A systemd unit facilitates management of the daemon.
 
 Upon starting, pkgfiled will compare the contents of the pacman database with
 the pkgfile cache and catch up with anything out of sync. After this, it will
