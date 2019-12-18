@@ -132,8 +132,8 @@ bool Pkgfile::ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname) {
 }
 
 std::optional<pkgfile::Result> Pkgfile::ProcessRepo(
-    const fs::path repo, const pkgfile::filter::Filter& filter) {
-  auto fd = pkgfile::ReadOnlyFile::Open(repo);
+    const fs::path repo, const filter::Filter& filter) {
+  auto fd = ReadOnlyFile::Open(repo);
   if (fd == nullptr) {
     if (errno != ENOENT) {
       fprintf(stderr, "failed to open %s for reading: %s\n", repo.c_str(),
@@ -143,15 +143,15 @@ std::optional<pkgfile::Result> Pkgfile::ProcessRepo(
   }
 
   const char* err;
-  auto read_archive = pkgfile::ReadArchive::New(fd->fd(), &err);
+  auto read_archive = ReadArchive::New(fd->fd(), &err);
   if (read_archive == nullptr) {
     fprintf(stderr, "failed to create new archive for reading: %s: %s\n",
             repo.c_str(), err);
     return std::nullopt;
   }
 
-  pkgfile::Result result(repo.stem());
-  pkgfile::ArchiveReader reader(read_archive->read_archive());
+  Result result(repo.stem());
+  ArchiveReader reader(read_archive->read_archive());
 
   archive_entry* e;
   while (reader.Next(&e) == ARCHIVE_OK) {
@@ -293,7 +293,7 @@ Pkgfile::RepoMap Pkgfile::DiscoverRepos(std::string_view cachedir) {
 
 int Pkgfile::Run(const std::vector<std::string>& args) {
   if (options_.mode & MODE_UPDATE) {
-    return pkgfile::Updater(options_.cachedir, options_.compress)
+    return Updater(options_.cachedir, options_.compress)
         .Update(options_.cfgfile, options_.mode == MODE_UPDATE_FORCE);
   }
 
@@ -309,7 +309,7 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
 
   const std::string& input = args[0];
 
-  auto filter = pkgfile::Pkgfile::BuildFilterFromOptions(options_, input);
+  auto filter = Pkgfile::BuildFilterFromOptions(options_, input);
   if (filter == nullptr) {
     return 1;
   }
