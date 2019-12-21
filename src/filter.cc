@@ -15,8 +15,7 @@ bool Bin::Matches(std::string_view line) const {
     return false;
   }
 
-  return line.find("/bin/") != line.npos ||
-         line.find("/sbin/") != line.npos;
+  return line.find("/bin/") != line.npos || line.find("/sbin/") != line.npos;
 }
 
 Glob::Glob(std::string glob_pattern, bool case_sensitive)

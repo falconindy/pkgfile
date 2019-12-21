@@ -232,9 +232,11 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
     case FilterStyle::EXACT:
       if (options.mode == MODE_SEARCH) {
         if (match.find('/') != match.npos) {
-          filter = std::make_unique<filter::Exact>(match, options.case_sensitive);
+          filter =
+              std::make_unique<filter::Exact>(match, options.case_sensitive);
         } else {
-          filter = std::make_unique<filter::Basename>(match, options.case_sensitive);
+          filter =
+              std::make_unique<filter::Basename>(match, options.case_sensitive);
         }
       } else if (options.mode == MODE_LIST) {
         auto pos = match.find('/');
@@ -242,7 +244,8 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
           filter = std::make_unique<filter::Exact>(match.substr(pos + 1),
                                                    options.case_sensitive);
         } else {
-          filter = std::make_unique<filter::Exact>(match, options.case_sensitive);
+          filter =
+              std::make_unique<filter::Exact>(match, options.case_sensitive);
         }
       }
       break;
