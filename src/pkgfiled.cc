@@ -113,7 +113,7 @@ class Pkgfiled {
       }
 
       repack_futures.emplace_back(std::async(
-          std::launch::async, [=] { RepackRepo(p.path().filename()); }));
+          std::launch::async, [this, p] { RepackRepo(p.path().filename()); }));
     }
 
     for (auto& f : repack_futures) {
