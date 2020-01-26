@@ -20,7 +20,7 @@ std::optional<int> ValidateCompression(std::string_view compress) {
       // clang-format on
   };
 
-  if (auto iter = mapping->find(compress); iter != mapping->end()) {
+  if (const auto iter = mapping->find(compress); iter != mapping->end()) {
     return iter->second;
   }
 

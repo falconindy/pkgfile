@@ -33,7 +33,7 @@ int ArchiveReader::ConsumeBlock() {
 }
 
 int ArchiveReader::FillLine() {
-  auto pos = block_.find('\n');
+  const auto pos = block_.find('\n');
 
   if (pos == block_.npos) {
     // grab the entire block, and the caller will try again

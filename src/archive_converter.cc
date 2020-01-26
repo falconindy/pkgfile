@@ -87,7 +87,7 @@ bool ArchiveConverter::Finalize() {
   struct stat st;
   fstat(in_->fd(), &st);
 
-  struct timeval times[] = {
+  const struct timeval times[] = {
       {st.st_atim.tv_sec, 0},
       {st.st_mtim.tv_sec, 0},
   };

@@ -37,7 +37,7 @@ Regex::~Regex() {
 // static
 std::unique_ptr<Regex> Regex::Compile(const std::string& pattern,
                                       bool case_sensitive) {
-  int options = case_sensitive ? 0 : PCRE_CASELESS;
+  const int options = case_sensitive ? 0 : PCRE_CASELESS;
   const char* err;
   int offset;
 
@@ -85,7 +85,7 @@ Basename::Basename(std::string match, bool case_sensitive)
     : predicate_(std::make_unique<Exact>(match, case_sensitive)) {}
 
 bool Basename::Matches(std::string_view line) const {
-  auto pos = line.rfind('/');
+  const auto pos = line.rfind('/');
   if (pos != line.npos) {
     line.remove_prefix(pos + 1);
   }

@@ -113,7 +113,7 @@ int OpenTmpfile(int flags) {
   std::string p(tmpdir);
   p.append("/pkgfile-tmp-XXXXXX");
 
-  fd = mkostemp(p.data(), flags);
+  fd = mkostemp(p.c_str(), flags);
   if (fd < 0) {
     return -errno;
   }

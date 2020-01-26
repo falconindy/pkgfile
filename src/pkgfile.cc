@@ -89,7 +89,7 @@ int Pkgfile::ListMetafile(const std::string& repo,
     return 0;
   }
 
-  pkgfile::filter::Bin is_bin;
+  const pkgfile::filter::Bin is_bin;
   std::string line;
   while (reader->GetLine(&line) == ARCHIVE_OK) {
     if (options_.binaries && !is_bin.Matches(line)) {
@@ -115,12 +115,12 @@ int Pkgfile::ListMetafile(const std::string& repo,
 
 // static
 bool Pkgfile::ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname) {
-  auto pkgrel = entryname.rfind('-');
+  const auto pkgrel = entryname.rfind('-');
   if (pkgrel == entryname.npos) {
     return false;
   }
 
-  auto pkgver = entryname.substr(0, pkgrel).rfind('-');
+  const auto pkgver = entryname.substr(0, pkgrel).rfind('-');
   if (pkgver == entryname.npos) {
     return false;
   }
@@ -143,7 +143,7 @@ std::optional<pkgfile::Result> Pkgfile::ProcessRepo(
   }
 
   const char* err;
-  auto read_archive = ReadArchive::New(fd->fd(), &err);
+  const auto read_archive = ReadArchive::New(fd->fd(), &err);
   if (read_archive == nullptr) {
     fprintf(stderr, "failed to create new archive for reading: %s: %s\n",
             repo.c_str(), err);
@@ -215,7 +215,7 @@ int Pkgfile::SearchAllRepos(const RepoMap& repos,
     return 1;
   }
 
-  size_t prefixlen = options_.raw ? 0 : MaxPrefixlen(results);
+  const size_t prefixlen = options_.raw ? 0 : MaxPrefixlen(results);
   for (auto& result : results) {
     result.Print(prefixlen, options_.eol);
   }
@@ -305,19 +305,19 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
     return 1;
   }
 
-  auto repos = DiscoverRepos(options_.cachedir);
+  const auto repos = DiscoverRepos(options_.cachedir);
   if (repos.empty()) {
     fputs("error: No repo files found. Please run `pkgfiled -o'.\n", stderr);
   }
 
   const std::string& input = args[0];
 
-  auto filter = Pkgfile::BuildFilterFromOptions(options_, input);
+  const auto filter = Pkgfile::BuildFilterFromOptions(options_, input);
   if (filter == nullptr) {
     return 1;
   }
 
-  auto is_repo_package_syntax = [](std::string_view input) {
+  const auto is_repo_package_syntax = [](std::string_view input) {
     auto pos = input.find('/');
 
     // Make sure we reject anything that starts with a slash.
@@ -410,7 +410,7 @@ std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
   pkgfile::Pkgfile::Options options;
 
   for (;;) {
-    int opt = getopt_long(*argc, *argv, kShortOpts, kLongOpts, nullptr);
+    const int opt = getopt_long(*argc, *argv, kShortOpts, kLongOpts, nullptr);
     if (opt < 0) {
       break;
     }
@@ -498,7 +498,7 @@ std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
 int main(int argc, char* argv[]) {
   setlocale(LC_ALL, "");
 
-  auto options = ParseOpts(&argc, &argv);
+  const auto options = ParseOpts(&argc, &argv);
   if (options == std::nullopt) {
     return 2;
   }

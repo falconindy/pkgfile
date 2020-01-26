@@ -59,7 +59,7 @@ class Pkgfiled {
       : watch_path_(watch_path),
         pkgfile_cache_(pkgfile_cache),
         options_(options) {
-    int shutdown_signal = isatty(fileno(stdin)) ? SIGINT : SIGTERM;
+    const int shutdown_signal = isatty(fileno(stdin)) ? SIGINT : SIGTERM;
 
     BlockSignals({shutdown_signal, SIGUSR1, SIGUSR2}, &saved_ss_);
 
@@ -125,17 +125,17 @@ class Pkgfiled {
 
  private:
   bool RepackRepo(const fs::path& changed_path) {
-    auto inner = [&] {
-      std::string input_repo = watch_path_ / changed_path;
+    auto repack = [&] {
+      const std::string input_repo = watch_path_ / changed_path;
 
       fprintf(stderr, "processing new files DB: %s\n", input_repo.c_str());
 
-      auto input_file = ReadOnlyFile::Open(input_repo);
+      const auto input_file = ReadOnlyFile::Open(input_repo);
       if (input_file == nullptr) {
         return false;
       }
 
-      std::string reponame = changed_path.filename().stem();
+      const std::string reponame = changed_path.filename().stem();
       auto converter = pkgfile::ArchiveConverter::New(
           reponame, input_file->fd(), pkgfile_cache_ / changed_path,
           options_.compress);
@@ -143,8 +143,8 @@ class Pkgfiled {
       return converter != nullptr && converter->RewriteArchive();
     };
 
-    auto start_time = std::chrono::system_clock::now();
-    bool ok = inner();
+    const auto start_time = std::chrono::system_clock::now();
+    const bool ok = repack();
     if (ok) {
       std::chrono::duration<double> dur =
           std::chrono::system_clock::now() - start_time;
@@ -157,7 +157,7 @@ class Pkgfiled {
   }
 
   int OnInotifyEvent(const struct inotify_event* event) {
-    fs::path changed_path(event->name);
+    const fs::path changed_path(event->name);
     if (changed_path.extension() != kFilesExt) {
       return 0;
     }
