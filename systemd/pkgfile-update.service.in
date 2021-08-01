@@ -1,7 +1,7 @@
 [Unit]
 Description=pkgfile database update
 RequiresMountsFor=@DEFAULT_CACHEPATH@
-After=network-online.target
+After=network-online.target nss-lookup.target
 Wants=network-online.target
 
 [Service]
