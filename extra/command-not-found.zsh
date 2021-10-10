@@ -5,6 +5,13 @@ command_not_found_handler() {
   if [[ -n "$pkgs" ]]; then
     printf '%s may be found in the following packages:\n' "$cmd"
     printf '  %s\n' $pkgs[@]
+    pkg=`echo $pkgs | cut -f1 -d " "`
+    echo -n "Install $pkg? [Y/n]"
+    read -r response
+    [[ -z $response || $response = [Yy] ]] || return 0
+    printf '\n'
+    sudo pacman -S --noconfirm -- "$pkg"
+    return
   else
     printf 'zsh: command not found: %s\n' "$cmd"
   fi 1>&2
