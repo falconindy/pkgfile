@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <map>
+#include <optional>
 
 #include "archive_reader.hh"
 #include "filter.hh"
