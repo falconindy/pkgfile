@@ -355,19 +355,12 @@ cleanup:
 static int compile_pcre_expr(struct pcre_data *re, const char *preg,
                              int flags) {
   const char *err;
-  int err_offset;
+  size_t err_offset;
 
-  re->re = pcre_compile(preg, flags, &err, &err_offset, NULL);
+  re->re = pcre2_compile((PCRE2_SPTR)preg, PCRE2_ZERO_TERMINATED, flags, &err, &err_offset, NULL);
   if (!re->re) {
     fprintf(stderr, "error: failed to compile regex at char %d: %s\n",
             err_offset, err);
-    return 1;
-  }
-
-  re->re_extra = pcre_study(re->re, PCRE_STUDY_JIT_COMPILE, &err);
-  if (err) {
-    fprintf(stderr, "error: failed to study regex: %s\n", err);
-    pcre_free(re->re);
     return 1;
   }
 
@@ -621,7 +614,7 @@ static int filter_setup(char *arg) {
       config.filterfunc = match_glob;
       break;
     case FILTER_REGEX:
-      config.matchflags = config.icase ? PCRE_CASELESS : 0;
+      config.matchflags = config.icase ? PCRE2_CASELESS : 0;
       config.filterfunc = match_regex;
       config.filterfree = free_regex;
       return compile_pcre_expr(&config.filter.re, arg, config.matchflags);

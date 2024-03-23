@@ -35,7 +35,7 @@ configure_file(
 
 add_project_arguments('-include', 'config.h', language : 'c')
 
-libpcre = dependency('libpcre', version : '>= 8.30')
+libpcre2 = dependency('libpcre2-8', version : '>= 10')
 libarchive = dependency('libarchive', version : '>= 3.2.0')
 libcurl = dependency('libcurl')
 pthreads = dependency('threads')
@@ -59,7 +59,7 @@ run_target(
 executable(
   'pkgfile',
   pkgfile_sources,
-  dependencies : [libpcre, libarchive, libcurl, pthreads],
+  dependencies : [libpcre2, libarchive, libcurl, pthreads],
   install : true)
 
 man = custom_target(

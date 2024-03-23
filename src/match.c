@@ -12,13 +12,15 @@ int match_glob(const filterpattern_t *pattern, const char *line, int UNUSED len,
 
 int match_regex(const filterpattern_t *pattern, const char *line, int len,
                 int UNUSED flags) {
-  return pcre_exec(pattern->re.re, pattern->re.re_extra, line, len, 0,
-                   PCRE_NO_UTF16_CHECK, NULL, 0) < 0;
+  pcre2_match_data *match_data = pcre2_match_data_create_from_pattern(pattern->re.re, NULL);
+  int result = pcre2_match(pattern->re.re, (PCRE2_SPTR)line, len, 0,
+                   PCRE2_NO_UTF_CHECK, match_data, 0);
+  pcre2_match_data_free(match_data);
+  return result < 0;
 }
 
 void free_regex(filterpattern_t *pattern) {
-  pcre_free(pattern->re.re);
-  pcre_free_study(pattern->re.re_extra);
+  pcre2_code_free(pattern->re.re);
 }
 
 int match_exact_basename(const filterpattern_t *pattern, const char *line,

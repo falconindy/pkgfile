@@ -6,7 +6,8 @@
 #include <archive.h>
 #include <archive_entry.h>
 
-#include <pcre.h>
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
 
 #include "result.h"
 
@@ -31,8 +32,7 @@ typedef enum _filterstyle_t {
 
 typedef union _filterpattern_t {
   struct pcre_data {
-    pcre *re;
-    pcre_extra *re_extra;
+    pcre2_code *re;
   } re;
   struct glob_data {
     char *glob;
