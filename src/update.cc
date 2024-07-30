@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 
+#include <algorithm>
 #include <sstream>
 
 #include "archive_converter.hh"
