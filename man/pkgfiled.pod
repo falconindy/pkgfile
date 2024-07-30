@@ -75,4 +75,4 @@ B<pkgfile>(8)
 
 =head1 AUTHOR
 
-Dave Reisner E<lt>dreisner@archlinux.orgE<gt>
+Dave Reisner E<lt>d@falconindy.com<gt>

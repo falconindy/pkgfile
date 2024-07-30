@@ -181,4 +181,4 @@ B<pkgfiled>(1), B<repo-add>(8), B<pcre>(3), B<glob>(7), B<pacman.conf>(5)
 
 =head1 AUTHOR
 
-Dave Reisner E<lt>dreisner@archlinux.orgE<gt>
+Dave Reisner E<lt>d@falconindy.com<gt>
