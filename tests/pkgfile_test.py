@@ -71,7 +71,7 @@ class TestCase(unittest.TestCase):
         with open(os.path.join(self.tempdir, 'pacman.conf'), 'w') as f:
             f.write('''
             [options]
-            Architecture = x86_64
+            Architecture = x86_64 x86_64_v3 imnotlistening
 
             [testing]
             Server = {fakehttp_server}/$arch/$repo

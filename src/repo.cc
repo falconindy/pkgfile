@@ -136,6 +136,12 @@ static int parse_one_file(const char* filename, std::string* section,
         parse_include(val, section, alpm_config);
       } else if (in_options && key == kArchitecture) {
         if (strcmp(val, "auto") != 0) {
+          // More recent pacman allows alternative architectures, space
+          // delimited. In this case, take only the first value.
+          if (void* space = memchr(val, ' ', valsz); space != nullptr) {
+            valsz = static_cast<char*>(space) - val;
+          }
+
           alpm_config->architecture.assign(val, valsz);
         }
       }
