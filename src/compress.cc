@@ -9,12 +9,13 @@ namespace pkgfile {
 std::optional<int> ValidateCompression(std::string_view compress) {
   static const auto* mapping = new std::unordered_map<std::string_view, int>{
       // clang-format off
-      { "none",  ARCHIVE_FILTER_NONE  },
-      { "gzip",  ARCHIVE_FILTER_GZIP  },
       { "bzip2", ARCHIVE_FILTER_BZIP2 },
+      { "gzip",  ARCHIVE_FILTER_GZIP  },
+      { "lz4",   ARCHIVE_FILTER_LZ4   },
+      { "lzip",  ARCHIVE_FILTER_LZIP  },
       { "lzma",  ARCHIVE_FILTER_LZMA  },
       { "lzop",  ARCHIVE_FILTER_LZOP  },
-      { "lz4",   ARCHIVE_FILTER_LZ4   },
+      { "none",  ARCHIVE_FILTER_NONE  },
       { "xz",    ARCHIVE_FILTER_XZ    },
       { "zstd",  ARCHIVE_FILTER_ZSTD  },
       // clang-format on
