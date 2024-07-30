@@ -1,5 +1,5 @@
 project('pkgfile', 'cpp',
-        version : '21',
+        version : '22',
         license : 'MIT',
         default_options : [
           'cpp_std=c++20',
