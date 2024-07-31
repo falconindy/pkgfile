@@ -8,54 +8,27 @@
 #include <string.h>
 #include <unistd.h>
 
-Repo::~Repo() {
-  if (tmpfile.fd >= 0) {
-    close(tmpfile.fd);
+namespace {
+
+std::pair<std::string_view, std::string_view> split_keyval(
+    std::string_view line, const char separator) {
+  if (auto pos = line.find(separator); pos != line.npos) {
+    return {line.substr(0, pos), line.substr(pos + 1)};
   }
+
+  return {line, std::string_view()};
 }
 
-static size_t strtrim(char* str) {
-  char *left = str, *right;
+int parse_one_file(const char*, std::string*, AlpmConfig*);
 
-  if (!str || *str == '\0') {
-    return 0;
-  }
-
-  while (isspace((unsigned char)*left)) {
-    left++;
-  }
-  if (left != str) {
-    memmove(str, left, (strlen(left) + 1));
-    left = str;
-  }
-
-  if (*str == '\0') {
-    return 0;
-  }
-
-  right = strchr(str, '\0') - 1;
-  while (isspace((unsigned char)*right)) {
-    right--;
-  }
-  *++right = '\0';
-
-  return right - left;
-}
-
-static char* split_keyval(char* line, const char* sep) {
-  strsep(&line, sep);
-  return line;
-}
-
-static int parse_one_file(const char*, std::string*, struct AlpmConfig*);
-
-static int parse_include(const char* include, std::string* section,
-                         struct AlpmConfig* alpm_config) {
+int parse_include(std::string_view include, std::string* section,
+                  AlpmConfig* alpm_config) {
   glob_t globbuf;
 
-  if (glob(include, GLOB_NOCHECK, nullptr, &globbuf) != 0) {
+  const std::string include_str(include);
+  if (glob(include_str.c_str(), GLOB_NOCHECK, nullptr, &globbuf) != 0) {
     fprintf(stderr, "warning: globbing failed on '%s': out of memory\n",
-            include);
+            include_str.c_str());
     return -ENOMEM;
   }
 
@@ -68,52 +41,73 @@ static int parse_include(const char* include, std::string* section,
   return 0;
 }
 
-static int parse_one_file(const char* filename, std::string* section,
-                          struct AlpmConfig* alpm_config) {
+std::string_view trim(std::string_view in) {
+  auto left = in.begin();
+
+  for (;; ++left) {
+    if (left == in.end()) {
+      return std::string_view();
+    }
+    if (!isspace(*left)) {
+      break;
+    }
+  }
+
+  auto right = in.end() - 1;
+  for (; right > left && isspace(*right); --right);
+
+  return std::string_view(left, std::distance(left, right) + 1);
+}
+
+int parse_one_file(const char* filename, std::string* section,
+                   AlpmConfig* alpm_config) {
   FILE* fp;
-  char* ptr;
-  char line[4096];
-  constexpr std::string_view kServer = "Server";
-  constexpr std::string_view kInclude = "Include";
-  constexpr std::string_view kArchitecture = "Architecture";
+  char buffer[4096];
+  static constexpr std::string_view kServer = "Server";
+  static constexpr std::string_view kInclude = "Include";
+  static constexpr std::string_view kArchitecture = "Architecture";
+  static constexpr std::string_view kAuto = "auto";
   int in_options = 0, r = 0, lineno = 0;
 
   fp = fopen(filename, "r");
   if (!fp) {
-    fprintf(stderr, "error: failed to open %s: %s\n", filename,
+    fprintf(stderr, "error: failed to open '%s': %s\n", filename,
             strerror(errno));
     return -errno;
   }
 
-  while (fgets(line, sizeof(line), fp)) {
-    size_t len;
+  while (fgets(buffer, sizeof(buffer), fp)) {
     ++lineno;
 
-    // remove comments
-    ptr = strchr(line, '#');
-    if (ptr) {
-      *ptr = '\0';
+    std::string_view line(buffer, sizeof(buffer));
+    line = line.substr(0, line.find('\0'));
+
+    // Remove comments
+    if (auto pos = line.find('#'); pos != line.npos) {
+      line = line.substr(0, pos);
     }
 
-    len = strtrim(line);
-    if (len == 0) {
+    line = trim(line);
+    if (line.empty()) {
       continue;
     }
 
     // found a section header
-    if (line[0] == '[' && line[len - 1] == ']') {
-      section->assign(&line[1], len - 2);
-      in_options = len - 2 == 7 && *section == "options";
+    if (line.front() == '[' && line.back() == ']') {
+      section->assign(line.substr(1, line.size() - 2));
+      in_options = *section == "options";
       if (!in_options) {
         alpm_config->repos.emplace_back(*section);
       }
     }
 
-    if (memchr(line, '=', len)) {
-      char *key = line, *val = split_keyval(line, "=");
-      size_t keysz = strtrim(key), valsz = strtrim(val);
+    if (auto pos = line.find('='); pos != line.npos) {
+      auto [key, value] = split_keyval(line, '=');
 
-      if (std::string_view(key, keysz) == kServer) {
+      key = trim(key);
+      value = trim(value);
+
+      if (key == kServer) {
         if (section->empty()) {
           fprintf(
               stderr,
@@ -131,18 +125,17 @@ static int parse_one_file(const char* filename, std::string* section,
           continue;
         }
 
-        alpm_config->repos.back().servers.emplace_back(val, valsz);
+        alpm_config->repos.back().servers.emplace_back(value.data(),
+                                                       value.size());
       } else if (key == kInclude) {
-        parse_include(val, section, alpm_config);
+        parse_include(value, section, alpm_config);
       } else if (in_options && key == kArchitecture) {
-        if (strcmp(val, "auto") != 0) {
+        if (value != kAuto) {
           // More recent pacman allows alternative architectures, space
           // delimited. In this case, take only the first value.
-          if (void* space = memchr(val, ' ', valsz); space != nullptr) {
-            valsz = static_cast<char*>(space) - val;
-          }
+          auto [arch, rest] = split_keyval(value, ' ');
 
-          alpm_config->architecture.assign(val, valsz);
+          alpm_config->architecture.assign(arch);
         }
       }
     }
@@ -152,6 +145,8 @@ static int parse_one_file(const char* filename, std::string* section,
 
   return r;
 }
+
+}  // namespace
 
 int AlpmConfig::LoadFromFile(const char* filename, AlpmConfig* alpm_config) {
   std::string section;
@@ -163,6 +158,12 @@ int AlpmConfig::LoadFromFile(const char* filename, AlpmConfig* alpm_config) {
   }
 
   return 0;
+}
+
+Repo::~Repo() {
+  if (tmpfile.fd >= 0) {
+    close(tmpfile.fd);
+  }
 }
 
 // vim: set ts=2 sw=2 et:
