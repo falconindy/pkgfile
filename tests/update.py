@@ -24,13 +24,11 @@ class TestUpdate(pkgfile_test.TestCase):
         self.cachedir = os.path.join(self.tempdir, 'cache')
         os.mkdir(self.cachedir)
 
-
     def assertMatchesGolden(self, reponame):
         golden_repo = '{}/{}.files'.format(self.goldendir, reponame)
         converted_repo = '{}/{}.files'.format(self.cachedir, reponame)
 
         self.assertEqual(_sha256(golden_repo), _sha256(converted_repo))
-
 
     def testUpdate(self):
         r = self.Pkgfile(['-u'])
@@ -40,15 +38,15 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertMatchesGolden('testing')
 
         for repo in ('multilib', 'testing'):
-            original_repo = '{}/x86_64/{repo}/{repo}.files'.format(self.alpmcachedir, repo=repo)
+            original_repo = '{}/x86_64/{repo}/{repo}.files'.format(
+                self.alpmcachedir, repo=repo)
             converted_repo = '{}/{}.files'.format(self.cachedir, repo)
 
             # Only compare the integer portion of the mtime. we'll only ever
             # get back second precision from a remote server, so any fractional
             # second that's present on our golden repo can be ignored.
             self.assertEqual(int(os.stat(original_repo).st_mtime),
-                    int(os.stat(converted_repo).st_mtime))
-
+                             int(os.stat(converted_repo).st_mtime))
 
     def testUpdateForcesUpdates(self):
         r = self.Pkgfile(['-u'])
@@ -57,7 +55,7 @@ class TestUpdate(pkgfile_test.TestCase):
         inodes_before = {}
         for r in ('multilib', 'testing'):
             inodes_before[r] = os.stat(
-                    os.path.join(self.cachedir, '{}.files'.format(r))).st_ino
+                os.path.join(self.cachedir, '{}.files'.format(r))).st_ino
 
         r = self.Pkgfile(['-uu'])
         self.assertEqual(r.returncode, 0)
@@ -65,12 +63,13 @@ class TestUpdate(pkgfile_test.TestCase):
         inodes_after = {}
         for r in ('multilib', 'testing'):
             inodes_after[r] = os.stat(
-                    os.path.join(self.cachedir, '{}.files'.format(r))).st_ino
+                os.path.join(self.cachedir, '{}.files'.format(r))).st_ino
 
         for r in ('multilib', 'testing'):
-            self.assertNotEqual(inodes_before[r], inodes_after[r],
-                    msg='{}.files unexpectedly NOT rewritten'.format(r))
-
+            self.assertNotEqual(
+                inodes_before[r],
+                inodes_after[r],
+                msg='{}.files unexpectedly NOT rewritten'.format(r))
 
     def testUpdateSkipsUpToDate(self):
         r = self.Pkgfile(['-u'])
@@ -79,7 +78,7 @@ class TestUpdate(pkgfile_test.TestCase):
         inodes = {}
         for r in ('multilib', 'testing'):
             inodes[r] = os.stat(
-                    os.path.join(self.cachedir, '{}.files'.format(r))).st_ino
+                os.path.join(self.cachedir, '{}.files'.format(r))).st_ino
 
         # set the mtime to the epoch, expect that it gets rewritten on next update
         os.utime(os.path.join(self.cachedir, 'testing.files'), (0, 0))
@@ -88,15 +87,14 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertEqual(r.returncode, 0)
 
         self.assertEqual(
-                inodes['multilib'],
-                os.stat(os.path.join(self.cachedir, 'multilib.files')).st_ino,
-                msg='multilib.files unexpectedly rewritten by `pkgfile -u`')
+            inodes['multilib'],
+            os.stat(os.path.join(self.cachedir, 'multilib.files')).st_ino,
+            msg='multilib.files unexpectedly rewritten by `pkgfile -u`')
 
         self.assertNotEqual(
-                inodes['testing'],
-                os.stat(os.path.join(self.cachedir, 'testing.files')).st_ino,
-                msg='testing.files unexpectedly NOT rewritten by `pkgfile -u`')
-
+            inodes['testing'],
+            os.stat(os.path.join(self.cachedir, 'testing.files')).st_ino,
+            msg='testing.files unexpectedly NOT rewritten by `pkgfile -u`')
 
     def testUpdateSkipsBadServer(self):
         with open(os.path.join(self.tempdir, 'pacman.conf'), 'w') as f:
@@ -114,7 +112,6 @@ class TestUpdate(pkgfile_test.TestCase):
 
         r = self.Pkgfile(['-u'])
         self.assertEqual(r.returncode, 0)
-
 
     def testUpdateFailsWhenExhaustingServers(self):
         with open(os.path.join(self.tempdir, 'pacman.conf'), 'w') as f:

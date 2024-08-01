@@ -5,17 +5,18 @@ import os.path
 import signal
 import sys
 
-
-DBROOT = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), '../golden/alpm')
+DBROOT = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                      '../golden/alpm')
 
 
 class PkgfileHandler(http.server.SimpleHTTPRequestHandler):
+
     def __init__(self, *args, directory=None, **kwargs):
         return super().__init__(*args, directory=DBROOT, **kwargs)
 
 
 class PkgfileServer(http.server.HTTPServer):
+
     def handle_error(self, request, client_address):
         raise
 

@@ -10,7 +10,9 @@ class TestUpdate(pkgfile_test.TestCase):
         r = self.Pkgfile(['-l', 'dhcpcd'])
         self.assertEqual(r.returncode, 0)
 
-        self.assertEqual(r.stdout.decode(), textwrap.dedent('''
+        self.assertEqual(
+            r.stdout.decode(),
+            textwrap.dedent('''
             testing/dhcpcd	/etc/
             testing/dhcpcd	/etc/dhcpcd.conf
             testing/dhcpcd	/usr/
@@ -50,12 +52,13 @@ class TestUpdate(pkgfile_test.TestCase):
             testing/dhcpcd	/var/lib/dhcpcd/
         ''').lstrip('\n'))
 
-
     def testListRegex(self):
         r = self.Pkgfile(['-l', '-r', 'java.*src'])
         self.assertEqual(r.returncode, 0)
 
-        self.assertEqual(r.stdout.decode(), textwrap.dedent('''
+        self.assertEqual(
+            r.stdout.decode(),
+            textwrap.dedent('''
             testing/java-openjfx-src  	/usr/
             testing/java-openjfx-src  	/usr/lib/
             testing/java-openjfx-src  	/usr/lib/jvm/
@@ -74,21 +77,23 @@ class TestUpdate(pkgfile_test.TestCase):
             testing/java11-openjfx-src	/usr/share/licenses/java11-openjfx-src
         ''').lstrip('\n'))
 
-
     def testListBinaries(self):
         r = self.Pkgfile(['-l', '-b', 'dhcpcd'])
         self.assertEqual(r.returncode, 0)
 
-        self.assertEqual(r.stdout.decode(), textwrap.dedent('''
+        self.assertEqual(
+            r.stdout.decode(),
+            textwrap.dedent('''
             testing/dhcpcd	/usr/bin/dhcpcd
         ''').lstrip('\n'))
-
 
     def testListQuiet(self):
         r = self.Pkgfile(['-l', '-q', 'java-openjfx-src'])
         self.assertEqual(r.returncode, 0)
 
-        self.assertEqual(r.stdout.decode(), textwrap.dedent('''
+        self.assertEqual(
+            r.stdout.decode(),
+            textwrap.dedent('''
             /usr/
             /usr/lib/
             /usr/lib/jvm/
@@ -99,12 +104,13 @@ class TestUpdate(pkgfile_test.TestCase):
             /usr/share/licenses/java-openjfx-src
         ''').lstrip('\n'))
 
-
     def testListWithRepo(self):
         r = self.Pkgfile(['-l', 'testing/java-openjfx-src'])
         self.assertEqual(r.returncode, 0)
 
-        self.assertEqual(r.stdout.decode(), textwrap.dedent('''
+        self.assertEqual(
+            r.stdout.decode(),
+            textwrap.dedent('''
             testing/java-openjfx-src	/usr/
             testing/java-openjfx-src	/usr/lib/
             testing/java-openjfx-src	/usr/lib/jvm/
@@ -115,7 +121,6 @@ class TestUpdate(pkgfile_test.TestCase):
             testing/java-openjfx-src	/usr/share/licenses/java-openjfx-src
         ''').lstrip('\n'))
 
-
     def testListWithPath(self):
         # we should handle this case gracefully by basically failing. The trick
         # is that our code wants to split on slashes to find the repo name, but
@@ -123,12 +128,13 @@ class TestUpdate(pkgfile_test.TestCase):
         r = self.Pkgfile(['-l', '/usr/bin'])
         self.assertNotEqual(r.returncode, 0)
 
-
     def testListRaw(self):
         r = self.Pkgfile(['-l', '-w', '-r', 'java.*-openjfx-src'])
         self.assertEqual(r.returncode, 0)
 
-        self.assertEqual(r.stdout.decode(), textwrap.dedent('''
+        self.assertEqual(
+            r.stdout.decode(),
+            textwrap.dedent('''
             testing/java-openjfx-src	/usr/
             testing/java-openjfx-src	/usr/lib/
             testing/java-openjfx-src	/usr/lib/jvm/
@@ -146,7 +152,6 @@ class TestUpdate(pkgfile_test.TestCase):
             testing/java11-openjfx-src	/usr/share/licenses/
             testing/java11-openjfx-src	/usr/share/licenses/java11-openjfx-src
         ''').lstrip('\n'))
-
 
     def testNotFound(self):
         r = self.Pkgfile(['-l', 'packagedoesntexist'])

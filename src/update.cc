@@ -277,8 +277,7 @@ void Updater::DownloadWaitLoop(CURLM* multi) {
       break;
     }
 
-    while (DownloadCheckComplete(multi, active_handles) == 0)
-      ;
+    while (DownloadCheckComplete(multi, active_handles) == 0);
   } while (active_handles > 0);
 }
 
