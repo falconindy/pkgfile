@@ -1,6 +1,7 @@
 project('pkgfile', 'cpp',
         version : '22',
         license : 'MIT',
+        meson_version : '>=0.56',
         default_options : [
           'cpp_std=c++20',
           'warning_level=3',
@@ -56,7 +57,7 @@ libcommon = static_library(
 run_target(
   'fmt',
   command : [
-    join_paths(meson.source_root(), 'build-aux/source-format')
+    join_paths(meson.project_source_root(), 'build-aux/source-format')
   ])
 
 executable(
@@ -107,7 +108,7 @@ custom_target(
 if get_option('systemd_units')
   systemd = dependency(
     'systemd', not_found_message : 'systemd not found but systemd_units=true')
-  systemunitdir = systemd.get_pkgconfig_variable('systemdsystemunitdir')
+  systemunitdir = systemd.get_variable(pkgconfig : 'systemdsystemunitdir')
 
   install_data(
     'systemd/pkgfile-update.timer',
@@ -185,7 +186,7 @@ if py3.found() and py3.language_version().version_compare(python_requirement)
     test(
       'pkgfile_@0@_integration_test'.format(basename),
       py3,
-      args : [join_paths(meson.source_root(), input)],
+      args : [join_paths(meson.project_source_root(), input)],
       env : ['PYTHONDONTWRITEBYTECODE=1'])
   endforeach
 else
