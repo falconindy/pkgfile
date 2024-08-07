@@ -90,6 +90,7 @@ class Pkgfile {
 
   Options options_;
   ArchiveEntryCallback entry_callback_;
+  bool try_mmap_;
 };
 
 }  // namespace pkgfile

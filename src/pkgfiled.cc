@@ -130,7 +130,7 @@ class Pkgfiled {
 
       fprintf(stderr, "processing new files DB: %s\n", input_repo.c_str());
 
-      const auto input_file = ReadOnlyFile::Open(input_repo);
+      const auto input_file = ReadOnlyFile::Open(input_repo, /*try_mmap=*/true);
       if (input_file == nullptr) {
         return false;
       }

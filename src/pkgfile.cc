@@ -25,6 +25,7 @@ namespace pkgfile {
 Pkgfile::Pkgfile(Options options) : options_(options) {
   switch (options_.mode) {
     case MODE_SEARCH:
+      try_mmap_ = true;
       entry_callback_ = [this](const std::string& repo,
                                const filter::Filter& filter, const Package& pkg,
                                Result* result, ArchiveReader* reader) {
@@ -32,6 +33,7 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
       };
       break;
     case MODE_LIST:
+      try_mmap_ = false;
       entry_callback_ = [this](const std::string& repo,
                                const filter::Filter& filter, const Package& pkg,
                                Result* result, ArchiveReader* reader) {
@@ -133,7 +135,7 @@ bool Pkgfile::ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname) {
 
 std::optional<pkgfile::Result> Pkgfile::ProcessRepo(
     const fs::path repo, const filter::Filter& filter) {
-  auto fd = ReadOnlyFile::Open(repo);
+  auto fd = ReadOnlyFile::Open(repo, try_mmap_);
   if (fd == nullptr) {
     if (errno != ENOENT) {
       fprintf(stderr, "failed to open %s for reading: %s\n", repo.c_str(),
@@ -143,7 +145,7 @@ std::optional<pkgfile::Result> Pkgfile::ProcessRepo(
   }
 
   const char* err;
-  const auto read_archive = ReadArchive::New(fd->fd(), &err);
+  const auto read_archive = ReadArchive::New(*fd, &err);
   if (read_archive == nullptr) {
     fprintf(stderr, "failed to create new archive for reading: %s: %s\n",
             repo.c_str(), err);

@@ -2,31 +2,54 @@
 
 #include <archive.h>
 #include <fcntl.h>
+#include <sys/mman.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace pkgfile {
 
 class ReadOnlyFile {
  public:
-  ~ReadOnlyFile() { close(fd_); }
+  ~ReadOnlyFile();
+
+  struct MMappedRegion {
+    MMappedRegion(void* ptr, off_t size) : ptr(ptr), size(size) {}
+
+    // Cannot be copied
+    MMappedRegion(const MMappedRegion&) = delete;
+    MMappedRegion& operator=(const MMappedRegion&) = delete;
+
+    MMappedRegion(MMappedRegion&& other) : ptr(other.ptr), size(other.size) {
+      other.ptr = MAP_FAILED;
+    }
+    MMappedRegion& operator=(MMappedRegion&& other) {
+      ptr = other.ptr;
+      size = other.size;
+      other.ptr = MAP_FAILED;
+      return *this;
+    }
+
+    ~MMappedRegion();
+
+    void* ptr;
+    off_t size;
+  };
 
   int fd() const { return fd_; }
 
-  static std::unique_ptr<ReadOnlyFile> Open(const std::string& path) {
-    int fd = open(path.c_str(), O_RDONLY);
-    if (fd < 0) {
-      return nullptr;
-    }
+  const std::optional<MMappedRegion>& mmapped() const { return mapped_; }
 
-    return std::unique_ptr<ReadOnlyFile>(new ReadOnlyFile(fd));
-  }
+  static std::unique_ptr<ReadOnlyFile> Open(const std::string& path,
+                                            bool try_mmap);
 
  private:
-  ReadOnlyFile(int fd) : fd_(fd) {}
+  ReadOnlyFile(int fd, std::optional<MMappedRegion> mapped)
+      : fd_(fd), mapped_(std::move(mapped)) {}
 
   int fd_;
+  std::optional<MMappedRegion> mapped_;
 };
 
 class ReadArchive {
@@ -40,6 +63,9 @@ class ReadArchive {
   ReadArchive& operator=(ReadArchive&&) = default;
 
   static std::unique_ptr<ReadArchive> New(int fd, const char** error);
+
+  static std::unique_ptr<ReadArchive> New(const ReadOnlyFile& file,
+                                          const char** error);
 
   int fd() const { return fd_; }
   archive* read_archive() { return a_; }
