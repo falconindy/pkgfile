@@ -1,5 +1,4 @@
 ![GitHub Actions status | falconindy/pkgfile](https://github.com/falconindy/pkgfile/workflows/arch.x86_64/badge.svg)
-![GitHub Actions status | falconindy/pkgfile](https://github.com/falconindy/pkgfile/workflows/arch.x86_64.asan/badge.svg)
 
 ## pkgfile
 
