@@ -167,7 +167,7 @@ implementation.
 It is recommended to use B<pkgfiled>(1) to keep .files DBs up as `pacman -Fy` is
 issued (either by a user or a cronjob/systemd timer). pkgfiled can be enabled with:
 
-  systemctl enabkle --now pkgfiled
+  systemctl enable --now pkgfiled
 
 Alternatively, pkgfile includes systemd timer and service units to automate
 periodic updates to the .files DBs. Assuming that pkgfile was built with
