@@ -190,6 +190,7 @@ if gtest.found() and gmock.found()
             link_with: [libcommon, gtest_main],
             dependencies: [gmock, gtest, libpcre],
         ),
+        protocol: 'gtest',
     )
 else
     message('Skipping unit tests, gtest or gmock not found')
@@ -208,6 +209,7 @@ if py3.found() and py3.language_version().version_compare(python_requirement)
             py3,
             args: [join_paths(meson.project_source_root(), input)],
             env: ['PYTHONDONTWRITEBYTECODE=1'],
+            suite: 'integration'
         )
     endforeach
 else
