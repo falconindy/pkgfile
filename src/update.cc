@@ -224,7 +224,6 @@ int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
   } else {
     curl_multi_remove_handle(multi, repo->curl);
     lseek(repo->tmpfile.fd, 0, SEEK_SET);
-    ftruncate(repo->tmpfile.fd, 0);
     repo->server_iter++;
   }
 
