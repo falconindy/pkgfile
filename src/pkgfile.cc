@@ -309,7 +309,8 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
 
   const auto repos = DiscoverRepos(options_.cachedir);
   if (repos.empty()) {
-    fputs("error: No repo files found. Please run `pkgfiled -o'.\n", stderr);
+    fputs("error: No repo files found. Please run `pkgfile --update.\n",
+          stderr);
   }
 
   const std::string& input = args[0];
