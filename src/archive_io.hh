@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace pkgfile {
 
@@ -16,22 +17,20 @@ class ReadOnlyFile {
 
   struct MMappedRegion {
     MMappedRegion(void* ptr, off_t size) : ptr(ptr), size(size) {}
+    ~MMappedRegion();
 
-    // Cannot be copied
+    // Moveable, but not copyable.
     MMappedRegion(const MMappedRegion&) = delete;
     MMappedRegion& operator=(const MMappedRegion&) = delete;
 
-    MMappedRegion(MMappedRegion&& other) : ptr(other.ptr), size(other.size) {
-      other.ptr = MAP_FAILED;
-    }
     MMappedRegion& operator=(MMappedRegion&& other) {
-      ptr = other.ptr;
-      size = other.size;
-      other.ptr = MAP_FAILED;
+      ptr = std::exchange(other.ptr, MAP_FAILED);
+      size = std::exchange(other.size, -1);
       return *this;
     }
-
-    ~MMappedRegion();
+    MMappedRegion(MMappedRegion&& other) : ptr(other.ptr), size(other.size) {
+      *this = std::move(other);
+    }
 
     void* ptr;
     off_t size;
