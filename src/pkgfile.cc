@@ -268,14 +268,11 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
                                              std::move(filter));
     }
 
-    std::unique_ptr<filter::Filter> dir_filter =
-        std::make_unique<filter::Directory>();
     if (!options.directories) {
-      dir_filter = std::make_unique<filter::Not>(std::move(dir_filter));
+      filter = std::make_unique<filter::And>(
+          std::make_unique<filter::Not>(std::make_unique<filter::Directory>()),
+          std::move(filter));
     }
-
-    filter =
-        std::make_unique<filter::And>(std::move(dir_filter), std::move(filter));
   }
 
   return filter;

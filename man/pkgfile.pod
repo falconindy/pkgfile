@@ -49,7 +49,7 @@ Return only files which are contained within a bin or sbin directory.
 
 =item B<-d>, B<--directories>
 
-Match directories in search results.
+Additionally include directories in search results.
 
 =item B<-g>, B<--glob>
 

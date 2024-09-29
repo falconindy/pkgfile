@@ -75,6 +75,15 @@ class TestUpdate(pkgfile_test.TestCase):
             testing/dhcpcd
         ''').lstrip('\n'))
 
+        r = self.Pkgfile(['-s', '-d', '/usr/bin/dhcpcd'])
+        self.assertEqual(r.returncode, 0)
+
+        self.assertEqual(
+            r.stdout.decode(),
+            textwrap.dedent('''
+            testing/dhcpcd
+        ''').lstrip('\n'))
+
     def testSearchCaseInsensitive(self):
         r = self.Pkgfile(['-s', '-i', 'mKiNiTcPiO'])
         self.assertEqual(r.returncode, 0)
