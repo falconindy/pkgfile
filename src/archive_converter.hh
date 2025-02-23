@@ -17,9 +17,15 @@ namespace pkgfile {
 // packed in CPIO).
 class ArchiveConverter {
  public:
-  ArchiveConverter(std::string reponame, std::unique_ptr<ReadArchive> in,
+  ArchiveConverter(std::string reponame, std::string base_filename_out,
+                   int compress, int repo_chunk_bytes,
+                   std::unique_ptr<ReadArchive> in,
                    std::unique_ptr<WriteArchive> out)
       : reponame_(std::move(reponame)),
+        base_filename_out_(std::move(base_filename_out)),
+        compress_(compress),
+        repo_chunk_bytes_(repo_chunk_bytes <= 0 ? kDefaultRepoChunkMax
+                                                : repo_chunk_bytes),
         in_(std::move(in)),
         out_(std::move(out)) {}
 
@@ -31,19 +37,32 @@ class ArchiveConverter {
 
   static std::unique_ptr<ArchiveConverter> New(const std::string& reponame,
                                                int fd_in,
-                                               const std::string& filename_out,
-                                               int compress);
+                                               std::string base_filename_out,
+                                               int compress,
+                                               int repo_chunk_bytes);
 
   bool RewriteArchive();
 
  private:
+  static constexpr int kDefaultRepoChunkMax = 40 * (1 << 20);
+
   int WriteCpioEntry(archive_entry* ae, const std::filesystem::path& entryname);
   bool Finalize();
 
+  static std::string MakeArchiveChunkFilename(const std::string& base_filename,
+                                              int chunk_number, bool tempfile);
+
+  bool NextArchiveChunk();
+
   std::string reponame_;
-  std::string destfile_;
+  std::string base_filename_out_;
+  int compress_;
+  int repo_chunk_bytes_;
+
   std::unique_ptr<ReadArchive> in_;
   std::unique_ptr<WriteArchive> out_;
+
+  int chunk_number_ = 0;
 };
 
 }  // namespace pkgfile

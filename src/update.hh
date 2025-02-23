@@ -9,7 +9,7 @@ namespace pkgfile {
 
 class Updater {
  public:
-  Updater(std::string cachedir, int compress);
+  Updater(std::string cachedir, int compress, int repo_chunk_bytes);
   ~Updater();
 
   int Update(const std::string& alpm_config_file, bool force);
@@ -22,6 +22,7 @@ class Updater {
 
   std::string cachedir_;
   int compress_;
+  int repo_chunk_bytes_;
   CURLM* curl_multi_;
 };
 

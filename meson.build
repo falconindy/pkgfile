@@ -53,6 +53,7 @@ libcommon = static_library(
     src/repo.cc src/repo.hh
     src/result.cc src/result.hh
     src/update.cc src/update.hh
+    src/queue.hh
   '''.split(),
     ),
     dependencies: [libpcre, libarchive, libcurl, pthreads, stdcppfs],

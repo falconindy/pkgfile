@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -7,13 +8,10 @@ namespace pkgfile {
 
 class Result {
  public:
-  Result(std::string name) : name_(std::move(name)) {}
+  explicit Result(std::string name) : name_(std::move(name)) {}
 
   Result(const Result&) = delete;
   Result& operator=(const Result&) = delete;
-
-  Result(Result&&) = default;
-  Result& operator=(Result&&) = default;
 
   bool Empty() const { return lines_.empty(); }
 
@@ -30,6 +28,7 @@ class Result {
     std::string entry;
   };
 
+  std::mutex mu_;
   std::string name_;
   std::vector<Line> lines_;
   size_t max_prefixlen_ = 0;

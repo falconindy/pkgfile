@@ -138,7 +138,7 @@ class Pkgfiled {
       const std::string reponame = changed_path.filename().stem();
       auto converter = pkgfile::ArchiveConverter::New(
           reponame, input_file->fd(), pkgfile_cache_ / changed_path,
-          options_.compress);
+          options_.compress, -1);
 
       return converter != nullptr && converter->RewriteArchive();
     };

@@ -236,7 +236,8 @@ int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
 
   curl_easy_setopt(repo->curl, CURLOPT_URL, url.c_str());
 
-  if (repo->force == 0 && stat(repo->diskfile.c_str(), &st) == 0) {
+  std::string first_repo_chunk = std::format("{}.000", repo->diskfile);
+  if (repo->force == 0 && stat(first_repo_chunk.c_str(), &st) == 0) {
     curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
     curl_easy_setopt(repo->curl, CURLOPT_TIMECONDITION,
                      CURL_TIMECOND_IFMODSINCE);
@@ -250,7 +251,8 @@ int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
 
 bool Updater::RepackRepoData(const struct Repo* repo) {
   auto converter = pkgfile::ArchiveConverter::New(repo->name, repo->tmpfile.fd,
-                                                  repo->diskfile, compress_);
+                                                  repo->diskfile, compress_,
+                                                  repo_chunk_bytes_);
 
   return converter != nullptr && converter->RewriteArchive();
 }
@@ -421,8 +423,10 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
   return ret;
 }
 
-Updater::Updater(std::string cachedir, int compress)
-    : cachedir_(cachedir), compress_(compress) {
+Updater::Updater(std::string cachedir, int compress, int repo_chunk_bytes)
+    : cachedir_(cachedir),
+      compress_(compress),
+      repo_chunk_bytes_(repo_chunk_bytes) {
   curl_global_init(CURL_GLOBAL_ALL);
   curl_multi_ = curl_multi_init();
 }

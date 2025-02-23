@@ -81,7 +81,8 @@ class TestCase(unittest.TestCase):
 
     def Pkgfile(self, args):
         env = {
-            'LC_TIME': 'C',
+            'LC_TIME': 'C.UTF-8',
+            'LC_COLLATE': 'C.UTF-8',
             'TZ': 'UTC',
             'PATH': '/bin:/usr/bin',
         }

@@ -48,6 +48,7 @@ class Pkgfile {
     bool raw = false;
     char eol = '\n';
     int compress = ARCHIVE_FILTER_NONE;
+    int repo_chunk_bytes = -1;  // <=0 implies default chunk size
   };
 
   Pkgfile(Options options);
@@ -61,7 +62,7 @@ class Pkgfile {
     std::string_view version;
   };
 
-  using RepoMap = std::map<std::string, std::filesystem::path>;
+  using RepoMap = std::multimap<std::string, std::filesystem::path>;
 
   using ArchiveEntryCallback = std::function<int(
       const std::string& repo, const filter::Filter& filter, const Package& pkg,
@@ -74,12 +75,32 @@ class Pkgfile {
 
   static bool ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname);
 
-  std::optional<pkgfile::Result> ProcessRepo(const std::filesystem::path repo,
-                                             const filter::Filter& filter);
+  void ProcessRepo(const std::string& reponame,
+                   const std::filesystem::path repopath,
+                   const filter::Filter& filter, Result* result);
 
   std::string FormatSearchResult(const std::string& repo, const Package& pkg);
 
-  int SearchAllRepos(const RepoMap& repos, const filter::Filter& filter);
+  class RepoMapIteratorPair {
+   public:
+    using It = RepoMap::const_iterator;
+
+    RepoMapIteratorPair(const RepoMap& repomap)
+        : first_(repomap.begin()), last_(repomap.end()) {}
+
+    RepoMapIteratorPair(std::pair<It, It> p)
+        : first_(p.first), last_(p.second) {}
+
+    friend It begin(RepoMapIteratorPair p) { return p.first_; }
+    friend It end(RepoMapIteratorPair p) { return p.last_; }
+
+   private:
+    It first_;
+    It last_;
+  };
+
+  int SearchRepos(const RepoMapIteratorPair& repo_range,
+                  const filter::Filter& filter);
   int SearchSingleRepo(const RepoMap& repos, const filter::Filter& filter,
                        std::string_view searchstring);
 

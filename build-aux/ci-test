@@ -21,14 +21,14 @@ endgroup() {
   echo "::endgroup::"
 }
 
-debug "Running with buildmode=$buildmode"
-
 group 'setup'
 
 buildmode=$1
 setup_flags=()
 builddir=build-$buildmode
 test_install=0
+
+debug "Running with buildmode=$buildmode"
 
 case $buildmode in
   plain)
@@ -60,7 +60,7 @@ endgroup
 
 # test
 group 'test'
-meson test -C "$builddir"
+meson test -C "$builddir" --print-errorlogs -v
 endgroup
 
 # install

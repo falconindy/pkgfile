@@ -9,12 +9,14 @@
 
 #include <future>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <vector>
 
 #include "archive_io.hh"
 #include "compress.hh"
 #include "filter.hh"
+#include "queue.hh"
 #include "result.hh"
 #include "update.hh"
 
@@ -159,26 +161,25 @@ bool Pkgfile::ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname) {
   return true;
 }
 
-std::optional<pkgfile::Result> Pkgfile::ProcessRepo(
-    const fs::path repo, const filter::Filter& filter) {
-  auto fd = ReadOnlyFile::Open(repo, try_mmap_);
+void Pkgfile::ProcessRepo(const std::string& reponame, const fs::path repopath,
+                          const filter::Filter& filter, Result* result) {
+  auto fd = ReadOnlyFile::Open(repopath, try_mmap_);
   if (fd == nullptr) {
     if (errno != ENOENT) {
-      fprintf(stderr, "failed to open %s for reading: %s\n", repo.c_str(),
+      fprintf(stderr, "failed to open %s for reading: %s\n", repopath.c_str(),
               strerror(errno));
     }
-    return std::nullopt;
+    return;
   }
 
   const char* err;
   const auto read_archive = ReadArchive::New(*fd, &err);
   if (read_archive == nullptr) {
     fprintf(stderr, "failed to create new archive for reading: %s: %s\n",
-            repo.c_str(), err);
-    return std::nullopt;
+            repopath.c_str(), err);
+    return;
   }
 
-  Result result(repo.stem());
   ArchiveReader reader(read_archive->read_archive());
 
   archive_entry* e;
@@ -191,12 +192,10 @@ std::optional<pkgfile::Result> Pkgfile::ProcessRepo(
       continue;
     }
 
-    if (entry_callback_(repo.stem(), filter, pkg, &result, &reader) < 0) {
+    if (entry_callback_(reponame, filter, pkg, result, &reader) < 0) {
       break;
     }
   }
-
-  return result;
 }
 
 int Pkgfile::SearchSingleRepo(const RepoMap& repos,
@@ -209,33 +208,51 @@ int Pkgfile::SearchSingleRepo(const RepoMap& repos,
     wanted_repo = searchstring.substr(0, searchstring.find('/'));
   }
 
-  auto iter = repos.find(wanted_repo);
-  if (iter == repos.end()) {
-    fprintf(stderr, "error: repo not available: %s\n", wanted_repo.c_str());
-  }
-
-  auto result = ProcessRepo(iter->second, filter);
-  if (!result.has_value() || result->Empty()) {
-    return 1;
-  }
-
-  result->Print(options_.raw ? 0 : result->MaxPrefixlen(), options_.eol);
-  return 0;
+  return SearchRepos(repos.equal_range(wanted_repo), filter);
 }
 
-int Pkgfile::SearchAllRepos(const RepoMap& repos,
-                            const filter::Filter& filter) {
-  std::vector<std::future<std::optional<Result>>> futures;
-  for (const auto& repo : repos) {
-    futures.push_back(std::async(
-        std::launch::async, [&] { return ProcessRepo(repo.second, filter); }));
+int Pkgfile::SearchRepos(const RepoMapIteratorPair& repo_range,
+                         const filter::Filter& filter) {
+  using ResultMap = std::map<std::string, std::unique_ptr<Result>>;
+  ResultMap results;
+
+  struct WorkItem {
+    const std::string* reponame;
+    const fs::path* filepath;
+    const filter::Filter* filter;
+    Result* result;
+  };
+
+  ThreadSafeQueue<WorkItem> queue;
+  for (auto& [reponame, filepath] : repo_range) {
+    results.emplace(reponame, std::make_unique<Result>(reponame));
+    queue.enqueue(
+        WorkItem{&reponame, &filepath, &filter, results[reponame].get()});
   }
 
-  std::vector<Result> results;
-  for (auto& fu : futures) {
-    auto result = fu.get();
-    if (result.has_value() && !result->Empty()) {
-      results.emplace_back(std::move(result.value()));
+  const auto num_workers =
+      std::min<int>(std::thread::hardware_concurrency(), queue.size());
+
+  std::vector<std::thread> workers;
+  workers.reserve(num_workers);
+  for (int i = 0; i < num_workers; ++i) {
+    workers.push_back(std::thread([&] {
+      while (!queue.empty()) {
+        WorkItem item = queue.dequeue();
+        ProcessRepo(*item.reponame, *item.filepath, *item.filter, item.result);
+      }
+    }));
+  }
+
+  for (auto& worker : workers) {
+    worker.join();
+  }
+
+  for (auto iter = results.begin(); iter != results.end();) {
+    if (iter->second->Empty()) {
+      results.erase(iter++);
+    } else {
+      ++iter;
     }
   }
 
@@ -243,9 +260,18 @@ int Pkgfile::SearchAllRepos(const RepoMap& repos,
     return 1;
   }
 
-  const size_t prefixlen = options_.raw ? 0 : MaxPrefixlen(results);
-  for (auto& result : results) {
-    result.Print(prefixlen, options_.eol);
+  const size_t prefixlen =
+      options_.raw ? 0
+                   : std::max_element(results.begin(), results.end(),
+                                      [](const ResultMap::value_type& a,
+                                         const ResultMap::value_type& b) {
+                                        return a.second->MaxPrefixlen() <
+                                               b.second->MaxPrefixlen();
+                                      })
+                         ->second->MaxPrefixlen();
+
+  for (auto& [repo, result] : results) {
+    result->Print(prefixlen, options_.eol);
   }
 
   return 0;
@@ -303,17 +329,53 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
   return filter;
 }
 
+// Repo files should always be of the form ${reponame}.files.nnn where 'n' is an
+// 0-indexed, zero-padded, increasing integer
+bool HasRepoSuffix(std::string_view path) {
+  const auto ndots = std::count(path.begin(), path.end(), '.');
+  if (ndots != 2) {
+    return false;
+  }
+
+  auto pos = path.rfind('.');
+  if (!path.substr(0, pos).ends_with(".files")) {
+    return false;
+  }
+
+  for (++pos; pos < path.size(); ++pos) {
+    if (!isdigit(path[pos])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // static
 Pkgfile::RepoMap Pkgfile::DiscoverRepos(std::string_view cachedir,
                                         std::error_code& ec) {
-  RepoMap repos;
+  std::set<fs::path> paths;
 
-  for (const auto& p : fs::directory_iterator(cachedir, ec)) {
-    if (!p.is_regular_file() || p.path().extension() != ".files") {
+  // std::multimap guarantees insertion order which is the same as directory
+  // iterator order (i.e. undefined). Gather the paths into a std::set to ensure
+  // they're lexicographically ordered.
+  for (const auto& entry : fs::directory_iterator(cachedir, ec)) {
+    const std::string pathname = entry.path();
+    if (!entry.is_regular_file() || !HasRepoSuffix(pathname)) {
       continue;
     }
 
-    repos.emplace(p.path().stem(), p.path());
+    paths.insert(pathname);
+  }
+
+  RepoMap repos;
+  for (std::string pathname : paths) {
+    const std::string_view view(pathname);
+    const auto slash = view.rfind('/');
+    std::string_view reponame =
+        view.substr(slash + 1, view.substr(slash).find('.') - 1);
+
+    repos.emplace(reponame, pathname);
   }
 
   return repos;
@@ -321,7 +383,8 @@ Pkgfile::RepoMap Pkgfile::DiscoverRepos(std::string_view cachedir,
 
 int Pkgfile::Run(const std::vector<std::string>& args) {
   if (options_.mode & MODE_UPDATE) {
-    return Updater(options_.cachedir, options_.compress)
+    return Updater(options_.cachedir, options_.compress,
+                   options_.repo_chunk_bytes)
         .Update(options_.cfgfile, options_.mode == MODE_UPDATE_FORCE);
   }
 
@@ -360,7 +423,7 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
     return SearchSingleRepo(repos, *filter, input);
   }
 
-  return SearchAllRepos(repos, *filter);
+  return SearchRepos(repos, *filter);
 }
 
 }  // namespace pkgfile
@@ -415,24 +478,25 @@ std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
   static constexpr char kShortOpts[] = "0bC:D:dghilqR:rsuVvwz::";
   static constexpr struct option kLongOpts[] = {
       // clang-format off
-    { "binaries",      no_argument,        0, 'b' },
-    { "cachedir",      required_argument,  0, 'D' },
-    { "compress",      optional_argument,  0, 'z' },
-    { "config",        required_argument,  0, 'C' },
-    { "directories",   no_argument,        0, 'd' },
-    { "glob",          no_argument,        0, 'g' },
-    { "help",          no_argument,        0, 'h' },
-    { "ignorecase",    no_argument,        0, 'i' },
-    { "list",          no_argument,        0, 'l' },
-    { "quiet",         no_argument,        0, 'q' },
-    { "repo",          required_argument,  0, 'R' },
-    { "regex",         no_argument,        0, 'r' },
-    { "search",        no_argument,        0, 's' },
-    { "update",        no_argument,        0, 'u' },
-    { "version",       no_argument,        0, 'V' },
-    { "verbose",       no_argument,        0, 'v' },
-    { "raw",           no_argument,        0, 'w' },
-    { "null",          no_argument,        0, '0' },
+    { "binaries",       no_argument,        0, 'b' },
+    { "cachedir",       required_argument,  0, 'D' },
+    { "compress",       optional_argument,  0, 'z' },
+    { "config",         required_argument,  0, 'C' },
+    { "directories",    no_argument,        0, 'd' },
+    { "glob",           no_argument,        0, 'g' },
+    { "help",           no_argument,        0, 'h' },
+    { "ignorecase",     no_argument,        0, 'i' },
+    { "list",           no_argument,        0, 'l' },
+    { "quiet",          no_argument,        0, 'q' },
+    { "repo",           required_argument,  0, 'R' },
+    { "regex",          no_argument,        0, 'r' },
+    { "search",         no_argument,        0, 's' },
+    { "update",         no_argument,        0, 'u' },
+    { "version",        no_argument,        0, 'V' },
+    { "verbose",        no_argument,        0, 'v' },
+    { "raw",            no_argument,        0, 'w' },
+    { "null",           no_argument,        0, '0' },
+    { "repochunkbytes", required_argument,  0, '~' + 1 },  // undocumented
     { 0, 0, 0, 0 },
     // clang-format pn
   };
@@ -511,6 +575,9 @@ std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
         } else {
           options.compress = ARCHIVE_FILTER_GZIP;
         }
+        break;
+      case '~' + 1:
+        options.repo_chunk_bytes = atoi(optarg);
         break;
       default:
         return std::nullopt;

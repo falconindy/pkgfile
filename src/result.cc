@@ -1,6 +1,7 @@
 #include "result.hh"
 
 #include <algorithm>
+#include <mutex>
 
 namespace pkgfile {
 
@@ -18,6 +19,8 @@ void Result::PrintOneColumn(char eol) const {
 }
 
 void Result::Add(std::string prefix, std::string entry) {
+  std::lock_guard l(mu_);
+
   if (prefix.size() > max_prefixlen_) {
     max_prefixlen_ = prefix.size();
   }
