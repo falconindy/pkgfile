@@ -279,10 +279,11 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
 }
 
 // static
-Pkgfile::RepoMap Pkgfile::DiscoverRepos(std::string_view cachedir) {
+Pkgfile::RepoMap Pkgfile::DiscoverRepos(std::string_view cachedir,
+                                        std::error_code& ec) {
   RepoMap repos;
 
-  for (const auto& p : fs::directory_iterator(cachedir)) {
+  for (const auto& p : fs::directory_iterator(cachedir, ec)) {
     if (!p.is_regular_file() || p.path().extension() != ".files") {
       continue;
     }
@@ -304,8 +305,12 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
     return 1;
   }
 
-  const auto repos = DiscoverRepos(options_.cachedir);
-  if (repos.empty()) {
+  std::error_code ec;
+  const auto repos = DiscoverRepos(options_.cachedir, ec);
+  if (ec.value() != 0) {
+    fprintf(stderr, "error: Failed to open cache directory %s: %s\n",
+            options_.cachedir.c_str(), ec.message().c_str());
+  } else if (repos.empty()) {
     fputs("error: No repo files found. Please run `pkgfile --update.\n",
           stderr);
   }

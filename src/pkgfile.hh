@@ -67,7 +67,7 @@ class Pkgfile {
       const std::string& repo, const filter::Filter& filter, const Package& pkg,
       Result* result, ArchiveReader* reader)>;
 
-  static RepoMap DiscoverRepos(std::string_view cachedir);
+  static RepoMap DiscoverRepos(std::string_view cachedir, std::error_code& ec);
 
   static std::unique_ptr<filter::Filter> BuildFilterFromOptions(
       const Options& config, const std::string& match);
