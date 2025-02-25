@@ -10,7 +10,7 @@
 #include <sys/utsname.h>
 
 #include <algorithm>
-#include <sstream>
+#include <format>
 
 #include "archive_converter.hh"
 #include "archive_reader.hh"
@@ -63,10 +63,7 @@ std::string PrepareUrl(const std::string& url_template, const std::string& repo,
   StrReplace(&url, "$arch", arch);
   StrReplace(&url, "$repo", repo);
 
-  std::stringstream ss;
-
-  ss << url << '/' << repo << ".files";
-  return ss.str();
+  return std::format("{}/{}.files", url, repo);
 }
 
 size_t WriteHandler(void* ptr, size_t size, size_t nmemb, void* data) {

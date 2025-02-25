@@ -7,10 +7,9 @@
 #include <locale.h>
 #include <string.h>
 
-#include <future>
+#include <format>
 #include <optional>
 #include <set>
-#include <sstream>
 #include <vector>
 
 #include "archive_io.hh"
@@ -75,19 +74,15 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
 
 std::string Pkgfile::FormatSearchResult(const std::string& repo,
                                         const Package& pkg) {
-  std::stringstream ss;
-
   if (options_.verbose) {
-    ss << repo << '/' << pkg.name << ' ' << pkg.version;
-    return ss.str();
+    return std::format("{}/{} {}", repo, pkg.name, pkg.version);
   }
 
   if (options_.quiet) {
     return std::string(pkg.name);
   }
 
-  ss << repo << '/' << pkg.name;
-  return ss.str();
+  return std::format("{}/{}", repo, pkg.name);
 }
 
 int Pkgfile::SearchMetafile(const std::string& repo,
@@ -128,13 +123,12 @@ int Pkgfile::ListMetafile(const std::string& repo,
 
     std::string out;
     if (options_.quiet) {
-      out.assign(line);
+      out = line;
     } else {
-      std::stringstream ss;
-      ss << repo << '/' << pkg.name;
-      out = ss.str();
+      out = std::format("{}/{}", repo, pkg.name);
     }
-    result->Add(out, options_.quiet ? std::string() : std::string(line));
+    result->Add(std::move(out),
+                options_.quiet ? std::string() : std::string(line));
   }
 
   // When we encounter a match with fixed string matching, we know we're done.
