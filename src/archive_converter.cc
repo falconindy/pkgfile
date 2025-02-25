@@ -39,7 +39,7 @@ std::unique_ptr<ArchiveConverter> ArchiveConverter::New(
 int ArchiveConverter::WriteCpioEntry(archive_entry* ae,
                                      const fs::path& entryname) {
   pkgfile::ArchiveReader reader(in_->read_archive());
-  std::string line;
+  std::string_view line;
 
   // discard the first line
   reader.GetLine(&line);

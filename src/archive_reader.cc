@@ -3,7 +3,7 @@
 namespace pkgfile {
 
 int ArchiveReader::Next(archive_entry** entry) {
-  line_.clear();
+  buffer_.clear();
   block_ = std::string_view();
 
   status_ = archive_read_next_header(archive_, entry);
@@ -32,40 +32,32 @@ int ArchiveReader::ConsumeBlock() {
   return status_;
 }
 
-int ArchiveReader::FillLine() {
-  const auto pos = block_.find('\n');
-
-  if (pos == block_.npos) {
-    // grab the entire block, and the caller will try again
-    line_.append(block_);
-    block_ = std::string_view();
-    return EAGAIN;
+int ArchiveReader::GetLine(std::string_view* line) {
+  // Take from the block if there's still newline-delimited bytes available.
+  if (auto pos = block_.find('\n'); pos != block_.npos) {
+    *line = {block_.data(), pos};
+    block_.remove_prefix(pos + 1);
+    return ARCHIVE_OK;
   }
 
-  line_.append(block_.substr(0, pos));
-  block_.remove_prefix(pos + 1);
-  return 0;
-}
+  // Otherwise, we need to take from the internal buffer, which also indicates
+  // that we should refill our block.
+  buffer_ = block_;
+  block_ = std::string_view();
 
-int ArchiveReader::GetLine(std::string* line) {
-  line->clear();
-
-  for (;;) {
-    int r;
-
-    r = ConsumeBlock();
-    if (r != ARCHIVE_OK) {
-      return r;
-    }
-
-    r = FillLine();
-    if (r == EAGAIN) {
-      continue;
-    }
-
-    *line = std::move(line_);
+  int r = ConsumeBlock();
+  if (r != ARCHIVE_OK) {
     return r;
   }
+
+  // We're guaranteed that buffer_ doesn't contain a new line, so grab the next
+  // data chunk up to a newline from the new block.
+  auto pos = block_.find('\n');
+  buffer_.append(block_.data(), pos);
+  block_.remove_prefix(pos + 1);
+
+  *line = buffer_;
+  return ARCHIVE_OK;
 }
 
 }  // namespace pkgfile

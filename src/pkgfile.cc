@@ -66,14 +66,14 @@ int Pkgfile::SearchMetafile(const std::string& repo,
                             const pkgfile::filter::Filter& filter,
                             const Package& pkg, pkgfile::Result* result,
                             pkgfile::ArchiveReader* reader) {
-  std::string line;
+  std::string_view line;
   while (reader->GetLine(&line) == ARCHIVE_OK) {
     if (!filter.Matches(line)) {
       continue;
     }
 
     result->Add(FormatSearchResult(repo, pkg),
-                options_.verbose ? line : std::string());
+                options_.verbose ? std::string(line) : std::string());
 
     if (!options_.verbose) {
       return 0;
@@ -92,7 +92,7 @@ int Pkgfile::ListMetafile(const std::string& repo,
   }
 
   const pkgfile::filter::Bin is_bin;
-  std::string line;
+  std::string_view line;
   while (reader->GetLine(&line) == ARCHIVE_OK) {
     if (options_.binaries && !is_bin.Matches(line)) {
       continue;
@@ -106,7 +106,7 @@ int Pkgfile::ListMetafile(const std::string& repo,
       ss << repo << '/' << pkg.name;
       out = ss.str();
     }
-    result->Add(out, options_.quiet ? std::string() : line);
+    result->Add(out, options_.quiet ? std::string() : std::string(line));
   }
 
   // When we encounter a match with fixed string matching, we know we're done.

@@ -2,6 +2,7 @@
 
 #include <archive.h>
 
+#include <queue>
 #include <string>
 #include <string_view>
 
@@ -17,17 +18,16 @@ class ArchiveReader {
 
   // Read the body of the archive entry line by line, returning ARCHIVE_OK on
   // success.
-  int GetLine(std::string* line);
+  int GetLine(std::string_view* line);
 
  private:
   int ConsumeBlock();
-  int FillLine();
 
   archive* archive_;
 
   long status_ = ARCHIVE_OK;
-  std::string line_;
   std::string_view block_;
+  std::string buffer_;
 };
 
 }  // namespace pkgfile
