@@ -43,6 +43,32 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
     default:
       break;
   }
+
+  if (const char* p = getenv("PATH"); p) {
+    std::string_view psv(p);
+
+    while (!psv.empty()) {
+      auto pos = psv.find(':');
+      if (pos == psv.npos) {
+        // then the remainder goes in the vector
+        bins_.emplace_back(psv);
+        break;
+      }
+
+      // Remove any trailing slashes from the PATH component and normalize it.
+      std::string_view component = {psv.data(), pos};
+      while (!component.empty() && component.ends_with('/')) {
+        component.remove_suffix(1);
+      }
+
+      if (!component.empty() && component.starts_with('/') &&
+          !component.starts_with("/home")) {
+        bins_.emplace_back(fs::weakly_canonical(component));
+      }
+
+      psv.remove_prefix(pos + 1);
+    }
+  }
 }
 
 std::string Pkgfile::FormatSearchResult(const std::string& repo,
@@ -91,7 +117,7 @@ int Pkgfile::ListMetafile(const std::string& repo,
     return 0;
   }
 
-  const pkgfile::filter::Bin is_bin;
+  const pkgfile::filter::Bin is_bin(bins_);
   std::string_view line;
   while (reader->GetLine(&line) == ARCHIVE_OK) {
     if (options_.binaries && !is_bin.Matches(line)) {
@@ -225,7 +251,6 @@ int Pkgfile::SearchAllRepos(const RepoMap& repos,
   return 0;
 }
 
-// static
 std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
     const Pkgfile::Options& options, const std::string& match) {
   std::unique_ptr<filter::Filter> filter;
@@ -264,8 +289,8 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
 
   if (options.mode == MODE_SEARCH) {
     if (options.binaries) {
-      filter = std::make_unique<filter::And>(std::make_unique<filter::Bin>(),
-                                             std::move(filter));
+      filter = std::make_unique<filter::And>(
+          std::make_unique<filter::Bin>(bins_), std::move(filter));
     }
 
     if (!options.directories) {
@@ -317,7 +342,7 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
 
   const std::string& input = args[0];
 
-  const auto filter = Pkgfile::BuildFilterFromOptions(options_, input);
+  const auto filter = BuildFilterFromOptions(options_, input);
   if (filter == nullptr) {
     return 1;
   }

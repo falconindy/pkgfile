@@ -15,7 +15,16 @@ bool Bin::Matches(std::string_view line) const {
     return false;
   }
 
-  return line.find("/bin/") != line.npos || line.find("/sbin/") != line.npos;
+  for (const auto& bin : bins_) {
+    // Binaries must start with a PATH component and must be in a subdir of the
+    // component.
+    if (line.size() > bin.size() && line.starts_with(bin) &&
+        line[bin.size()] == '/') {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 Glob::Glob(std::string glob_pattern, bool case_sensitive)

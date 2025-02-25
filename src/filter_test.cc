@@ -14,7 +14,12 @@ TEST(DirectoryFilterTest, MatchesDirectories) {
 }
 
 TEST(BinaryFilterTest, MatchesBinaries) {
-  pkgfile::filter::Bin filter;
+  std::vector<std::string> bins{
+      "/bin",     "/sbin",           "/usr/sbin",
+      "/usr/bin", "/some/other/bin", "/some/other/sbin",
+  };
+
+  pkgfile::filter::Bin filter(bins);
 
   EXPECT_TRUE(filter.Matches("/bin/foo"));
   EXPECT_TRUE(filter.Matches("/sbin/foo"));

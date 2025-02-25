@@ -83,6 +83,7 @@ class TestCase(unittest.TestCase):
         env = {
             'LC_TIME': 'C',
             'TZ': 'UTC',
+            'PATH': '/bin:/usr/bin',
         }
 
         cmdline = [

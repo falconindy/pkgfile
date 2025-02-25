@@ -69,7 +69,7 @@ class Pkgfile {
 
   static RepoMap DiscoverRepos(std::string_view cachedir, std::error_code& ec);
 
-  static std::unique_ptr<filter::Filter> BuildFilterFromOptions(
+  std::unique_ptr<filter::Filter> BuildFilterFromOptions(
       const Options& config, const std::string& match);
 
   static bool ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname);
@@ -91,6 +91,8 @@ class Pkgfile {
   Options options_;
   ArchiveEntryCallback entry_callback_;
   bool try_mmap_;
+
+  std::vector<std::string> bins_;
 };
 
 }  // namespace pkgfile
