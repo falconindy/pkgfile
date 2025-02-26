@@ -177,13 +177,15 @@ bool FilenameHasRepoSuffix(std::string_view path) {
     return false;
   }
 
+  int ndigits = 0;
   for (++pos; pos < path.size(); ++pos) {
     if (!isdigit(path[pos])) {
       return false;
     }
+    ++ndigits;
   }
 
-  return true;
+  return ndigits == 3;
 }
 
 // vim: set ts=2 sw=2 et:
