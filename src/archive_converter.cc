@@ -5,7 +5,6 @@
 
 #include <filesystem>
 #include <format>
-#include <iostream>
 
 namespace fs = std::filesystem;
 
@@ -72,13 +71,11 @@ int ArchiveConverter::WriteCpioEntry(archive_entry* ae,
   // discard the first line
   reader.GetLine(&line);
 
-  std::stringstream entry_data;
+  std::string entry;
   while (reader.GetLine(&line) == ARCHIVE_OK) {
     // do the copy, with a slash prepended
-    entry_data << '/' << line << '\n';
+    std::format_to(std::back_inserter(entry), "/{}\n", line);
   }
-
-  const std::string entry = entry_data.str();
 
   // adjust the entry size for removing the first line and adding slashes
   archive_entry_set_size(ae, entry.size());
