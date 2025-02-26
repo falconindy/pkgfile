@@ -258,6 +258,19 @@ bool Updater::RepackRepoData(const struct Repo* repo) {
 
 void Updater::TidyCacheDir(const std::set<std::string>& known_repos) {
   std::error_code ec;
+
+  // For a bit of paranoia, don't try to delete files when we're in a directory
+  // that has subdirectories. This should catch the most egregious of cases
+  // where someone tries to drop a cachedir in a place that it doesn't belong.
+  for (const auto& entry : fs::directory_iterator(cachedir_, ec)) {
+    if (entry.is_directory()) {
+      fprintf(stderr,
+              "warning: Directory found in pkgfile cachedir. Refusing to tidy "
+              "cachedir.\n");
+      return;
+    }
+  }
+
   for (const auto& entry : fs::directory_iterator(cachedir_, ec)) {
     const fs::path filename = entry.path().filename();
     const fs::path reponame = entry.path().stem().stem();

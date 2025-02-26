@@ -49,7 +49,8 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertMatchesGolden('testing')
 
         for repo in ('multilib', 'testing'):
-            original_repo = Path(self.alpmcachedir, 'x86_64', repo, f'{repo}.files')
+            original_repo = Path(self.alpmcachedir, 'x86_64', repo,
+                                 f'{repo}.files')
 
             for converted_repo in self.getRepoFiles(self.cachedir, repo):
                 # Only compare the integer portion of the mtime. we'll only ever
@@ -171,7 +172,30 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertEqual(r.returncode, 0)
 
         for p in expected_removed:
-            self.assertFalse(p.exists(), msg='{p} still exists, expected deleted')
+            self.assertFalse(p.exists(),
+                             msg='{p} still exists, expected deleted')
+
+    def testSkipsCachedirTidyingOnParanoia(self):
+        (self.cachedir / "somedir").mkdir()
+
+        non_repo_files = (
+            self.cachedir / "garbage.files",
+            self.cachedir / "deletemebro.files.000",
+        )
+
+        for p in non_repo_files:
+            p.touch()
+
+        r = self.Pkgfile(['-u'])
+        self.assertEqual(r.returncode, 0)
+
+        # files which should be removed are still present because we bailed on
+        # detecting a directory
+        for p in non_repo_files:
+            self.assertTrue(p.exists(),
+                            msg='{p} still exists, expected deleted')
+
+        self.assertIn("Directory found in pkgfile cachedir", r.stderr.decode())
 
 
 if __name__ == '__main__':
