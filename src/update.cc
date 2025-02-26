@@ -10,6 +10,7 @@
 #include <sys/utsname.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <format>
 
 #include "archive_converter.hh"
@@ -18,6 +19,7 @@
 #include "repo.hh"
 
 namespace chrono = std::chrono;
+namespace fs = std::filesystem;
 
 auto now = chrono::system_clock::now;
 
@@ -254,6 +256,24 @@ bool Updater::RepackRepoData(const struct Repo* repo) {
   return converter != nullptr && converter->RewriteArchive();
 }
 
+void Updater::TidyCacheDir(const std::set<std::string>& known_repos) {
+  std::error_code ec;
+  for (const auto& entry : fs::directory_iterator(cachedir_, ec)) {
+    const fs::path filename = entry.path().filename();
+    const fs::path reponame = entry.path().stem().stem();
+
+    if (!FilenameHasRepoSuffix(filename.c_str()) ||
+        !known_repos.contains(reponame)) {
+      std::error_code ec;
+      fs::remove(entry, ec);
+      if (ec.value() != 0) {
+        fprintf(stderr, "warning: failed to remove stale cache file: %s\n",
+                entry.path().c_str());
+      }
+    }
+  }
+}
+
 void Updater::DownloadWaitLoop(CURLM* multi) {
   int active_handles;
 
@@ -416,6 +436,13 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
   if (WaitForRepacking(&repos) != 0) {
     ret = 1;
   }
+
+  std::set<std::string> known_repos;
+  for (const auto& repo : alpm_config.repos) {
+    known_repos.insert(repo.name);
+  }
+
+  TidyCacheDir(known_repos);
 
   return ret;
 }

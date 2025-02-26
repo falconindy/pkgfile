@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from pathlib import Path
 
 
 def FindMesonBuildDir():
@@ -46,7 +47,7 @@ class TestCase(unittest.TestCase):
     def setUp(self):
         self.build_dir = FindMesonBuildDir()
         self._tempdir = tempfile.TemporaryDirectory()
-        self.tempdir = self._tempdir.name
+        self.tempdir = Path(self._tempdir.name)
         self.cachedir = os.path.join(
             os.path.dirname(os.path.realpath(__file__)), 'golden/pkgfile')
         self.alpmcachedir = os.path.join(

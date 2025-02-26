@@ -180,12 +180,13 @@ if gtest.found() and gmock.found()
     gtest_main = static_library('gtest_main', 'src/test/gtest_main.cc')
 
     test(
-        'filter_test',
+        'unit_tests',
         executable(
-            'filter_test',
+            'unit_tests',
             files(
                 '''
         src/filter_test.cc
+        src/repo_test.cc
       '''.split(),
             ),
             link_with: [libcommon, gtest_main],

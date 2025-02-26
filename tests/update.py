@@ -5,6 +5,7 @@ import hashlib
 import pkgfile_test
 import os
 from collections import defaultdict
+from pathlib import Path
 
 
 def _sha256(path):
@@ -23,12 +24,12 @@ class TestUpdate(pkgfile_test.TestCase):
 
         # relocate our cachedir to not overwrite the golden fileset
         self.goldendir = self.cachedir
-        self.cachedir = os.path.join(self.tempdir, 'cache')
-        os.mkdir(self.cachedir)
+        self.cachedir = Path(self.tempdir, 'cache')
+        self.cachedir.mkdir()
 
     @staticmethod
     def getRepoFiles(subdir, reponame):
-        return sorted(glob.glob('{}/{}.files.*'.format(subdir, reponame)))
+        return sorted(Path(subdir).glob(f'{reponame}.files.*'))
 
     def assertMatchesGolden(self, reponame):
         golden_files = self.getRepoFiles(self.goldendir, reponame)
@@ -48,15 +49,14 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertMatchesGolden('testing')
 
         for repo in ('multilib', 'testing'):
-            original_repo = '{}/x86_64/{repo}/{repo}.files'.format(
-                self.alpmcachedir, repo=repo)
+            original_repo = Path(self.alpmcachedir, 'x86_64', repo, f'{repo}.files')
 
             for converted_repo in self.getRepoFiles(self.cachedir, repo):
                 # Only compare the integer portion of the mtime. we'll only ever
                 # get back second precision from a remote server, so any fractional
                 # second that's present on our golden repo can be ignored.
-                self.assertEqual(int(os.stat(original_repo).st_mtime),
-                                 int(os.stat(converted_repo).st_mtime))
+                self.assertEqual(int(original_repo.stat().st_mtime),
+                                 int(converted_repo.stat().st_mtime))
 
     def testUpdateForcesUpdates(self):
         r = self.Pkgfile(['-u'])
@@ -65,8 +65,7 @@ class TestUpdate(pkgfile_test.TestCase):
         inodes_before = {}
         for r in ('multilib', 'testing'):
             for repofile in self.getRepoFiles(self.cachedir, r):
-                inodes_before[os.path.basename(repofile)] = os.stat(
-                    repofile).st_ino
+                inodes_before[repofile.name] = repofile.stat().st_ino
 
         r = self.Pkgfile(['-uu'])
         self.assertEqual(r.returncode, 0)
@@ -74,8 +73,7 @@ class TestUpdate(pkgfile_test.TestCase):
         inodes_after = {}
         for r in ('multilib', 'testing'):
             for repofile in self.getRepoFiles(self.cachedir, r):
-                inodes_after[os.path.basename(repofile)] = os.stat(
-                    repofile).st_ino
+                inodes_after[repofile.name] = repofile.stat().st_ino
 
         for r in ('multilib', 'testing'):
             self.assertNotEqual(
@@ -87,25 +85,25 @@ class TestUpdate(pkgfile_test.TestCase):
         r = self.Pkgfile(['-u'])
         self.assertEqual(r.returncode, 0)
 
-        # gather mtimes
+        # gather inodes before the update
         inodes_before = defaultdict(dict)
         for r in ('multilib', 'testing'):
             for repofile in self.getRepoFiles(self.cachedir, r):
-                inodes_before[r][repofile] = os.stat(repofile).st_ino
+                inodes_before[r][repofile] = repofile.stat().st_ino
 
         # set the mtime to the epoch, expect that it gets rewritten on next update
-        os.utime(os.path.join(self.cachedir, 'testing.files.000'), (0, 0))
+        os.utime(self.cachedir / 'testing.files.000', (0, 0))
 
         r = self.Pkgfile(['-u'])
         self.assertEqual(r.returncode, 0)
 
-        # re-gather mtimes after a soft update
+        # re-gather inodes after a soft update
         inodes_after = defaultdict(dict)
         for r in ('multilib', 'testing'):
             for repofile in self.getRepoFiles(self.cachedir, r):
-                inodes_after[r][repofile] = os.stat(repofile).st_ino
+                inodes_after[r][repofile] = repofile.stat().st_ino
 
-        # compare to mtimes after
+        # compare inodes
         self.assertEqual(
             inodes_before['multilib'],
             inodes_after['multilib'],
@@ -117,34 +115,32 @@ class TestUpdate(pkgfile_test.TestCase):
             msg='testing.files unexpectedly NOT rewritten by `pkgfile -u`')
 
     def testUpdateSkipsBadServer(self):
-        with open(os.path.join(self.tempdir, 'pacman.conf'), 'w') as f:
-            f.write('''
+        Path(self.tempdir / 'pacman.conf').write_text(f'''
             [options]
             Architecture = x86_64
 
             [testing]
-            Server = {fakehttp_server}/$arch/$repo/404
-            Server = {fakehttp_server}/$arch/$repo
+            Server = {self.baseurl}/$arch/$repo/404
+            Server = {self.baseurl}/$arch/$repo
 
             [multilib]
-            Server = {fakehttp_server}/$arch/$repo
-            '''.format(fakehttp_server=self.baseurl))
+            Server = {self.baseurl}/$arch/$repo
+            ''')
 
         r = self.Pkgfile(['-u'])
         self.assertEqual(r.returncode, 0)
 
     def testUpdateFailsWhenExhaustingServers(self):
-        with open(os.path.join(self.tempdir, 'pacman.conf'), 'w') as f:
-            f.write('''
+        Path(self.tempdir, 'pacman.conf').write_text(f'''
             [options]
             Architecture = x86_64
 
             [testing]
-            Server = {fakehttp_server}/$arch/$repo/404
+            Server = {self.baseurl}/$arch/$repo/404
 
             [multilib]
-            Server = {fakehttp_server}/$arch/$repo
-            '''.format(fakehttp_server=self.baseurl))
+            Server = {self.baseurl}/$arch/$repo
+            ''')
 
         r = self.Pkgfile(['-u'])
         self.assertNotEqual(r.returncode, 0)
@@ -152,17 +148,30 @@ class TestUpdate(pkgfile_test.TestCase):
     def testUpdateCleansUpOldRepoChunks(self):
         r = self.Pkgfile(['-uu', '--repochunkbytes=5000'])
         self.assertEqual(r.returncode, 0)
-        small_chunks = set(glob.glob('{}/testing.files*'.format(
-            self.cachedir)))
+        small_chunks = set(Path(self.cachedir).glob('testing.files*'))
 
         # update again, creating ~half as many repo files
         r = self.Pkgfile(['-uu', '--repochunkbytes=200000'])
         self.assertEqual(r.returncode, 0)
-        large_chunks = set(glob.glob('{}/testing.files*'.format(
-            self.cachedir)))
+        large_chunks = set(Path(self.cachedir).glob('testing.files*'))
 
         # the 100k chunked fileset is a strict subset of the original 5k chunked fileset.
         self.assertLess(large_chunks, small_chunks)
+
+    def testUpdateRemovesUnknownRepos(self):
+        expected_removed = (
+            self.cachedir / "garbage.files",
+            self.cachedir / "deletemebro.files.000",
+        )
+
+        for p in expected_removed:
+            p.touch()
+
+        r = self.Pkgfile(['-u'])
+        self.assertEqual(r.returncode, 0)
+
+        for p in expected_removed:
+            self.assertFalse(p.exists(), msg='{p} still exists, expected deleted')
 
 
 if __name__ == '__main__':

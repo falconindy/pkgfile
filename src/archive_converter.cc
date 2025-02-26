@@ -137,7 +137,8 @@ bool ArchiveConverter::Finalize() {
   for (int i = chunk_number_ + 1;; ++i) {
     std::string path = MakeArchiveChunkFilename(base_filename_out_, i, false);
 
-    if (unlink(path.c_str()) != 0) {
+    std::error_code ec;
+    if (!fs::remove(path, ec)) {
       break;
     }
   }

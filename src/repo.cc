@@ -166,4 +166,24 @@ Repo::~Repo() {
   }
 }
 
+bool FilenameHasRepoSuffix(std::string_view path) {
+  const auto ndots = std::count(path.begin(), path.end(), '.');
+  if (ndots != 2) {
+    return false;
+  }
+
+  auto pos = path.rfind('.');
+  if (!path.substr(0, pos).ends_with(".files")) {
+    return false;
+  }
+
+  for (++pos; pos < path.size(); ++pos) {
+    if (!isdigit(path[pos])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // vim: set ts=2 sw=2 et:

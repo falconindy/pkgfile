@@ -16,6 +16,7 @@
 #include "compress.hh"
 #include "filter.hh"
 #include "queue.hh"
+#include "repo.hh"
 #include "result.hh"
 #include "update.hh"
 
@@ -323,28 +324,6 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
   return filter;
 }
 
-// Repo files should always be of the form ${reponame}.files.nnn where 'n' is an
-// 0-indexed, zero-padded, increasing integer
-bool HasRepoSuffix(std::string_view path) {
-  const auto ndots = std::count(path.begin(), path.end(), '.');
-  if (ndots != 2) {
-    return false;
-  }
-
-  auto pos = path.rfind('.');
-  if (!path.substr(0, pos).ends_with(".files")) {
-    return false;
-  }
-
-  for (++pos; pos < path.size(); ++pos) {
-    if (!isdigit(path[pos])) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 // static
 Pkgfile::RepoMap Pkgfile::DiscoverRepos(std::string_view cachedir,
                                         std::error_code& ec) {
@@ -355,7 +334,7 @@ Pkgfile::RepoMap Pkgfile::DiscoverRepos(std::string_view cachedir,
   // they're lexicographically ordered.
   for (const auto& entry : fs::directory_iterator(cachedir, ec)) {
     const std::string pathname = entry.path();
-    if (!entry.is_regular_file() || !HasRepoSuffix(pathname)) {
+    if (!entry.is_regular_file() || !FilenameHasRepoSuffix(pathname)) {
       continue;
     }
 

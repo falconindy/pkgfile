@@ -61,4 +61,8 @@ struct AlpmConfig {
   std::string architecture;
 };
 
+// Verifies that the given file path has a format of "${reponame}.files.nnn"
+// where 'n' is an 0-indexed, zero-padded, increasing integer.
+bool FilenameHasRepoSuffix(std::string_view path);
+
 // vim: set ts=2 sw=2 et:

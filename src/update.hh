@@ -2,6 +2,8 @@
 
 #include <curl/curl.h>
 
+#include <set>
+
 #include "pkgfile.hh"
 #include "repo.hh"
 
@@ -19,6 +21,7 @@ class Updater {
   void DownloadWaitLoop(CURLM* multi);
   int DownloadCheckComplete(CURLM* multi, int remaining);
   bool RepackRepoData(const struct Repo* repo);
+  void TidyCacheDir(const std::set<std::string>& known_repos);
 
   std::string cachedir_;
   int compress_;
