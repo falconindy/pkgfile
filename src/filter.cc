@@ -3,6 +3,9 @@
 #include <fnmatch.h>
 #include <string.h>
 
+#include <format>
+#include <iostream>
+
 namespace pkgfile {
 namespace filter {
 
@@ -52,14 +55,14 @@ std::unique_ptr<Regex> Regex::Compile(const std::string& pattern,
 
   pcre* re = pcre_compile(pattern.c_str(), options, &err, &offset, nullptr);
   if (re == nullptr) {
-    fprintf(stderr, "error: failed to compile regex at char %d: %s\n", offset,
-            err);
+    std::cerr << std::format("error: failed to compile regex at char {}: {}\n",
+                             offset, err);
     return nullptr;
   }
 
   pcre_extra* re_extra = pcre_study(re, PCRE_STUDY_JIT_COMPILE, &err);
   if (err) {
-    fprintf(stderr, "error: failed to study regex: %s\n", err);
+    std::cerr << std::format("error: failed to study regex: {}\n", err);
     pcre_free(re);
     return nullptr;
   }

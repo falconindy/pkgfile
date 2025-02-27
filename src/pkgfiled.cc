@@ -3,7 +3,9 @@
 #include <utime.h>
 
 #include <chrono>
+#include <format>
 #include <future>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -128,7 +130,8 @@ class Pkgfiled {
     auto repack = [&] {
       const std::string input_repo = watch_path_ / changed_path;
 
-      fprintf(stderr, "processing new files DB: %s\n", input_repo.c_str());
+      std::cerr << std::format("processing new files DB: {}\n",
+                               input_repo.c_str());
 
       const auto input_file = ReadOnlyFile::Open(input_repo, /*try_mmap=*/true);
       if (input_file == nullptr) {
@@ -149,8 +152,8 @@ class Pkgfiled {
       std::chrono::duration<double> dur =
           std::chrono::system_clock::now() - start_time;
 
-      fprintf(stderr, "finished repacking %s (%.3fs)\n",
-              changed_path.filename().c_str(), dur.count());
+      std::cerr << std::format("finished repacking {} ({:.3f})\n",
+                               changed_path.filename().string(), dur.count());
     }
 
     return ok;
@@ -176,15 +179,16 @@ class Pkgfiled {
     switch (si->ssi_signo) {
       case SIGTERM:
       case SIGINT:
-        fprintf(stderr, "%s received, shutting down\n",
-                strsignal(si->ssi_signo));
+        std::cerr << std::format("{} received, shutting down\n",
+                                 strsignal(si->ssi_signo));
         sd_event_exit(sd_event_, 0);
         break;
       case SIGUSR1:
       case SIGUSR2:
         bool force = si->ssi_signo == SIGUSR2;
-        fprintf(stderr, "%s received, repacking repos (force=%s)\n",
-                strsignal(si->ssi_signo), force ? "true" : "false");
+        std::cerr << std::format("{} received, repacking repos (force={})\n",
+                                 strsignal(si->ssi_signo),
+                                 force ? "true" : "false");
         Sync(force);
         break;
     }
@@ -214,19 +218,16 @@ class Pkgfiled {
 namespace {
 
 void Usage() {
-  fputs("pkgfiled " PACKAGE_VERSION
-        "\nUsage: pkgfiled [options] pacman_source pkgfile_dest\n\n",
-        stdout);
-  fputs(
-      "  -f, --force             repack all repos on initial sync\n"
-      "  -o, --oneshot           exit after initial sync \n"
-      "  -z, --compress[=type]   compress downloaded repos\n\n"
-      "  -h, --help              display this help and exit\n"
-      "  -V, --version           display the version and exit\n\n",
-      stdout);
+  std::cout << "pkgfiled " PACKAGE_VERSION
+               "\nUsage: pkgfiled [options] pacman_source pkgfile_dest\n\n";
+  std::cout << "  -f, --force             repack all repos on initial sync\n"
+               "  -o, --oneshot           exit after initial sync \n"
+               "  -z, --compress[=type]   compress downloaded repos\n\n"
+               "  -h, --help              display this help and exit\n"
+               "  -V, --version           display the version and exit\n\n";
 }
 
-void Version(void) { fputs("pkgfiled v" PACKAGE_VERSION "\n", stdout); }
+void Version(void) { std::cout << "pkgfiled v" PACKAGE_VERSION "\n"; }
 
 std::optional<pkgfile::Pkgfiled::Options> ParseOpts(int* argc, char*** argv) {
   static constexpr char kShortOpts[] = "hofVz:";
@@ -265,7 +266,8 @@ std::optional<pkgfile::Pkgfiled::Options> ParseOpts(int* argc, char*** argv) {
         if (optarg != nullptr) {
           opts.compress = pkgfile::ValidateCompression(optarg).value_or(-1);
           if (opts.compress < 0) {
-            fprintf(stderr, "error: invalid compression option %s\n", optarg);
+            std::cerr << std::format("error: invalid compression option {}\n",
+                                     optarg);
             return std::nullopt;
           }
         } else {
@@ -292,7 +294,7 @@ int main(int argc, char** argv) {
   }
 
   if (argc < 3) {
-    fprintf(stderr, "error: not enough arguments (use -h for help)\n");
+    std::cerr << std::format("error: not enough arguments (use -h for help)\n");
     return 1;
   }
 

@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include <format>
+#include <iostream>
 #include <optional>
 #include <set>
 #include <vector>
@@ -161,8 +162,8 @@ void Pkgfile::ProcessRepo(const std::string& reponame, const fs::path repopath,
   auto fd = ReadOnlyFile::Open(repopath, try_mmap_);
   if (fd == nullptr) {
     if (errno != ENOENT) {
-      fprintf(stderr, "failed to open %s for reading: %s\n", repopath.c_str(),
-              strerror(errno));
+      std::cerr << std::format("failed to open {} for reading: {}\n",
+                               repopath.string(), strerror(errno));
     }
     return;
   }
@@ -170,8 +171,9 @@ void Pkgfile::ProcessRepo(const std::string& reponame, const fs::path repopath,
   const char* err;
   const auto read_archive = ReadArchive::New(*fd, &err);
   if (read_archive == nullptr) {
-    fprintf(stderr, "failed to create new archive for reading: %s: %s\n",
-            repopath.c_str(), err);
+    std::cerr << std::format(
+        "failed to create new archive for reading: {}: {}\n", repopath.string(),
+        err);
     return;
   }
 
@@ -183,7 +185,7 @@ void Pkgfile::ProcessRepo(const std::string& reponame, const fs::path repopath,
 
     Package pkg;
     if (!ParsePkgname(&pkg, entryname)) {
-      fprintf(stderr, "error parsing pkgname from: %s\n", entryname);
+      std::cerr << std::format("error parsing pkgname from: {}\n", entryname);
       continue;
     }
 
@@ -362,18 +364,19 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
   }
 
   if (args.empty()) {
-    fputs("error: no target specified (use -h for help)\n", stderr);
+    std::cerr << "error: no target specified (use -h for help)\n";
     return 1;
   }
 
   std::error_code ec;
   const auto repos = DiscoverRepos(options_.cachedir, ec);
   if (ec.value() != 0) {
-    fprintf(stderr, "error: Failed to open cache directory %s: %s\n",
-            options_.cachedir.c_str(), ec.message().c_str());
+    std::cerr << std::format("error: Failed to open cache directory {}: {}\n",
+                             options_.cachedir, ec.message());
+    return 1;
   } else if (repos.empty()) {
-    fputs("error: No repo files found. Please run `pkgfile --update.\n",
-          stderr);
+    std::cerr << "error: No repo files found. Please run `pkgfile --update.\n";
+    return 1;
   }
 
   const std::string& input = args[0];
@@ -404,48 +407,43 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
 namespace {
 
 void Usage(void) {
-  fputs("pkgfile " PACKAGE_VERSION "\nUsage: pkgfile [options] target\n\n",
-        stdout);
-  fputs(
+  std::cout << "pkgfile " PACKAGE_VERSION
+               "\nUsage: pkgfile [options] target\n\n";
+  std::cout <<  //
       " Operations:\n"
       "  -l, --list              list contents of a package\n"
       "  -s, --search            search for packages containing the target "
       "(default)\n"
-      "  -u, --update            update repo files lists\n\n",
-      stdout);
-  fputs(
+      "  -u, --update            update repo files lists\n\n";
+  std::cout <<  //
       " Matching:\n"
       "  -b, --binaries          return only files contained in a bin dir\n"
       "  -d, --directories       match directories in searches\n"
       "  -g, --glob              enable matching with glob characters\n"
       "  -i, --ignorecase        use case insensitive matching\n"
       "  -R, --repo <repo>       search a singular repo\n"
-      "  -r, --regex             enable matching with regular expressions\n\n",
-      stdout);
-  fputs(
+      "  -r, --regex             enable matching with regular "
+      "expressions\n\n";
+  std::cout <<  //
       " Output:\n"
       "  -q, --quiet             output less when listing\n"
       "  -v, --verbose           output more\n"
       "  -w, --raw               disable output justification\n"
-      "  -0, --null              null terminate output\n\n",
-      stdout);
-  fputs(
+      "  -0, --null              null terminate output\n\n";
+  std::cout <<  //
       " Downloading:\n"
-      "  -z, --compress[=type]   compress downloaded repos\n\n",
-      stdout);
-  fputs(
-      " General:\n"
-      "  -C, --config <file>     use an alternate config (default: "
+      "  -z, --compress[=type]   compress downloaded repos\n\n";
+  std::cout <<  //
+      " General:\n  -C, --config <file>     use an alternate config (default: "
       "/etc/pacman.conf)\n"
       "  -D, --cachedir <dir>    use an alternate cachedir "
       "(default: " DEFAULT_CACHEPATH
       ")\n"
       "  -h, --help              display this help and exit\n"
-      "  -V, --version           display the version and exit\n\n",
-      stdout);
+      "  -V, --version           display the version and exit\n\n";
 }
 
-void Version(void) { fputs(PACKAGE_NAME " v" PACKAGE_VERSION "\n", stdout); }
+void Version(void) { std::cout << PACKAGE_NAME " v" PACKAGE_VERSION "\n"; }
 
 std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
   static constexpr char kShortOpts[] = "0bC:D:dghilqR:rsuVvwz::";
@@ -541,7 +539,7 @@ std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
         if (optarg != nullptr) {
           auto compress = pkgfile::ValidateCompression(optarg);
           if (compress == std::nullopt) {
-            fprintf(stderr, "error: invalid compression option %s\n", optarg);
+            std::cerr << std::format("error: invalid compression option {}\n", optarg);
             return std::nullopt;
           }
           options.compress = compress.value();

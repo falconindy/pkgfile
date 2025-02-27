@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <format>
+#include <iostream>
 
 namespace fs = std::filesystem;
 
@@ -18,16 +19,16 @@ std::unique_ptr<ArchiveConverter> ArchiveConverter::New(
 
   auto reader = ReadArchive::New(fd_in, &error);
   if (reader == nullptr) {
-    fprintf(stderr, "error: failed to create archive reader for %s: %s\n",
-            reponame.c_str(), error);
+    std::cerr << std::format(
+        "error: failed to create archive reader for {}: {}\n", reponame, error);
     return nullptr;
   }
 
   auto writer = WriteArchive::New(
       MakeArchiveChunkFilename(base_filename_out, 0, true), compress, &error);
   if (writer == nullptr) {
-    fprintf(stderr, "error: failed to open file for writing: %s: %s\n",
-            base_filename_out.c_str(), error);
+    std::cerr << std::format("error: failed to open file for writing: {}: {}\n",
+                             base_filename_out, error);
     return nullptr;
   }
 
@@ -53,8 +54,8 @@ bool ArchiveConverter::NextArchiveChunk() {
       MakeArchiveChunkFilename(base_filename_out_, ++chunk_number_, true),
       compress_, &error);
   if (writer == nullptr) {
-    fprintf(stderr, "error: failed to open file for writing: %s: %s\n",
-            base_filename_out_.c_str(), error);
+    std::cerr << std::format("error: failed to open file for writing: {}: {}\n",
+                             base_filename_out_, error);
     return false;
   }
 
@@ -87,15 +88,17 @@ int ArchiveConverter::WriteCpioEntry(archive_entry* ae,
   archive_entry_update_pathname_utf8(ae, entryname.parent_path().c_str());
 
   if (archive_write_header(out_->write_archive(), ae) != ARCHIVE_OK) {
-    fprintf(stderr, "error: failed to write entry header: %s/%s: %s\n",
-            reponame_.c_str(), archive_entry_pathname(ae), strerror(errno));
+    std::cerr << std::format("error: failed to write entry header: {}/{}: {}\n",
+                             reponame_, archive_entry_pathname(ae),
+                             strerror(errno));
     return -errno;
   }
 
   if (archive_write_data(out_->write_archive(), entry.c_str(), entry.size()) !=
       static_cast<ssize_t>(entry.size())) {
-    fprintf(stderr, "error: failed to write entry: %s/%s: %s\n",
-            reponame_.c_str(), archive_entry_pathname(ae), strerror(errno));
+    std::cerr << std::format("error: failed to write entry: {}/{}: {}\n",
+                             reponame_, archive_entry_pathname(ae),
+                             strerror(errno));
     return -errno;
   }
 
@@ -121,16 +124,16 @@ bool ArchiveConverter::Finalize() {
     std::string path = MakeArchiveChunkFilename(base_filename_out_, i, true);
 
     if (utimes(path.c_str(), times) < 0) {
-      fprintf(stderr, "warning: failed to set filetimes on %s: %s\n",
-              out_->path().c_str(), strerror(errno));
+      std::cerr << std::format("warning: failed to set filetimes on {}: {}\n",
+                               out_->path(), strerror(errno));
     }
 
     const fs::path dest = path.substr(0, path.size() - 1);
 
     std::error_code ec;
     if (fs::rename(path, dest, ec); ec.value() != 0) {
-      fprintf(stderr, "error: renaming tmpfile to %s failed: %s\n",
-              dest.c_str(), ec.message().c_str());
+      std::cerr << std::format("error: renaming tmpfile to {} failed: {}\n",
+                               dest.string(), ec.message());
     }
   }
 

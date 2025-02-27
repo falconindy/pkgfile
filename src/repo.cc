@@ -3,10 +3,12 @@
 #include <ctype.h>
 #include <errno.h>
 #include <glob.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <format>
+#include <iostream>
 
 namespace {
 
@@ -27,8 +29,8 @@ int parse_include(std::string_view include, std::string* section,
 
   const std::string include_str(include);
   if (glob(include_str.c_str(), GLOB_NOCHECK, nullptr, &globbuf) != 0) {
-    fprintf(stderr, "warning: globbing failed on '%s': out of memory\n",
-            include_str.c_str());
+    std::cerr << std::format(
+        "warning: globbing failed on '{}': out of memory\n", include_str);
     return -ENOMEM;
   }
 
@@ -71,8 +73,8 @@ int parse_one_file(const char* filename, std::string* section,
 
   fp = fopen(filename, "r");
   if (!fp) {
-    fprintf(stderr, "error: failed to open '%s': %s\n", filename,
-            strerror(errno));
+    std::cerr << std::format("error: failed to open '{}': {}\n", filename,
+                             strerror(errno));
     return -errno;
   }
 
@@ -109,17 +111,15 @@ int parse_one_file(const char* filename, std::string* section,
 
       if (key == kServer) {
         if (section->empty()) {
-          fprintf(
-              stderr,
-              "error: failed to parse %s on line %d: found 'Server' directive "
+          std::cerr << std::format(
+              "error: failed to parse {} on line {}: found 'Server' directive "
               "outside of a section\n",
               filename, lineno);
           continue;
         }
         if (in_options) {
-          fprintf(
-              stderr,
-              "error: failed to parse %s on line %d: found 'Server' directive "
+          std::cerr << std::format(
+              "error: failed to parse {} on line {}: found 'Server' directive "
               "in options section\n",
               filename, lineno);
           continue;

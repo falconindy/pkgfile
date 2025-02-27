@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <format>
+#include <iostream>
 
 #include "archive_converter.hh"
 #include "archive_reader.hh"
@@ -26,8 +27,8 @@ auto now = chrono::system_clock::now;
 namespace {
 
 std::pair<double, const char*> Humanize(off_t bytes) {
-  static constexpr std::array<const char*, 9> labels{
-      "B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"};
+  static constexpr std::array labels{"B",   "KiB", "MiB", "GiB", "TiB",
+                                     "PiB", "EiB", "ZiB", "YiB"};
 
   double val = static_cast<double>(bytes);
 
@@ -177,8 +178,9 @@ int WaitForRepacking(std::vector<Repo>* repos) {
       });
 
   if (running > 0) {
-    printf(":: waiting for %d repo%s to finish repacking...\n", running,
-           running == 1 ? "" : "s");
+    std::cout << std::format(
+        ":: waiting for {} repo{} to finish repacking...\n", running,
+        running == 1 ? "" : "s");
   }
 
   return std::count_if(repos->begin(), repos->end(), [](Repo& repo) {
@@ -195,8 +197,8 @@ int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
 
   if (repo->curl == nullptr) {
     if (repo->servers.empty()) {
-      fprintf(stderr, "error: no servers configured for repo %s\n",
-              repo->name.c_str());
+      std::cerr << std::format("error: no servers configured for repo {}\n",
+                               repo->name);
       return -1;
     }
     repo->curl = curl_easy_init();
@@ -215,9 +217,9 @@ int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
     curl_easy_setopt(repo->curl, CURLOPT_NETRC, CURL_NETRC_OPTIONAL);
     repo->tmpfile.fd = OpenTmpfile(O_RDWR | O_NONBLOCK);
     if (repo->tmpfile.fd < 0) {
-      fprintf(stderr,
-              "error: failed to create temporary file for download: %s\n",
-              strerror(-repo->tmpfile.fd));
+      std::cerr << std::format(
+          "error: failed to create temporary file for download: {}\n",
+          strerror(-repo->tmpfile.fd));
       return -1;
     }
   } else {
@@ -227,7 +229,7 @@ int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
   }
 
   if (repo->server_iter == repo->servers.end()) {
-    fprintf(stderr, "error: failed to update repo: %s\n", repo->name.c_str());
+    std::cerr << std::format("error: failed to update repo: %s\n", repo->name);
     return -1;
   }
 
@@ -264,9 +266,8 @@ void Updater::TidyCacheDir(const std::set<std::string>& known_repos) {
   // where someone tries to drop a cachedir in a place that it doesn't belong.
   for (const auto& entry : fs::directory_iterator(cachedir_, ec)) {
     if (entry.is_directory()) {
-      fprintf(stderr,
-              "warning: Directory found in pkgfile cachedir. Refusing to tidy "
-              "cachedir.\n");
+      std::cerr << "warning: Directory found in pkgfile cachedir. Refusing to "
+                   "tidy cachedir.\n";
       return;
     }
   }
@@ -280,8 +281,9 @@ void Updater::TidyCacheDir(const std::set<std::string>& known_repos) {
       std::error_code ec;
       fs::remove(entry, ec);
       if (ec.value() != 0) {
-        fprintf(stderr, "warning: failed to remove stale cache file: %s\n",
-                entry.path().c_str());
+        std::cerr << std::format(
+            "warning: failed to remove stale cache file: {}\n",
+            entry.path().string());
       }
     }
   }
@@ -293,18 +295,18 @@ void Updater::DownloadWaitLoop(CURLM* multi) {
   do {
     int nfd, rc = curl_multi_wait(multi, nullptr, 0, 1000, &nfd);
     if (rc != CURLM_OK) {
-      fprintf(stderr, "error: curl_multi_wait failed (%d)\n", rc);
+      std::cerr << std::format("error: curl_multi_wait failed ({})\n", rc);
       break;
     }
 
     if (nfd < 0) {
-      fprintf(stderr, "error: poll error, possible network problem\n");
+      std::cerr << "error: poll error, possible network problem\n";
       break;
     }
 
     rc = curl_multi_perform(multi, &active_handles);
     if (rc != CURLM_OK) {
-      fprintf(stderr, "error: curl_multi_perform failed (%d)\n", rc);
+      std::cerr << std::format("error: curl_multi_perform failed ({})\n", rc);
       break;
     }
 
@@ -333,7 +335,7 @@ int Updater::DownloadCheckComplete(CURLM* multi, int remaining) {
     curl_easy_getinfo(msg->easy_handle, CURLINFO_FILETIME_T, &remote_mtime);
 
     if (uptodate) {
-      printf("  %s is up to date\n", repo->name.c_str());
+      std::cout << std::format("  {} is up to date\n", repo->name);
       repo->dl_result = DownloadResult::UPTODATE;
       return 0;
     }
@@ -342,11 +344,11 @@ int Updater::DownloadCheckComplete(CURLM* multi, int remaining) {
     if (msg->data.result != CURLE_OK || resp >= 400) {
       repo->dl_result = DownloadResult::ERROR;
       if (*repo->errmsg) {
-        fprintf(stderr, "warning: download failed: %s: %s\n", effective_url,
-                repo->errmsg);
+        std::cerr << std::format("warning: download failed: {}: {}\n",
+                                 effective_url, repo->errmsg);
       } else {
-        fprintf(stderr, "warning: download failed: %s [error %ld]\n",
-                effective_url, resp);
+        std::cerr << std::format("warning: download failed: {} [error {}]\n",
+                                 effective_url, resp);
       }
 
       return DownloadQueueRequest(multi, repo);
@@ -381,17 +383,17 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
   }
 
   if (alpm_config.repos.empty()) {
-    fprintf(stderr, "error: no repos found in %s\n", alpm_config_file.c_str());
+    std::cerr << std::format("error: no repos found in {}\n", alpm_config_file);
     return 1;
   }
 
   if (access(cachedir_.c_str(), W_OK)) {
-    fprintf(stderr, "error: unable to write to %s: %s\n", cachedir_.c_str(),
-            strerror(errno));
+    std::cerr << std::format("error: unable to write to {}: {}\n", cachedir_,
+                             strerror(errno));
     return 1;
   }
 
-  printf(":: Updating %zd repos...\n", alpm_config.repos.size());
+  std::cout << std::format(":: Updating {} repos...\n", alpm_config.repos.size());
 
   if (alpm_config.architecture.empty()) {
     struct utsname un;
