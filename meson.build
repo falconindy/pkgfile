@@ -21,12 +21,7 @@ endif
 
 configure_file(output: 'config.hh', configuration: conf)
 
-add_project_arguments(
-    '-include',
-    'config.hh',
-    '-fno-exceptions',
-    language: 'cpp',
-)
+add_project_arguments('-include', 'config.hh', language: 'cpp')
 
 libpcre = dependency('libpcre', version: '>= 8.30')
 libarchive = dependency('libarchive', version: '>= 3.2.0')
@@ -36,6 +31,7 @@ pthreads = dependency('threads')
 stdcppfs = cpp.find_library('stdc++fs')
 gtest = dependency('gtest', required: false)
 gmock = dependency('gmock', required: false)
+cista = declare_dependency(include_directories: 'third_party/cista')
 
 pod2man = find_program('pod2man')
 pkgconfig = find_program('pkg-config')
@@ -48,7 +44,6 @@ libcommon = static_library(
     src/archive_converter.cc src/archive_converter.hh
     src/archive_io.cc src/archive_io.hh
     src/archive_reader.cc src/archive_reader.hh
-    src/compress.cc src/compress.hh
     src/db.cc src/db.hh
     src/filter.cc src/filter.hh
     src/repo.cc src/repo.hh
@@ -57,7 +52,7 @@ libcommon = static_library(
     src/queue.hh
   '''.split(),
     ),
-    dependencies: [libpcre, libarchive, libcurl, pthreads, stdcppfs],
+    dependencies: [cista, libpcre, libarchive, libcurl, pthreads, stdcppfs],
     install: false,
 )
 
@@ -76,6 +71,7 @@ executable(
   '''.split(),
     ),
     link_with: [libcommon],
+    dependencies: [cista],
     install: true,
 )
 
@@ -83,7 +79,7 @@ executable(
     'pkgfiled',
     'src/pkgfiled.cc',
     link_with: [libcommon],
-    dependencies: [libsystemd, stdcppfs],
+    dependencies: [cista, libsystemd, stdcppfs],
     install: true,
 )
 
@@ -191,7 +187,7 @@ if gtest.found() and gmock.found()
       '''.split(),
             ),
             link_with: [libcommon, gtest_main],
-            dependencies: [gmock, gtest, libpcre],
+            dependencies: [cista, gmock, gtest, libpcre],
         ),
         protocol: 'gtest',
     )
@@ -210,6 +206,7 @@ if py3.found() and py3.language_version().version_compare(python_requirement)
       'tests/search.py',
       'tests/update.py'
     ]
+
     foreach input : integration_tests
         basename = input.split('/')[-1].split('.')[0]
 
@@ -218,7 +215,7 @@ if py3.found() and py3.language_version().version_compare(python_requirement)
             py3,
             args: [join_paths(meson.project_source_root(), input)],
             env: ['PYTHONDONTWRITEBYTECODE=1'],
-            suite: 'integration'
+            suite: 'integration',
         )
     endforeach
 else

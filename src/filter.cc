@@ -74,7 +74,7 @@ bool Regex::Matches(std::string_view line) const {
                    PCRE_NO_UTF16_CHECK, nullptr, 0) >= 0;
 }
 
-Exact::Exact(std::string match, bool case_sensitive) {
+Exact::Exact(std::string match, bool case_sensitive) : match_(match) {
   if (case_sensitive) {
     predicate_ = [m = std::move(match)](std::string_view line) {
       return m == line;

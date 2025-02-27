@@ -4,9 +4,11 @@
 #include <map>
 #include <optional>
 
+#include "archive_io.hh"
 #include "archive_reader.hh"
 #include "db.hh"
 #include "filter.hh"
+#include "repo.hh"
 #include "result.hh"
 
 namespace pkgfile {
@@ -48,7 +50,6 @@ class Pkgfile {
     bool verbose = false;
     bool raw = false;
     char eol = '\n';
-    int compress = ARCHIVE_FILTER_NONE;
     int repo_chunk_bytes = -1;  // <=0 implies default chunk size
   };
 
@@ -63,11 +64,9 @@ class Pkgfile {
     std::string_view version;
   };
 
-  using RepoMap = std::multimap<std::string, std::filesystem::path>;
-
   using ArchiveEntryCallback = std::function<int(
       const std::string& repo, const filter::Filter& filter, const Package& pkg,
-      Result* result, ArchiveReader* reader)>;
+      Result* result, const PackageMeta::FileList& files)>;
 
   std::unique_ptr<filter::Filter> BuildFilterFromOptions(
       const Options& config, const std::string& match);
@@ -85,9 +84,11 @@ class Pkgfile {
                        std::string_view searchstring);
 
   int SearchMetafile(const std::string& repo, const filter::Filter& filter,
-                     const Package& pkg, Result* result, ArchiveReader* reader);
+                     const Package& pkg, Result* result,
+                     const PackageMeta::FileList& files);
   int ListMetafile(const std::string& repo, const filter::Filter& filter,
-                   const Package& pkg, Result* result, ArchiveReader* reader);
+                   const Package& pkg, Result* result,
+                   const PackageMeta::FileList& files);
 
   Options options_;
   ArchiveEntryCallback entry_callback_;

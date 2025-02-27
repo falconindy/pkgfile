@@ -54,6 +54,7 @@ class TestCase(unittest.TestCase):
             os.path.dirname(os.path.realpath(__file__)), 'golden/alpm')
 
         q = multiprocessing.Queue()
+
         self.server = multiprocessing.Process(target=fakehttp.server.Serve,
                                               args=(q, ))
         self.server.start()

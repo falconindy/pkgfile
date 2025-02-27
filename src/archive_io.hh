@@ -8,47 +8,39 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
+
+#include "cista.h"
+#include "repo.hh"
 
 namespace pkgfile {
 
-class ReadOnlyFile {
+struct PackageMeta {
+  using FileList = cista::offset::vector<cista::offset::string>;
+
+  cista::offset::string version;
+  FileList files;
+};
+
+using RepoMeta = cista::offset::hash_map<cista::offset::string, PackageMeta>;
+
+class SerializedFile {
  public:
-  ~ReadOnlyFile();
+  static const SerializedFile Open(const std::string& path) {
+    return SerializedFile(
+        cista::mmap{path.c_str(), cista::mmap::protection::READ});
+  }
 
-  struct MMappedRegion {
-    MMappedRegion(void* ptr, off_t size) : ptr(ptr), size(size) {}
-    ~MMappedRegion();
-
-    // Moveable, but not copyable.
-    MMappedRegion(const MMappedRegion&) = delete;
-    MMappedRegion& operator=(const MMappedRegion&) = delete;
-
-    MMappedRegion& operator=(MMappedRegion&& other) {
-      ptr = std::exchange(other.ptr, MAP_FAILED);
-      size = std::exchange(other.size, -1);
-      return *this;
-    }
-    MMappedRegion(MMappedRegion&& other) : ptr(other.ptr), size(other.size) {
-      *this = std::move(other);
-    }
-
-    void* ptr;
-    off_t size;
-  };
-
-  int fd() const { return fd_; }
-
-  const std::optional<MMappedRegion>& mmapped() const { return mapped_; }
-
-  static std::unique_ptr<ReadOnlyFile> Open(const std::string& path,
-                                            bool try_mmap);
+  const RepoMeta& repo_meta() const { return *serialized_; }
 
  private:
-  ReadOnlyFile(int fd, std::optional<MMappedRegion> mapped)
-      : fd_(fd), mapped_(std::move(mapped)) {}
+  SerializedFile(cista::mmap mapped)
+      : storage_(std::move(mapped)),
+        serialized_(cista::deserialize<RepoMeta, cista::mode::CAST>(storage_)) {
+  }
 
-  int fd_;
-  std::optional<MMappedRegion> mapped_;
+  cista::mmap storage_;
+  const RepoMeta* serialized_;
 };
 
 class ReadArchive {
@@ -61,56 +53,31 @@ class ReadArchive {
   ReadArchive(ReadArchive&&) = default;
   ReadArchive& operator=(ReadArchive&&) = default;
 
-  static std::unique_ptr<ReadArchive> New(int fd, const char** error);
-
-  static std::unique_ptr<ReadArchive> New(const ReadOnlyFile& file,
+  static std::unique_ptr<ReadArchive> New(const std::string& filename,
                                           const char** error);
 
-  int fd() const { return fd_; }
+  static std::unique_ptr<ReadArchive> New(int fd, const char** error);
+
+  int Stat(struct stat* st) const;
+
   archive* read_archive() { return a_; }
 
   void Close();
 
  private:
-  ReadArchive(int fd) : fd_(fd) {
+  ReadArchive(const std::string& filename) : filename_(filename) { Init(); }
+
+  ReadArchive(int fd) : fd_(fd) { Init(); }
+
+  void Init() {
     archive_read_support_format_tar(a_);
-    archive_read_support_format_cpio(a_);
     archive_read_support_filter_all(a_);
   }
 
-  int fd_;
+  int fd_ = -1;
+  std::string filename_;
+
   archive* a_ = archive_read_new();
-  bool opened_ = false;
-};
-
-class WriteArchive {
- public:
-  ~WriteArchive();
-
-  WriteArchive(const WriteArchive&) = delete;
-  WriteArchive& operator=(const WriteArchive&) = delete;
-
-  WriteArchive(WriteArchive&&) = default;
-  WriteArchive& operator=(WriteArchive&&) = default;
-
-  static std::unique_ptr<WriteArchive> New(const std::string& path,
-                                           int compress, const char** error);
-
-  const std::string& path() const { return path_; }
-
-  archive* write_archive() { return a_; }
-
-  bool Close();
-
- private:
-  WriteArchive(const std::string& path, int compress) : path_(path) {
-    archive_write_set_format_cpio_newc(a_);
-    archive_write_add_filter(a_, compress);
-  }
-
-  archive* a_ = archive_write_new();
-  std::string tmppath_;
-  std::string path_;
   bool opened_ = false;
 };
 

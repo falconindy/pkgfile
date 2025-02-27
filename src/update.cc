@@ -16,6 +16,7 @@
 
 #include "archive_converter.hh"
 #include "archive_reader.hh"
+#include "db.hh"
 #include "pkgfile.hh"
 #include "repo.hh"
 
@@ -111,16 +112,13 @@ int OpenTmpfile(int flags) {
   }
 #endif
 
-  std::string p(tmpdir);
-  p.append("/pkgfile-tmp-XXXXXX");
-
+  std::string p = fs::path(tmpdir) / "pkgfile-tmp-XXXXXX";
   fd = mkostemp(p.data(), flags);
   if (fd < 0) {
     return -errno;
   }
 
-  // ignore any (unlikely) error
-  unlink(p.c_str());
+  fs::remove(p);
 
   return fd;
 }
@@ -251,11 +249,16 @@ int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
 }
 
 bool Updater::RepackRepoData(const struct Repo* repo) {
-  auto converter = pkgfile::ArchiveConverter::New(repo->name, repo->tmpfile.fd,
-                                                  repo->diskfile, compress_,
-                                                  repo_chunk_bytes_);
+  const char* error;
+  auto reader = ReadArchive::New(repo->tmpfile.fd, &error);
+  if (reader == nullptr) {
+    std::cerr << "Failed to open archive for reading: " << error;
+    return false;
+  }
 
-  return converter != nullptr && converter->RewriteArchive();
+  pkgfile::ArchiveConverter converter(repo->name, std::move(reader),
+                                      repo->diskfile, repo_chunk_bytes_);
+  return converter.RewriteArchive();
 }
 
 void Updater::TidyCacheDir(const std::set<std::string>& known_repos) {
@@ -467,10 +470,8 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
   return ret;
 }
 
-Updater::Updater(std::string cachedir, int compress, int repo_chunk_bytes)
-    : cachedir_(cachedir),
-      compress_(compress),
-      repo_chunk_bytes_(repo_chunk_bytes) {
+Updater::Updater(std::string cachedir, int repo_chunk_bytes)
+    : cachedir_(cachedir), repo_chunk_bytes_(repo_chunk_bytes) {
   curl_global_init(CURL_GLOBAL_ALL);
   curl_multi_ = curl_multi_init();
 }

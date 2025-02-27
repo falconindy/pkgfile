@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "archive_io.hh"
-#include "compress.hh"
 #include "db.hh"
 #include "filter.hh"
 #include "queue.hh"
@@ -46,16 +45,18 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
       try_mmap_ = true;
       entry_callback_ = [this](const std::string& repo,
                                const filter::Filter& filter, const Package& pkg,
-                               Result* result, ArchiveReader* reader) {
-        return SearchMetafile(repo, filter, pkg, result, reader);
+                               Result* result,
+                               const PackageMeta::FileList& files) {
+        return SearchMetafile(repo, filter, pkg, result, files);
       };
       break;
     case MODE_LIST:
       try_mmap_ = false;
       entry_callback_ = [this](const std::string& repo,
                                const filter::Filter& filter, const Package& pkg,
-                               Result* result, ArchiveReader* reader) {
-        return ListMetafile(repo, filter, pkg, result, reader);
+                               Result* result,
+                               const PackageMeta::FileList& files) {
+        return ListMetafile(repo, filter, pkg, result, files);
       };
       break;
     default:
@@ -106,15 +107,14 @@ std::string Pkgfile::FormatSearchResult(const std::string& repo,
 int Pkgfile::SearchMetafile(const std::string& repo,
                             const pkgfile::filter::Filter& filter,
                             const Package& pkg, pkgfile::Result* result,
-                            pkgfile::ArchiveReader* reader) {
-  std::string_view line;
-  while (reader->GetLine(&line) == ARCHIVE_OK) {
-    if (!filter.Matches(line)) {
+                            const PackageMeta::FileList& files) {
+  for (const auto& file : files) {
+    if (!filter.Matches(file)) {
       continue;
     }
 
     result->Add(FormatSearchResult(repo, pkg),
-                options_.verbose ? std::string(line) : std::string());
+                options_.verbose ? std::string(file) : std::string());
 
     if (!options_.verbose) {
       return 0;
@@ -127,26 +127,25 @@ int Pkgfile::SearchMetafile(const std::string& repo,
 int Pkgfile::ListMetafile(const std::string& repo,
                           const pkgfile::filter::Filter& filter,
                           const Package& pkg, pkgfile::Result* result,
-                          pkgfile::ArchiveReader* reader) {
+                          const PackageMeta::FileList& files) {
   if (!filter.Matches(pkg.name)) {
     return 0;
   }
 
   const pkgfile::filter::Bin is_bin(bins_);
-  std::string_view line;
-  while (reader->GetLine(&line) == ARCHIVE_OK) {
-    if (options_.binaries && !is_bin.Matches(line)) {
+  for (const auto& file : files) {
+    if (options_.binaries && !is_bin.Matches(file)) {
       continue;
     }
 
     std::string out;
     if (options_.quiet) {
-      out = line;
+      out = file;
     } else {
       out = std::format("{}/{}", repo, pkg.name);
     }
     result->Add(std::move(out),
-                options_.quiet ? std::string() : std::string(line));
+                options_.quiet ? std::string() : std::string(file));
   }
 
   // When we encounter a match with fixed string matching, we know we're done.
@@ -155,65 +154,20 @@ int Pkgfile::ListMetafile(const std::string& repo,
   return options_.filterby == FilterStyle::EXACT ? -1 : 0;
 }
 
-// static
-bool Pkgfile::ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname) {
-  const auto pkgrel = entryname.rfind('-');
-  if (pkgrel == entryname.npos) {
-    return false;
-  }
-
-  const auto pkgver = entryname.substr(0, pkgrel).rfind('-');
-  if (pkgver == entryname.npos) {
-    return false;
-  }
-
-  pkg->name = entryname.substr(0, pkgver);
-  pkg->version = entryname.substr(pkgver + 1);
-
-  return true;
-}
-
 void Pkgfile::ProcessRepo(const std::string& reponame,
                           const std::string& repopath,
                           const filter::Filter& filter, Result* result) {
-  auto fd = ReadOnlyFile::Open(repopath, try_mmap_);
-  if (fd == nullptr) {
-    if (errno != ENOENT) {
-      std::cerr << std::format("failed to open {} for reading: {}\n", repopath,
-                               strerror(errno));
-    }
-    return;
-  }
+  SerializedFile data = SerializedFile::Open(repopath);
 
-  const char* err;
-  const auto read_archive = ReadArchive::New(*fd, &err);
-  if (read_archive == nullptr) {
-    std::cerr << std::format(
-        "failed to create new archive for reading: {}: {}\n", repopath, err);
-    return;
-  }
-
-  ArchiveReader reader(read_archive->read_archive());
-
-  archive_entry* e;
-  while (reader.Next(&e) == ARCHIVE_OK) {
-    const char* entryname = archive_entry_pathname(e);
-
-    Package pkg;
-    if (!ParsePkgname(&pkg, entryname)) {
-      std::cerr << std::format("error parsing pkgname from: {}\n", entryname);
-      continue;
-    }
-
-    if (entry_callback_(reponame, filter, pkg, result, &reader) < 0) {
-      break;
-    }
+  for (const auto& [name, package] : data.repo_meta()) {
+    entry_callback_(reponame, filter, {name, package.version}, result,
+                    package.files);
   }
 }
 
 int Pkgfile::SearchSingleRepo(const Database& db, const filter::Filter& filter,
                               std::string_view searchstring) {
-  std::string wanted_repo;
+  std::string_view wanted_repo;
   if (!options_.targetrepo.empty()) {
     wanted_repo = options_.targetrepo;
   } else {
@@ -346,8 +300,7 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
 
 int Pkgfile::Run(const std::vector<std::string>& args) {
   if (options_.mode & MODE_UPDATE) {
-    return Updater(options_.cachedir, options_.compress,
-                   options_.repo_chunk_bytes)
+    return Updater(options_.cachedir, options_.repo_chunk_bytes)
         .Update(options_.cfgfile, options_.mode == MODE_UPDATE_FORCE);
   }
 
@@ -422,9 +375,6 @@ void Usage(void) {
       "  -w, --raw               disable output justification\n"
       "  -0, --null              null terminate output\n\n";
   std::cout <<  //
-      " Downloading:\n"
-      "  -z, --compress[=type]   compress downloaded repos\n\n";
-  std::cout <<  //
       " General:\n  -C, --config <file>     use an alternate config (default: "
       "/etc/pacman.conf)\n"
       "  -D, --cachedir <dir>    use an alternate cachedir "
@@ -437,12 +387,11 @@ void Usage(void) {
 void Version(void) { std::cout << PACKAGE_NAME " v" PACKAGE_VERSION "\n"; }
 
 std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
-  static constexpr char kShortOpts[] = "0bC:D:dghilqR:rsuVvwz::";
+  static constexpr char kShortOpts[] = "0bC:D:dghilqR:rsuVvw";
   static constexpr struct option kLongOpts[] = {
       // clang-format off
     { "binaries",       no_argument,        0, 'b' },
     { "cachedir",       required_argument,  0, 'D' },
-    { "compress",       optional_argument,  0, 'z' },
     { "config",         required_argument,  0, 'C' },
     { "directories",    no_argument,        0, 'd' },
     { "glob",           no_argument,        0, 'g' },
@@ -525,18 +474,6 @@ std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
         break;
       case 'w':
         options.raw = true;
-        break;
-      case 'z':
-        if (optarg != nullptr) {
-          auto compress = pkgfile::ValidateCompression(optarg);
-          if (compress == std::nullopt) {
-            std::cerr << std::format("error: invalid compression option {}\n", optarg);
-            return std::nullopt;
-          }
-          options.compress = compress.value();
-        } else {
-          options.compress = ARCHIVE_FILTER_GZIP;
-        }
         break;
       case '~' + 1:
         options.repo_chunk_bytes = atoi(optarg);

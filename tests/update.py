@@ -45,19 +45,27 @@ class TestUpdate(pkgfile_test.TestCase):
         r = self.Pkgfile(['-u', '--repochunkbytes=100000'])
         self.assertEqual(r.returncode, 0)
 
-        self.assertMatchesGolden('multilib')
-        self.assertMatchesGolden('testing')
+        # It's not possible to assert equality based on file hash because the
+        # serialized data uses a hash map. Instead, dump the contents of the
+        # DBs before and after and assert that they match.
+        self.assertEqual(
+            self.Pkgfile(['-gl', '*', '-D', self.cachedir]).stdout,
+            self.Pkgfile(['-gl', '*', '-D', self.goldendir]).stdout)
 
         for repo in ('multilib', 'testing'):
             original_repo = Path(self.alpmcachedir, 'x86_64', repo,
                                  f'{repo}.files')
 
             for converted_repo in self.getRepoFiles(self.cachedir, repo):
-                # Only compare the integer portion of the mtime. we'll only ever
-                # get back second precision from a remote server, so any fractional
-                # second that's present on our golden repo can be ignored.
-                self.assertEqual(int(original_repo.stat().st_mtime),
-                                 int(converted_repo.stat().st_mtime))
+                # Only compare the integer portion of the mtime. The
+                # Last-Modified header as well as stat(2) only ever report
+                # second precision, so any fractional second that's present on
+                # our golden repo can be ignored.
+                self.assertEqual(
+                    int(original_repo.stat().st_mtime),
+                    int(converted_repo.stat().st_mtime),
+                    msg=f"original={original_repo}, converted={converted_repo}"
+                )
 
     def testUpdateForcesUpdates(self):
         r = self.Pkgfile(['-u'])

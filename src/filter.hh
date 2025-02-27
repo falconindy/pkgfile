@@ -96,6 +96,7 @@ class Exact : public Filter {
   bool Matches(std::string_view line) const override;
 
  private:
+  std::string match_;
   std::function<bool(std::string_view)> predicate_;
 };
 

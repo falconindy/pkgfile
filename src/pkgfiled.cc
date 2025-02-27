@@ -12,7 +12,7 @@
 #include <string_view>
 
 #include "archive_converter.hh"
-#include "compress.hh"
+#include "archive_io.hh"
 
 namespace fs = std::filesystem;
 
@@ -44,8 +44,6 @@ class Pkgfiled {
  public:
   struct Options {
     Options() {}
-
-    int compress = 0;  // ARCHIVE_FILTER_NONE
 
     // If true, skip mtime comparisons between the watch path and pkgfile cache,
     // transcoding all repos found in the watch path.
@@ -133,17 +131,19 @@ class Pkgfiled {
       std::cerr << std::format("processing new files DB: {}\n",
                                input_repo.c_str());
 
-      const auto input_file = ReadOnlyFile::Open(input_repo, /*try_mmap=*/true);
-      if (input_file == nullptr) {
+      const char* error;
+      auto archive = ReadArchive::New(input_repo, &error);
+      if (archive == nullptr) {
+        std::cerr << "failed to open " << input_repo
+                  << " for reading:" << error;
         return false;
       }
 
       const std::string reponame = changed_path.filename().stem();
-      auto converter = pkgfile::ArchiveConverter::New(
-          reponame, input_file->fd(), pkgfile_cache_ / changed_path,
-          options_.compress, -1);
+      pkgfile::ArchiveConverter converter(reponame, std::move(archive),
+                                          pkgfile_cache_ / changed_path, -1);
 
-      return converter != nullptr && converter->RewriteArchive();
+      return converter.RewriteArchive();
     };
 
     const auto start_time = std::chrono::system_clock::now();
@@ -222,7 +222,6 @@ void Usage() {
                "\nUsage: pkgfiled [options] pacman_source pkgfile_dest\n\n";
   std::cout << "  -f, --force             repack all repos on initial sync\n"
                "  -o, --oneshot           exit after initial sync \n"
-               "  -z, --compress[=type]   compress downloaded repos\n\n"
                "  -h, --help              display this help and exit\n"
                "  -V, --version           display the version and exit\n\n";
 }
@@ -230,13 +229,12 @@ void Usage() {
 void Version(void) { std::cout << "pkgfiled v" PACKAGE_VERSION "\n"; }
 
 std::optional<pkgfile::Pkgfiled::Options> ParseOpts(int* argc, char*** argv) {
-  static constexpr char kShortOpts[] = "hofVz:";
+  static constexpr char kShortOpts[] = "hofV";
   static constexpr struct option kLongOpts[] = {
       // clang-format off
       { "oneshot",    no_argument,        0, 'o' },
       { "help",       no_argument,        0, 'h' },
       { "force",      no_argument,        0, 'f' },
-      { "compress",   required_argument,  0, 'z' },
       { "version",    required_argument,  0, 'V' },
       { 0, 0, 0, 0 },
       // clang-format on
@@ -262,18 +260,6 @@ std::optional<pkgfile::Pkgfiled::Options> ParseOpts(int* argc, char*** argv) {
       case 'V':
         Version();
         exit(0);
-      case 'z':
-        if (optarg != nullptr) {
-          opts.compress = pkgfile::ValidateCompression(optarg).value_or(-1);
-          if (opts.compress < 0) {
-            std::cerr << std::format("error: invalid compression option {}\n",
-                                     optarg);
-            return std::nullopt;
-          }
-        } else {
-          opts.compress = ARCHIVE_FILTER_GZIP;
-        }
-        break;
       default:
         return std::nullopt;
     }

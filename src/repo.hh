@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "cista.h"
+
 enum class DownloadResult {
   UNKNOWN,
   OK,

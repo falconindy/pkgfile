@@ -5,37 +5,31 @@
 
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <iostream>
 
 namespace fs = std::filesystem;
 
 namespace pkgfile {
 
-// static
-std::unique_ptr<ArchiveConverter> ArchiveConverter::New(
-    const std::string& reponame, int fd_in, std::string base_filename_out,
-    int compress, int repo_chunk_bytes) {
-  const char* error;
+namespace {
 
-  auto reader = ReadArchive::New(fd_in, &error);
-  if (reader == nullptr) {
-    std::cerr << std::format(
-        "error: failed to create archive reader for {}: {}\n", reponame, error);
-    return nullptr;
+std::pair<std::string_view, std::string_view> ParsePkgname(
+    std::string_view entryname) {
+  const auto pkgrel = entryname.rfind('-');
+  if (pkgrel == entryname.npos) {
+    return {};
   }
 
-  auto writer = WriteArchive::New(
-      MakeArchiveChunkFilename(base_filename_out, 0, true), compress, &error);
-  if (writer == nullptr) {
-    std::cerr << std::format("error: failed to open file for writing: {}: {}\n",
-                             base_filename_out, error);
-    return nullptr;
+  const auto pkgver = entryname.substr(0, pkgrel).rfind('-');
+  if (pkgver == entryname.npos) {
+    return {};
   }
 
-  return std::make_unique<ArchiveConverter>(
-      reponame, std::move(base_filename_out), compress, repo_chunk_bytes,
-      std::move(reader), std::move(writer));
+  return {entryname.substr(0, pkgver), entryname.substr(pkgver + 1)};
 }
+
+}  // namespace
 
 std::string ArchiveConverter::MakeArchiveChunkFilename(
     const std::string& base_filename, int chunk_number, bool tempfile) {
@@ -44,100 +38,69 @@ std::string ArchiveConverter::MakeArchiveChunkFilename(
 }
 
 bool ArchiveConverter::NextArchiveChunk() {
-  if (!out_->Close()) {
-    return false;
-  }
+  std::string chunk_name =
+      MakeArchiveChunkFilename(base_filename_out_, chunk_number_++, true);
+  cista::buf mmap{cista::mmap{chunk_name.c_str()}};
+  cista::serialize<cista::mode::NONE>(mmap, data_);
 
-  const char* error;
-
-  auto writer = WriteArchive::New(
-      MakeArchiveChunkFilename(base_filename_out_, ++chunk_number_, true),
-      compress_, &error);
-  if (writer == nullptr) {
-    std::cerr << std::format("error: failed to open file for writing: {}: {}\n",
-                             base_filename_out_, error);
-    return false;
-  }
-
-  out_ = std::move(writer);
+  data_.clear();
 
   return true;
 }
 
-int ArchiveConverter::WriteCpioEntry(archive_entry* ae,
-                                     const fs::path& entryname) {
-  pkgfile::ArchiveReader reader(in_->read_archive());
+int ArchiveConverter::WriteMetaEntry(const fs::path& entryname) {
+  ArchiveReader reader(in_->read_archive());
   std::string_view line;
 
   // discard the first line
   reader.GetLine(&line);
 
-  std::string entry;
+  auto [name, version] = ParsePkgname(entryname.c_str());
+  if (name.empty()) {
+    return 0;
+  }
+
+  auto& pkg = data_[name];
+  pkg.version = version;
+
+  int bytesize = 0;
   while (reader.GetLine(&line) == ARCHIVE_OK) {
     // do the copy, with a slash prepended
-    std::format_to(std::back_inserter(entry), "/{}\n", line);
+    bytesize += pkg.files.emplace_back(std::format("/{}", line)).size();
   }
 
-  // adjust the entry size for removing the first line and adding slashes
-  archive_entry_set_size(ae, entry.size());
-
-  // inodes in cpio archives are dumb.
-  archive_entry_set_ino64(ae, 0);
-
-  // store the metadata as simply $pkgname-$pkgver-$pkgrel
-  archive_entry_update_pathname_utf8(ae, entryname.parent_path().c_str());
-
-  if (archive_write_header(out_->write_archive(), ae) != ARCHIVE_OK) {
-    std::cerr << std::format("error: failed to write entry header: {}/{}: {}\n",
-                             reponame_, archive_entry_pathname(ae),
-                             strerror(errno));
-    return -errno;
-  }
-
-  if (archive_write_data(out_->write_archive(), entry.c_str(), entry.size()) !=
-      static_cast<ssize_t>(entry.size())) {
-    std::cerr << std::format("error: failed to write entry: {}/{}: {}\n",
-                             reponame_, archive_entry_pathname(ae),
-                             strerror(errno));
-    return -errno;
-  }
-
-  return entry.size();
+  return bytesize;
 }
 
 bool ArchiveConverter::Finalize() {
-  in_->Close();
-
-  if (!out_->Close()) {
-    return false;
-  }
+  NextArchiveChunk();
 
   struct stat st;
-  fstat(in_->fd(), &st);
+  in_->Stat(&st);
+  in_->Close();
 
   const struct timeval times[] = {
       {st.st_atim.tv_sec, 0},
       {st.st_mtim.tv_sec, 0},
   };
 
-  for (int i = 0; i <= chunk_number_; ++i) {
+  for (int i = 0; i < chunk_number_; ++i) {
     std::string path = MakeArchiveChunkFilename(base_filename_out_, i, true);
+    std::string dest = MakeArchiveChunkFilename(base_filename_out_, i, false);
 
     if (utimes(path.c_str(), times) < 0) {
       std::cerr << std::format("warning: failed to set filetimes on {}: {}\n",
-                               out_->path(), strerror(errno));
+                               path, strerror(errno));
     }
-
-    const fs::path dest = path.substr(0, path.size() - 1);
 
     std::error_code ec;
     if (fs::rename(path, dest, ec); ec.value() != 0) {
       std::cerr << std::format("error: renaming tmpfile to {} failed: {}\n",
-                               dest.string(), ec.message());
+                               dest, ec.message());
     }
   }
 
-  for (int i = chunk_number_ + 1;; ++i) {
+  for (int i = chunk_number_;; ++i) {
     std::string path = MakeArchiveChunkFilename(base_filename_out_, i, false);
 
     std::error_code ec;
@@ -162,17 +125,19 @@ bool ArchiveConverter::RewriteArchive() {
       chunk_size = 0;
     }
 
-    fs::path entryname = archive_entry_pathname(ae);
+    const fs::path entryname = archive_entry_pathname(ae);
 
     // ignore everything but the /files metadata
-    if (entryname.filename() == "files") {
-      const int bytes_written = WriteCpioEntry(ae, entryname);
-      if (bytes_written < 0) {
-        return false;
-      }
-
-      chunk_size += bytes_written;
+    if (entryname.filename() != "files") {
+      continue;
     }
+
+    const int bytes_written = WriteMetaEntry(entryname.parent_path());
+    if (bytes_written < 0) {
+      return false;
+    }
+
+    chunk_size += bytes_written;
   }
 
   return Finalize();
