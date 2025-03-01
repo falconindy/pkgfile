@@ -328,7 +328,7 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
   if (options.mode == MODE_SEARCH) {
     if (options.binaries) {
       filter = std::make_unique<filter::And>(
-          std::make_unique<filter::Bin>(bins_), std::move(filter));
+          std::move(filter), std::make_unique<filter::Bin>(bins_));
     }
 
     if (!options.directories) {
