@@ -8,7 +8,7 @@ namespace pkgfile {
 
 class Result {
  public:
-  explicit Result(std::string name) : name_(std::move(name)) {}
+  Result() = default;
 
   Result(const Result&) = delete;
   Result& operator=(const Result&) = delete;
@@ -29,7 +29,6 @@ class Result {
   };
 
   std::mutex mu_;
-  std::string name_;
   std::vector<Line> lines_;
   size_t max_prefixlen_ = 0;
 

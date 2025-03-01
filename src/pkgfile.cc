@@ -237,9 +237,12 @@ int Pkgfile::SearchRepos(Database::RepoChunks repo_chunks,
 
   ThreadSafeQueue<WorkItem> queue;
   for (auto& [reponame, filepath] : repo_chunks) {
-    results.emplace(reponame, std::make_unique<Result>(reponame));
-    queue.enqueue(
-        WorkItem{&reponame, &filepath, &filter, results[reponame].get()});
+    auto& result = results[reponame];
+    if (result == nullptr) {
+      result = std::make_unique<Result>();
+    }
+
+    queue.enqueue(WorkItem{&reponame, &filepath, &filter, result.get()});
   }
 
   const auto num_workers =
