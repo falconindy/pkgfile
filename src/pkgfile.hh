@@ -58,7 +58,7 @@ class Pkgfile {
   int Run(const std::vector<std::string>& args);
 
  private:
-  struct Package {
+  struct ParsedPkgname {
     std::string_view name;
     std::string_view version;
   };
@@ -66,28 +66,29 @@ class Pkgfile {
   using RepoMap = std::multimap<std::string, std::filesystem::path>;
 
   using ArchiveEntryCallback = std::function<int(
-      const std::string& repo, const filter::Filter& filter, const Package& pkg,
-      Result* result, ArchiveReader* reader)>;
+      const std::string& repo, const filter::Filter& filter,
+      const ParsedPkgname& pkg, Result* result, ArchiveReader* reader)>;
 
   std::unique_ptr<filter::Filter> BuildFilterFromOptions(
       const Options& config, const std::string& match);
 
-  static bool ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname);
+  static bool ParsePkgname(ParsedPkgname* pkg, std::string_view entryname);
 
   void ProcessRepo(const std::string& reponame, const std::string& repopath,
                    const filter::Filter& filter, Result* result);
 
-  std::string FormatSearchResult(const std::string& repo, const Package& pkg);
+  std::string FormatSearchResult(const std::string& repo,
+                                 const ParsedPkgname& pkg);
 
-  int SearchRepos(Database::RepoChunks repo_chunks,
-                  const filter::Filter& filter);
-  int SearchSingleRepo(const Database& db, const filter::Filter& filter,
-                       std::string_view searchstring);
+  int SearchRepoChunks(Database::RepoChunks repo_chunks,
+                       const filter::Filter& filter);
 
   int SearchMetafile(const std::string& repo, const filter::Filter& filter,
-                     const Package& pkg, Result* result, ArchiveReader* reader);
+                     const ParsedPkgname& pkg, Result* result,
+                     ArchiveReader* reader);
   int ListMetafile(const std::string& repo, const filter::Filter& filter,
-                   const Package& pkg, Result* result, ArchiveReader* reader);
+                   const ParsedPkgname& pkg, Result* result,
+                   ArchiveReader* reader);
 
   Options options_;
   ArchiveEntryCallback entry_callback_;

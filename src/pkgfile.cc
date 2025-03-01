@@ -45,16 +45,18 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
     case MODE_SEARCH:
       try_mmap_ = true;
       entry_callback_ = [this](const std::string& repo,
-                               const filter::Filter& filter, const Package& pkg,
-                               Result* result, ArchiveReader* reader) {
+                               const filter::Filter& filter,
+                               const ParsedPkgname& pkg, Result* result,
+                               ArchiveReader* reader) {
         return SearchMetafile(repo, filter, pkg, result, reader);
       };
       break;
     case MODE_LIST:
       try_mmap_ = false;
       entry_callback_ = [this](const std::string& repo,
-                               const filter::Filter& filter, const Package& pkg,
-                               Result* result, ArchiveReader* reader) {
+                               const filter::Filter& filter,
+                               const ParsedPkgname& pkg, Result* result,
+                               ArchiveReader* reader) {
         return ListMetafile(repo, filter, pkg, result, reader);
       };
       break;
@@ -91,7 +93,7 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
 }
 
 std::string Pkgfile::FormatSearchResult(const std::string& repo,
-                                        const Package& pkg) {
+                                        const ParsedPkgname& pkg) {
   if (options_.verbose) {
     return std::format("{}/{} {}", repo, pkg.name, pkg.version);
   }
@@ -105,7 +107,7 @@ std::string Pkgfile::FormatSearchResult(const std::string& repo,
 
 int Pkgfile::SearchMetafile(const std::string& repo,
                             const pkgfile::filter::Filter& filter,
-                            const Package& pkg, pkgfile::Result* result,
+                            const ParsedPkgname& pkg, pkgfile::Result* result,
                             pkgfile::ArchiveReader* reader) {
   std::string_view line;
   while (reader->GetLine(&line) == ARCHIVE_OK) {
@@ -126,7 +128,7 @@ int Pkgfile::SearchMetafile(const std::string& repo,
 
 int Pkgfile::ListMetafile(const std::string& repo,
                           const pkgfile::filter::Filter& filter,
-                          const Package& pkg, pkgfile::Result* result,
+                          const ParsedPkgname& pkg, pkgfile::Result* result,
                           pkgfile::ArchiveReader* reader) {
   if (!filter.Matches(pkg.name)) {
     return 0;
@@ -156,7 +158,7 @@ int Pkgfile::ListMetafile(const std::string& repo,
 }
 
 // static
-bool Pkgfile::ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname) {
+bool Pkgfile::ParsePkgname(ParsedPkgname* pkg, std::string_view entryname) {
   const auto pkgrel = entryname.rfind('-');
   if (pkgrel == entryname.npos) {
     return false;
@@ -199,7 +201,7 @@ void Pkgfile::ProcessRepo(const std::string& reponame,
   while (reader.Next(&e) == ARCHIVE_OK) {
     const char* entryname = archive_entry_pathname(e);
 
-    Package pkg;
+    ParsedPkgname pkg;
     if (!ParsePkgname(&pkg, entryname)) {
       std::cerr << std::format("error parsing pkgname from: {}\n", entryname);
       continue;
@@ -211,20 +213,8 @@ void Pkgfile::ProcessRepo(const std::string& reponame,
   }
 }
 
-int Pkgfile::SearchSingleRepo(const Database& db, const filter::Filter& filter,
-                              std::string_view searchstring) {
-  std::string wanted_repo;
-  if (!options_.targetrepo.empty()) {
-    wanted_repo = options_.targetrepo;
-  } else {
-    wanted_repo = searchstring.substr(0, searchstring.find('/'));
-  }
-
-  return SearchRepos(db.GetRepoChunks(wanted_repo), filter);
-}
-
-int Pkgfile::SearchRepos(Database::RepoChunks repo_chunks,
-                         const filter::Filter& filter) {
+int Pkgfile::SearchRepoChunks(Database::RepoChunks repo_chunks,
+                              const filter::Filter& filter) {
   using ResultMap = std::map<std::string, std::unique_ptr<Result>>;
   ResultMap results;
 
@@ -307,14 +297,7 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
               std::make_unique<filter::Basename>(match, options.case_sensitive);
         }
       } else if (options.mode == MODE_LIST) {
-        auto pos = match.find('/');
-        if (pos != match.npos) {
-          filter = std::make_unique<filter::Exact>(match.substr(pos + 1),
-                                                   options.case_sensitive);
-        } else {
-          filter =
-              std::make_unique<filter::Exact>(match, options.case_sensitive);
-        }
+        filter = std::make_unique<filter::Exact>(match, options.case_sensitive);
       }
       break;
     case FilterStyle::GLOB:
@@ -370,27 +353,32 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
     return 1;
   }
 
-  const std::string& input = args[0];
+  auto ParseQueryInput = [this](std::string_view input)
+      -> std::pair<std::string_view, std::string_view> {
+    const auto pos = input.find('/');
 
-  const auto filter = BuildFilterFromOptions(options_, input);
+    // Make sure we reject anything that starts with a slash.
+    if (options_.mode == MODE_LIST && pos != input.npos && pos > 0) {
+      return {input.substr(0, pos), input.substr(pos + 1)};
+    } else if (!options_.targetrepo.empty()) {
+      return {options_.targetrepo, input};
+    } else {
+      return {std::string_view{}, input};
+    }
+  };
+
+  auto [repo, query] = ParseQueryInput(args[0]);
+
+  const auto filter = BuildFilterFromOptions(options_, std::string(query));
   if (filter == nullptr) {
     return 1;
   }
 
-  const auto is_repo_package_syntax = [](std::string_view input) {
-    auto pos = input.find('/');
-
-    // Make sure we reject anything that starts with a slash.
-    return pos != input.npos && pos > 0;
-  };
-
-  // override behavior on $repo/$pkg syntax or --repo
-  if ((options_.mode == MODE_LIST && is_repo_package_syntax(input)) ||
-      !options_.targetrepo.empty()) {
-    return SearchSingleRepo(*database, *filter, input);
+  if (!repo.empty()) {
+    return SearchRepoChunks(database->GetRepoChunks(repo), *filter);
   }
 
-  return SearchRepos(database->GetAllRepoChunks(), *filter);
+  return SearchRepoChunks(database->GetAllRepoChunks(), *filter);
 }
 
 }  // namespace pkgfile
