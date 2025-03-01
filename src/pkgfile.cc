@@ -83,21 +83,11 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
   switch (options_.mode) {
     case MODE_SEARCH:
       try_mmap_ = true;
-      entry_callback_ = [this](const std::string& repo,
-                               const filter::Filter& filter,
-                               const ParsedPkgname& pkg, Result* result,
-                               ArchiveReader* reader) {
-        return SearchMetafile(repo, filter, pkg, result, reader);
-      };
+      entry_callback_ = std::bind_front(&Pkgfile::SearchMetafile, this);
       break;
     case MODE_LIST:
       try_mmap_ = false;
-      entry_callback_ = [this](const std::string& repo,
-                               const filter::Filter& filter,
-                               const ParsedPkgname& pkg, Result* result,
-                               ArchiveReader* reader) {
-        return ListMetafile(repo, filter, pkg, result, reader);
-      };
+      entry_callback_ = std::bind_front(&Pkgfile::ListMetafile, this);
       break;
     default:
       break;
