@@ -1,22 +1,20 @@
 #include "result.hh"
 
 #include <algorithm>
-#include <format>
-#include <iostream>
 #include <mutex>
 
 namespace pkgfile {
 
 void Result::PrintTwoColumns(size_t prefixlen, char eol) const {
   for (const auto& line : lines_) {
-    std::cout << std::format("{:<{}s}\t{}{}", line.prefix, prefixlen,
-                             line.entry, eol);
+    printf("%-*s\t%s%c", static_cast<int>(prefixlen), line.prefix.c_str(),
+           line.entry.c_str(), eol);
   }
 }
 
 void Result::PrintOneColumn(char eol) const {
   for (const auto& line : lines_) {
-    std::cout << std::format("{}{}", line.prefix, eol);
+    printf("%s%c", line.prefix.c_str(), eol);
   }
 }
 
