@@ -9,6 +9,7 @@
 
 #include <format>
 #include <iostream>
+#include <map>
 #include <optional>
 #include <set>
 #include <vector>
@@ -38,6 +39,44 @@ std::string WeaklyCanonicalizeBin(std::string_view path) {
   return fs::weakly_canonical(canonical);
 }
 
+bool IsValidBin(std::string_view path) {
+  if (path.empty() || path.starts_with("/home") || !path.starts_with('/')) {
+    return false;
+  }
+
+  return true;
+}
+
+std::vector<std::string> ParsePathVarToBins(const char* var) {
+  if (var == nullptr) {
+    return {};
+  }
+
+  std::set<std::string> bins;
+  std::string_view psv(var);
+
+  while (!psv.empty()) {
+    auto pos = psv.find(':');
+    if (pos == psv.npos) {
+      if (IsValidBin(psv)) {
+        // then the remainder goes in the vector
+        bins.emplace(WeaklyCanonicalizeBin(psv));
+      }
+      break;
+    }
+
+    std::string_view component(psv.data(), pos);
+    if (IsValidBin(component)) {
+      bins.emplace(WeaklyCanonicalizeBin(component));
+    }
+
+    psv.remove_prefix(pos + 1);
+  }
+
+  return {std::make_move_iterator(bins.begin()),
+          std::make_move_iterator(bins.end())};
+}
+
 }  // namespace
 
 Pkgfile::Pkgfile(Options options) : options_(options) {
@@ -64,32 +103,7 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
       break;
   }
 
-  if (const char* p = getenv("PATH"); p) {
-    std::string_view psv(p);
-
-    while (!psv.empty()) {
-      auto pos = psv.find(':');
-      if (pos == psv.npos) {
-        // then the remainder goes in the vector
-        bins_.emplace_back(WeaklyCanonicalizeBin(psv));
-        break;
-      }
-
-      // Remove any trailing slashes from the PATH component and normalize it.
-      std::string_view component = {psv.data(), pos};
-      while (!component.empty() && component.ends_with('/')) {
-        component.remove_suffix(1);
-      }
-
-      // No relative paths
-      if (!component.empty() && component.starts_with('/') &&
-          !component.starts_with("/home")) {
-        bins_.emplace_back(WeaklyCanonicalizeBin(component));
-      }
-
-      psv.remove_prefix(pos + 1);
-    }
-  }
+  bins_ = ParsePathVarToBins(getenv("PATH"));
 }
 
 std::string Pkgfile::FormatSearchResult(const std::string& repo,

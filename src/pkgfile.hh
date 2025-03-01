@@ -1,8 +1,6 @@
 #pragma once
 
 #include <filesystem>
-#include <map>
-#include <optional>
 
 #include "archive_reader.hh"
 #include "db.hh"
@@ -62,8 +60,6 @@ class Pkgfile {
     std::string_view name;
     std::string_view version;
   };
-
-  using RepoMap = std::multimap<std::string, std::filesystem::path>;
 
   using ArchiveEntryCallback = std::function<int(
       const std::string& repo, const filter::Filter& filter,

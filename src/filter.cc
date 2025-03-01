@@ -81,11 +81,8 @@ Exact::Exact(std::string match, bool case_sensitive) {
     };
   } else {
     predicate_ = [m = std::move(match)](std::string_view line) {
-      if (line.size() != m.size()) {
-        return false;
-      }
-
-      return strncasecmp(line.data(), m.data(), m.size()) == 0;
+      return line.size() == m.size() &&
+             strncasecmp(line.data(), m.data(), m.size()) == 0;
     };
   }
 }

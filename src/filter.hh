@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -52,7 +53,7 @@ class Directory : public Filter {
 
 class Bin : public Filter {
  public:
-  explicit Bin(const std::vector<std::string>& bins) : bins_(bins) {}
+  explicit Bin(std::span<const std::string> bins) : bins_(bins) {}
 
   bool Matches(std::string_view line) const override;
 
@@ -60,7 +61,7 @@ class Bin : public Filter {
   // We use this as an optimization for throwing out things early, i.e.
   // directories can't be binaries.
   Directory directory_filter_;
-  const std::vector<std::string>& bins_;
+  std::span<const std::string> bins_;
 };
 
 class Regex : public Filter {
