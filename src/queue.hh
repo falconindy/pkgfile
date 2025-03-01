@@ -8,10 +8,10 @@ class ThreadSafeQueue {
  public:
   ThreadSafeQueue() = default;
 
-  void enqueue(T data) {
+  void enqueue(T&& data) {
     {
       std::lock_guard<std::mutex> lock(mu_);
-      q_.push(data);
+      q_.push(std::move(data));
     }
     cv_.notify_one();
   }
@@ -22,16 +22,6 @@ class ThreadSafeQueue {
     T data = q_.front();
     q_.pop();
     return data;
-  }
-
-  bool try_dequeue(T& data) {
-    std::lock_guard lock(mu_);
-    if (q_.empty()) {
-      return false;
-    }
-    data = q_.front();
-    q_.pop();
-    return true;
   }
 
   bool empty() const {
