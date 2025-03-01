@@ -49,6 +49,7 @@ libcommon = static_library(
     src/archive_io.cc src/archive_io.hh
     src/archive_reader.cc src/archive_reader.hh
     src/compress.cc src/compress.hh
+    src/db.cc src/db.hh
     src/filter.cc src/filter.hh
     src/repo.cc src/repo.hh
     src/result.cc src/result.hh
@@ -203,7 +204,13 @@ py3 = python.find_installation('python3')
 
 python_requirement = '>=3.7'
 if py3.found() and py3.language_version().version_compare(python_requirement)
-    foreach input : ['tests/list.py', 'tests/search.py', 'tests/update.py']
+    integration_tests = [
+      'tests/database.py',
+      'tests/list.py',
+      'tests/search.py',
+      'tests/update.py'
+    ]
+    foreach input : integration_tests
         basename = input.split('/')[-1].split('.')[0]
 
         test(

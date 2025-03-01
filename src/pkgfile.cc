@@ -15,6 +15,7 @@
 
 #include "archive_io.hh"
 #include "compress.hh"
+#include "db.hh"
 #include "filter.hh"
 #include "queue.hh"
 #include "repo.hh"
@@ -64,6 +65,7 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
         component.remove_suffix(1);
       }
 
+      // No relative paths
       if (!component.empty() && component.starts_with('/') &&
           !component.starts_with("/home")) {
         bins_.emplace_back(fs::weakly_canonical(component));
@@ -157,13 +159,14 @@ bool Pkgfile::ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname) {
   return true;
 }
 
-void Pkgfile::ProcessRepo(const std::string& reponame, const fs::path repopath,
+void Pkgfile::ProcessRepo(const std::string& reponame,
+                          const std::string& repopath,
                           const filter::Filter& filter, Result* result) {
   auto fd = ReadOnlyFile::Open(repopath, try_mmap_);
   if (fd == nullptr) {
     if (errno != ENOENT) {
-      std::cerr << std::format("failed to open {} for reading: {}\n",
-                               repopath.string(), strerror(errno));
+      std::cerr << std::format("failed to open {} for reading: {}\n", repopath,
+                               strerror(errno));
     }
     return;
   }
@@ -172,8 +175,7 @@ void Pkgfile::ProcessRepo(const std::string& reponame, const fs::path repopath,
   const auto read_archive = ReadArchive::New(*fd, &err);
   if (read_archive == nullptr) {
     std::cerr << std::format(
-        "failed to create new archive for reading: {}: {}\n", repopath.string(),
-        err);
+        "failed to create new archive for reading: {}: {}\n", repopath, err);
     return;
   }
 
@@ -195,8 +197,7 @@ void Pkgfile::ProcessRepo(const std::string& reponame, const fs::path repopath,
   }
 }
 
-int Pkgfile::SearchSingleRepo(const RepoMap& repos,
-                              const filter::Filter& filter,
+int Pkgfile::SearchSingleRepo(const Database& db, const filter::Filter& filter,
                               std::string_view searchstring) {
   std::string wanted_repo;
   if (!options_.targetrepo.empty()) {
@@ -205,23 +206,23 @@ int Pkgfile::SearchSingleRepo(const RepoMap& repos,
     wanted_repo = searchstring.substr(0, searchstring.find('/'));
   }
 
-  return SearchRepos(repos.equal_range(wanted_repo), filter);
+  return SearchRepos(db.GetRepoChunks(wanted_repo), filter);
 }
 
-int Pkgfile::SearchRepos(const RepoMapIteratorPair& repo_range,
+int Pkgfile::SearchRepos(Database::RepoChunks repo_chunks,
                          const filter::Filter& filter) {
   using ResultMap = std::map<std::string, std::unique_ptr<Result>>;
   ResultMap results;
 
   struct WorkItem {
     const std::string* reponame;
-    const fs::path* filepath;
+    const std::string* filepath;
     const filter::Filter* filter;
     Result* result;
   };
 
   ThreadSafeQueue<WorkItem> queue;
-  for (auto& [reponame, filepath] : repo_range) {
+  for (auto& [reponame, filepath] : repo_chunks) {
     results.emplace(reponame, std::make_unique<Result>(reponame));
     queue.enqueue(
         WorkItem{&reponame, &filepath, &filter, results[reponame].get()});
@@ -326,36 +327,6 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
   return filter;
 }
 
-// static
-Pkgfile::RepoMap Pkgfile::DiscoverRepos(std::string_view cachedir,
-                                        std::error_code& ec) {
-  std::set<fs::path> paths;
-
-  // std::multimap guarantees insertion order which is the same as directory
-  // iterator order (i.e. undefined). Gather the paths into a std::set to ensure
-  // they're lexicographically ordered.
-  for (const auto& entry : fs::directory_iterator(cachedir, ec)) {
-    const std::string pathname = entry.path();
-    if (!entry.is_regular_file() || !FilenameHasRepoSuffix(pathname)) {
-      continue;
-    }
-
-    paths.insert(pathname);
-  }
-
-  RepoMap repos;
-  for (std::string pathname : paths) {
-    const std::string_view view(pathname);
-    const auto slash = view.rfind('/');
-    std::string_view reponame =
-        view.substr(slash + 1, view.substr(slash).find('.') - 1);
-
-    repos.emplace(reponame, pathname);
-  }
-
-  return repos;
-}
-
 int Pkgfile::Run(const std::vector<std::string>& args) {
   if (options_.mode & MODE_UPDATE) {
     return Updater(options_.cachedir, options_.compress,
@@ -369,12 +340,15 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
   }
 
   std::error_code ec;
-  const auto repos = DiscoverRepos(options_.cachedir, ec);
+  const auto database = Database::Open(options_.cachedir, ec);
   if (ec.value() != 0) {
-    std::cerr << std::format("error: Failed to open cache directory {}: {}\n",
-                             options_.cachedir, ec.message());
+    std::cerr << std::format("error: Failed to open cache directory {}: {}{}\n",
+                             options_.cachedir, ec.message(),
+                             DatabaseError::Is(ec)
+                                 ? " (you may need to run `pkgfile --update`)"
+                                 : "");
     return 1;
-  } else if (repos.empty()) {
+  } else if (database->empty()) {
     std::cerr << "error: No repo files found. Please run `pkgfile --update.\n";
     return 1;
   }
@@ -396,10 +370,10 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
   // override behavior on $repo/$pkg syntax or --repo
   if ((options_.mode == MODE_LIST && is_repo_package_syntax(input)) ||
       !options_.targetrepo.empty()) {
-    return SearchSingleRepo(repos, *filter, input);
+    return SearchSingleRepo(*database, *filter, input);
   }
 
-  return SearchRepos(repos, *filter);
+  return SearchRepos(database->GetAllRepoChunks(), *filter);
 }
 
 }  // namespace pkgfile

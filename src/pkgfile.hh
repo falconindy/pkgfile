@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "archive_reader.hh"
+#include "db.hh"
 #include "filter.hh"
 #include "result.hh"
 
@@ -68,40 +69,19 @@ class Pkgfile {
       const std::string& repo, const filter::Filter& filter, const Package& pkg,
       Result* result, ArchiveReader* reader)>;
 
-  static RepoMap DiscoverRepos(std::string_view cachedir, std::error_code& ec);
-
   std::unique_ptr<filter::Filter> BuildFilterFromOptions(
       const Options& config, const std::string& match);
 
   static bool ParsePkgname(Pkgfile::Package* pkg, std::string_view entryname);
 
-  void ProcessRepo(const std::string& reponame,
-                   const std::filesystem::path repopath,
+  void ProcessRepo(const std::string& reponame, const std::string& repopath,
                    const filter::Filter& filter, Result* result);
 
   std::string FormatSearchResult(const std::string& repo, const Package& pkg);
 
-  class RepoMapIteratorPair {
-   public:
-    using It = RepoMap::const_iterator;
-
-    RepoMapIteratorPair(const RepoMap& repomap)
-        : first_(repomap.begin()), last_(repomap.end()) {}
-
-    RepoMapIteratorPair(std::pair<It, It> p)
-        : first_(p.first), last_(p.second) {}
-
-    friend It begin(RepoMapIteratorPair p) { return p.first_; }
-    friend It end(RepoMapIteratorPair p) { return p.last_; }
-
-   private:
-    It first_;
-    It last_;
-  };
-
-  int SearchRepos(const RepoMapIteratorPair& repo_range,
+  int SearchRepos(Database::RepoChunks repo_chunks,
                   const filter::Filter& filter);
-  int SearchSingleRepo(const RepoMap& repos, const filter::Filter& filter,
+  int SearchSingleRepo(const Database& db, const filter::Filter& filter,
                        std::string_view searchstring);
 
   int SearchMetafile(const std::string& repo, const filter::Filter& filter,

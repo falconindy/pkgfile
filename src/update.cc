@@ -393,7 +393,8 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
     return 1;
   }
 
-  std::cout << std::format(":: Updating {} repos...\n", alpm_config.repos.size());
+  std::cout << std::format(":: Updating {} repos...\n",
+                           alpm_config.repos.size());
 
   if (alpm_config.architecture.empty()) {
     struct utsname un;
@@ -458,6 +459,10 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
   }
 
   TidyCacheDir(known_repos);
+
+  if (!Database::WriteDatabaseVersion(cachedir_)) {
+    std::cerr << "warning: failed to write database version marker\n";
+  }
 
   return ret;
 }
