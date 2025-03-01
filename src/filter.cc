@@ -21,8 +21,7 @@ bool Bin::Matches(std::string_view line) const {
   for (const auto& bin : bins_) {
     // Binaries must start with a PATH component and must be in a subdir of the
     // component.
-    if (line.size() > bin.size() && line.starts_with(bin) &&
-        line[bin.size()] == '/') {
+    if (line.starts_with(bin)) {
       return true;
     }
   }

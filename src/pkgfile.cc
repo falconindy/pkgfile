@@ -26,6 +26,20 @@ namespace fs = std::filesystem;
 
 namespace pkgfile {
 
+namespace {
+
+std::string WeaklyCanonicalizeBin(std::string_view path) {
+  std::string canonical(path);
+
+  if (!canonical.ends_with('/')) {
+    canonical.append("/");
+  }
+
+  return fs::weakly_canonical(canonical);
+}
+
+}  // namespace
+
 Pkgfile::Pkgfile(Options options) : options_(options) {
   switch (options_.mode) {
     case MODE_SEARCH:
@@ -55,7 +69,7 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
       auto pos = psv.find(':');
       if (pos == psv.npos) {
         // then the remainder goes in the vector
-        bins_.emplace_back(psv);
+        bins_.emplace_back(WeaklyCanonicalizeBin(psv));
         break;
       }
 
@@ -68,7 +82,7 @@ Pkgfile::Pkgfile(Options options) : options_(options) {
       // No relative paths
       if (!component.empty() && component.starts_with('/') &&
           !component.starts_with("/home")) {
-        bins_.emplace_back(fs::weakly_canonical(component));
+        bins_.emplace_back(WeaklyCanonicalizeBin(component));
       }
 
       psv.remove_prefix(pos + 1);
