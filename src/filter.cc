@@ -93,12 +93,13 @@ Basename::Basename(std::string match, bool case_sensitive)
     : predicate_(std::make_unique<Exact>(match, case_sensitive)) {}
 
 bool Basename::Matches(std::string_view line) const {
-  const auto pos = line.rfind('/');
-  if (pos != line.npos) {
-    line.remove_prefix(pos + 1);
+  const void* p = memrchr(line.data(), '/', line.size());
+  if (p == nullptr) {
+    return predicate_->Matches(line);
   }
 
-  return predicate_->Matches(line);
+  const std::string_view base(static_cast<const char*>(p) + 1, line.end());
+  return predicate_->Matches(base);
 }
 
 }  // namespace filter
