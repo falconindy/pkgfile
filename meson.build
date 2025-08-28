@@ -28,7 +28,7 @@ add_project_arguments(
     language: 'cpp',
 )
 
-libpcre = dependency('libpcre', version: '>= 8.30')
+re2 = dependency('re2')
 libarchive = dependency('libarchive', version: '>= 3.2.0')
 libcurl = dependency('libcurl')
 libsystemd = dependency('libsystemd')
@@ -57,7 +57,7 @@ libcommon = static_library(
     src/queue.hh
   '''.split(),
     ),
-    dependencies: [libpcre, libarchive, libcurl, pthreads, stdcppfs],
+    dependencies: [re2, libarchive, libcurl, pthreads, stdcppfs],
     install: false,
 )
 
@@ -191,7 +191,7 @@ if gtest.found() and gmock.found()
       '''.split(),
             ),
             link_with: [libcommon, gtest_main],
-            dependencies: [gmock, gtest, libpcre],
+            dependencies: [gmock, gtest, re2],
         ),
         protocol: 'gtest',
     )

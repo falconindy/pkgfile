@@ -1,6 +1,6 @@
 #pragma once
 
-#include <pcre.h>
+#include <re2/re2.h>
 
 #include <functional>
 #include <memory>
@@ -66,8 +66,7 @@ class Bin : public Filter {
 
 class Regex : public Filter {
  public:
-  Regex(pcre* re, pcre_extra* re_extra) : re_(re), re_extra_(re_extra) {}
-  ~Regex();
+  Regex(std::unique_ptr<re2::RE2> re) : re_(std::move(re)) {}
 
   static std::unique_ptr<Regex> Compile(const std::string& pattern,
                                         bool case_sensitive);
@@ -75,8 +74,7 @@ class Regex : public Filter {
   bool Matches(std::string_view line) const override;
 
  private:
-  pcre* re_;
-  pcre_extra* re_extra_;
+  std::unique_ptr<re2::RE2> re_;
 };
 
 class Glob : public Filter {
