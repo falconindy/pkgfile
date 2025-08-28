@@ -42,19 +42,29 @@ int ArchiveReader::GetLine(std::string_view* line) {
 
   // Otherwise, we need to take from the internal buffer, which also indicates
   // that we should refill our block.
-  buffer_ = block_;
-  block_ = std::string_view();
+  while (true) {
+    buffer_ = block_;
+    block_ = std::string_view();
 
-  int r = ConsumeBlock();
-  if (r != ARCHIVE_OK) {
-    return r;
+    int r = ConsumeBlock();
+    if (r != ARCHIVE_OK) {
+      return r;
+    }
+
+    // We're guaranteed that buffer_ doesn't contain a new line, so grab the
+    // next data chunk up to a newline from the new block.
+    auto pos = block_.find('\n');
+    if (pos == block_.npos) {
+      // If no newline was was found in the block, append the whole thing and
+      // read again.
+      buffer_.append(block_.data(), block_.size());
+      continue;
+    }
+
+    buffer_.append(block_.data(), pos);
+    block_.remove_prefix(pos + 1);
+    break;
   }
-
-  // We're guaranteed that buffer_ doesn't contain a new line, so grab the next
-  // data chunk up to a newline from the new block.
-  auto pos = block_.find('\n');
-  buffer_.append(block_.data(), pos);
-  block_.remove_prefix(pos + 1);
 
   *line = buffer_;
   return ARCHIVE_OK;
