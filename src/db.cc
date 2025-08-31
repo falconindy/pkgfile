@@ -80,7 +80,7 @@ std::unique_ptr<Database> Database::Open(std::string_view dbpath,
   Repos repos;
   for (const auto& entry : fs::directory_iterator(dbpath, ec)) {
     const fs::path& pathname = entry.path();
-    if (!entry.is_regular_file() || !FilenameHasRepoSuffix(pathname.native())) {
+    if (!entry.is_regular_file() || !FilenameHasRepoSuffix(pathname.filename().native())) {
       continue;
     }
 
