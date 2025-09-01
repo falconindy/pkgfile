@@ -63,7 +63,9 @@ Disable case sensitivity in matching.
 
 =item B<-r>, B<--regex>
 
-Enable regular expression matching. See B<pcre>(3).
+Enable regular expression matching. The matching is partial meaning it will
+match a substring of an entry. See https://github.com/google/re2/wiki/Syntax
+for supported syntax.
 
 =item B<-R> I<REPO>, B<--repo=>I<REPO>
 
@@ -177,7 +179,7 @@ systemd support, this can be enabled with:
 
 =head1 SEE ALSO
 
-B<pkgfiled>(1), B<repo-add>(8), B<pcre>(3), B<glob>(7), B<pacman.conf>(5)
+B<pkgfiled>(1), B<repo-add>(8), B<glob>(7), B<pacman.conf>(5)
 
 =head1 AUTHOR
 
