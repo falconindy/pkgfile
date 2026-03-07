@@ -2,7 +2,6 @@
 
 #include <archive.h>
 
-#include <queue>
 #include <string>
 #include <string_view>
 

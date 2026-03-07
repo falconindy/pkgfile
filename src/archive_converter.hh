@@ -2,13 +2,11 @@
 
 #include <archive.h>
 #include <archive_entry.h>
-#include <string.h>
 
 #include <filesystem>
 #include <string>
 
 #include "archive_io.hh"
-#include "pkgfile.hh"
 
 namespace pkgfile {
 

@@ -19,7 +19,6 @@
 #include "db.hh"
 #include "filter.hh"
 #include "queue.hh"
-#include "repo.hh"
 #include "result.hh"
 #include "update.hh"
 

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <filesystem>
-
 #include "archive_reader.hh"
 #include "db.hh"
 #include "filter.hh"

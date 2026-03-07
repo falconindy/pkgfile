@@ -1,11 +1,14 @@
 #include "archive_converter.hh"
 
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 
 #include <filesystem>
 #include <format>
 #include <iostream>
+
+#include "archive_reader.hh"
 
 namespace fs = std::filesystem;
 

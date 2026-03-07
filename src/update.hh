@@ -4,7 +4,6 @@
 
 #include <set>
 
-#include "pkgfile.hh"
 #include "repo.hh"
 
 namespace pkgfile {

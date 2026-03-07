@@ -1,4 +1,5 @@
 #include <getopt.h>
+#include <string.h>
 #include <systemd/sd-event.h>
 #include <utime.h>
 

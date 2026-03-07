@@ -15,8 +15,7 @@
 #include <iostream>
 
 #include "archive_converter.hh"
-#include "archive_reader.hh"
-#include "pkgfile.hh"
+#include "db.hh"
 #include "repo.hh"
 
 namespace chrono = std::chrono;
