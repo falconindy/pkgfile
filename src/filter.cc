@@ -5,6 +5,7 @@
 
 #include <format>
 #include <iostream>
+#include <re2/re2.h>
 
 namespace pkgfile {
 namespace filter {
@@ -40,38 +41,25 @@ bool Glob::Matches(std::string_view line) const {
   return fnmatch(glob_pattern_.c_str(), std::string(line).c_str(), flags_) == 0;
 }
 
-Regex::~Regex() {
-  pcre_free_study(re_extra_);
-  pcre_free(re_);
-}
-
 // static
 std::unique_ptr<Regex> Regex::Compile(const std::string& pattern,
                                       bool case_sensitive) {
-  const int options = case_sensitive ? 0 : PCRE_CASELESS;
-  const char* err;
-  int offset;
+  re2::RE2::Options re2_options;
+  re2_options.set_case_sensitive(case_sensitive);
+  re2_options.set_log_errors(false);
 
-  pcre* re = pcre_compile(pattern.c_str(), options, &err, &offset, nullptr);
-  if (re == nullptr) {
-    std::cerr << std::format("error: failed to compile regex at char {}: {}\n",
-                             offset, err);
+  auto re = std::make_unique<re2::RE2>(pattern, re2_options);
+  if (!re->ok()) {
+    std::cerr << std::format("error: failed to compile regex: {}\n",
+                             re->error());
     return nullptr;
   }
 
-  pcre_extra* re_extra = pcre_study(re, PCRE_STUDY_JIT_COMPILE, &err);
-  if (err) {
-    std::cerr << std::format("error: failed to study regex: {}\n", err);
-    pcre_free(re);
-    return nullptr;
-  }
-
-  return std::make_unique<Regex>(re, re_extra);
+  return std::make_unique<Regex>(std::move(re));
 }
 
 bool Regex::Matches(std::string_view line) const {
-  return pcre_exec(re_, re_extra_, line.data(), line.size(), 0,
-                   PCRE_NO_UTF16_CHECK, nullptr, 0) >= 0;
+  return re2::RE2::PartialMatch(line, *re_);
 }
 
 Exact::Exact(std::string match, bool case_sensitive) {
