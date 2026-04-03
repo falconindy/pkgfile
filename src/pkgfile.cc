@@ -28,22 +28,29 @@ namespace pkgfile {
 
 namespace {
 
-std::string WeaklyCanonicalizeBin(std::string_view path) {
-  std::string canonical(path);
-
-  if (!canonical.ends_with('/')) {
-    canonical.append("/");
-  }
-
-  return fs::weakly_canonical(canonical);
-}
-
 bool IsValidBin(std::string_view path) {
   if (path.empty() || path.starts_with("/home") || !path.starts_with('/')) {
     return false;
   }
 
   return true;
+}
+
+std::string WeaklyCanonicalizeBin(std::string_view path) {
+  if (!IsValidBin(path)) {
+    return std::string();
+  }
+
+  std::string canonical(path);
+
+  if (!canonical.ends_with('/')) {
+    canonical.append("/");
+  }
+
+  // Silently ignore any errors and just return an empty string.
+  // ref: https://github.com/falconindy/pkgfile/issues/79
+  std::error_code ec;
+  return fs::weakly_canonical(canonical, ec);
 }
 
 std::vector<std::string> ParsePathVarToBins(const char* var) {
@@ -57,16 +64,16 @@ std::vector<std::string> ParsePathVarToBins(const char* var) {
   while (!psv.empty()) {
     auto pos = psv.find(':');
     if (pos == psv.npos) {
-      if (IsValidBin(psv)) {
+      if (std::string canon = WeaklyCanonicalizeBin(psv); !canon.empty()) {
         // then the remainder goes in the vector
-        bins.emplace(WeaklyCanonicalizeBin(psv));
+        bins.emplace(canon);
       }
       break;
     }
 
     std::string_view component(psv.data(), pos);
-    if (IsValidBin(component)) {
-      bins.emplace(WeaklyCanonicalizeBin(component));
+    if (std::string canon = WeaklyCanonicalizeBin(component); !canon.empty()) {
+      bins.emplace(canon);
     }
 
     psv.remove_prefix(pos + 1);
