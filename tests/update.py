@@ -18,7 +18,6 @@ def _sha256(path):
 
 
 class TestUpdate(pkgfile_test.TestCase):
-
     def setUp(self):
         super().setUp()
 
@@ -36,10 +35,11 @@ class TestUpdate(pkgfile_test.TestCase):
         converted_files = self.getRepoFiles(self.cachedir, reponame)
 
         for golden, converted in zip(golden_files, converted_files):
-            self.assertEqual(_sha256(golden),
-                             _sha256(converted),
-                             msg="golden={}, converted={}".format(
-                                 golden, converted))
+            self.assertEqual(
+                _sha256(golden),
+                _sha256(converted),
+                msg='golden={}, converted={}'.format(golden, converted),
+            )
 
     def testUpdate(self):
         r = self.Pkgfile(['-u', '--repochunkbytes=100000'])
@@ -49,15 +49,16 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertMatchesGolden('testing')
 
         for repo in ('multilib', 'testing'):
-            original_repo = Path(self.alpmcachedir, 'x86_64', repo,
-                                 f'{repo}.files')
+            original_repo = Path(self.alpmcachedir, 'x86_64', repo, f'{repo}.files')
 
             for converted_repo in self.getRepoFiles(self.cachedir, repo):
                 # Only compare the integer portion of the mtime. we'll only ever
                 # get back second precision from a remote server, so any fractional
                 # second that's present on our golden repo can be ignored.
-                self.assertEqual(int(original_repo.stat().st_mtime),
-                                 int(converted_repo.stat().st_mtime))
+                self.assertEqual(
+                    int(original_repo.stat().st_mtime),
+                    int(converted_repo.stat().st_mtime),
+                )
 
     def testUpdateForcesUpdates(self):
         r = self.Pkgfile(['-u'])
@@ -80,7 +81,8 @@ class TestUpdate(pkgfile_test.TestCase):
             self.assertNotEqual(
                 inodes_before,
                 inodes_after,
-                msg='{}.files unexpectedly NOT rewritten'.format(r))
+                msg='{}.files unexpectedly NOT rewritten'.format(r),
+            )
 
     def testUpdateSkipsUpToDate(self):
         r = self.Pkgfile(['-u'])
@@ -108,15 +110,17 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertEqual(
             inodes_before['multilib'],
             inodes_after['multilib'],
-            msg='multilib.files unexpectedly rewritten by `pkgfile -u`')
+            msg='multilib.files unexpectedly rewritten by `pkgfile -u`',
+        )
 
         self.assertNotEqual(
             inodes_before['testing'],
             inodes_after['testing'],
-            msg='testing.files unexpectedly NOT rewritten by `pkgfile -u`')
+            msg='testing.files unexpectedly NOT rewritten by `pkgfile -u`',
+        )
 
     def testUpdateSkipsBadServer(self):
-        Path(self.tempdir / 'pacman.conf').write_text(f'''
+        Path(self.tempdir / 'pacman.conf').write_text(f"""
             [options]
             Architecture = x86_64
 
@@ -126,13 +130,13 @@ class TestUpdate(pkgfile_test.TestCase):
 
             [multilib]
             Server = {self.baseurl}/$arch/$repo
-            ''')
+            """)
 
         r = self.Pkgfile(['-u'])
         self.assertEqual(r.returncode, 0)
 
     def testUpdateFailsWhenExhaustingServers(self):
-        Path(self.tempdir, 'pacman.conf').write_text(f'''
+        Path(self.tempdir, 'pacman.conf').write_text(f"""
             [options]
             Architecture = x86_64
 
@@ -141,7 +145,7 @@ class TestUpdate(pkgfile_test.TestCase):
 
             [multilib]
             Server = {self.baseurl}/$arch/$repo
-            ''')
+            """)
 
         r = self.Pkgfile(['-u'])
         self.assertNotEqual(r.returncode, 0)
@@ -161,8 +165,8 @@ class TestUpdate(pkgfile_test.TestCase):
 
     def testUpdateRemovesUnknownRepos(self):
         expected_removed = (
-            self.cachedir / "garbage.files",
-            self.cachedir / "deletemebro.files.000",
+            self.cachedir / 'garbage.files',
+            self.cachedir / 'deletemebro.files.000',
         )
 
         for p in expected_removed:
@@ -172,15 +176,14 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertEqual(r.returncode, 0)
 
         for p in expected_removed:
-            self.assertFalse(p.exists(),
-                             msg='{p} still exists, expected deleted')
+            self.assertFalse(p.exists(), msg='{p} still exists, expected deleted')
 
     def testSkipsCachedirTidyingOnParanoia(self):
-        (self.cachedir / "somedir").mkdir()
+        (self.cachedir / 'somedir').mkdir()
 
         non_repo_files = (
-            self.cachedir / "garbage.files",
-            self.cachedir / "deletemebro.files.000",
+            self.cachedir / 'garbage.files',
+            self.cachedir / 'deletemebro.files.000',
         )
 
         for p in non_repo_files:
@@ -192,10 +195,9 @@ class TestUpdate(pkgfile_test.TestCase):
         # files which should be removed are still present because we bailed on
         # detecting a directory
         for p in non_repo_files:
-            self.assertTrue(p.exists(),
-                            msg='{p} still exists, expected deleted')
+            self.assertTrue(p.exists(), msg='{p} still exists, expected deleted')
 
-        self.assertIn("Directory found in pkgfile cachedir", r.stderr.decode())
+        self.assertIn('Directory found in pkgfile cachedir', r.stderr.decode())
 
 
 if __name__ == '__main__':

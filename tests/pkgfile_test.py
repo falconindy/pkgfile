@@ -19,29 +19,24 @@ def FindMesonBuildDir():
     # When run manually, we're probably in the repo root.
     paths = glob.glob('*/.ninja_log')
     if len(paths) > 1:
-        raise ValueError(
-            'Multiple build directories found. Unable to proceed.')
+        raise ValueError('Multiple build directories found. Unable to proceed.')
     if len(paths) == 0:
-        raise ValueError(
-            'No build directory found. Have you run "meson build" yet?')
+        raise ValueError('No build directory found. Have you run "meson build" yet?')
 
     return os.path.dirname(paths[0])
 
 
 class TimeLoggingTestResult(unittest.runner.TextTestResult):
-
     def startTest(self, test):
         self._started_at = time.time()
         super().startTest(test)
 
     def addSuccess(self, test):
         elapsed = time.time() - self._started_at
-        self.stream.write('\n{} ({:.03}s)'.format(self.getDescription(test),
-                                                  elapsed))
+        self.stream.write('\n{} ({:.03}s)'.format(self.getDescription(test), elapsed))
 
 
 class TestCase(unittest.TestCase):
-
     maxDiff = 10000
 
     def setUp(self):
@@ -49,13 +44,14 @@ class TestCase(unittest.TestCase):
         self._tempdir = tempfile.TemporaryDirectory()
         self.tempdir = Path(self._tempdir.name)
         self.cachedir = os.path.join(
-            os.path.dirname(os.path.realpath(__file__)), 'golden/pkgfile')
+            os.path.dirname(os.path.realpath(__file__)), 'golden/pkgfile'
+        )
         self.alpmcachedir = os.path.join(
-            os.path.dirname(os.path.realpath(__file__)), 'golden/alpm')
+            os.path.dirname(os.path.realpath(__file__)), 'golden/alpm'
+        )
 
         q = multiprocessing.Queue()
-        self.server = multiprocessing.Process(target=fakehttp.server.Serve,
-                                              args=(q, ))
+        self.server = multiprocessing.Process(target=fakehttp.server.Serve, args=(q,))
         self.server.start()
         self.baseurl = q.get()
 
@@ -64,12 +60,12 @@ class TestCase(unittest.TestCase):
     def tearDown(self):
         self.server.terminate()
         self.server.join()
-        self.assertEqual(0, self.server.exitcode,
-                         'Server did not exit cleanly')
+        self.assertEqual(0, self.server.exitcode, 'Server did not exit cleanly')
 
     def _WritePacmanConf(self):
         with open(os.path.join(self.tempdir, 'pacman.conf'), 'w') as f:
-            f.write('''
+            f.write(
+                """
             [options]
             Architecture = x86_64 x86_64_v3 imnotlistening
 
@@ -78,7 +74,8 @@ class TestCase(unittest.TestCase):
 
             [multilib]
             Server = {fakehttp_server}/$arch/$repo
-            '''.format(fakehttp_server=self.baseurl))
+            """.format(fakehttp_server=self.baseurl)
+            )
 
     def Pkgfile(self, args):
         env = {

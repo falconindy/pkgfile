@@ -5,7 +5,6 @@ from pathlib import Path
 
 
 class TestDatabase(pkgfile_test.TestCase):
-
     def setUp(self):
         super().setUp()
 
@@ -18,8 +17,7 @@ class TestDatabase(pkgfile_test.TestCase):
         r = self.Pkgfile(['-u'])
 
         # writes a .db_version tag with an integer
-        self.assertTrue(
-            Path(self.cachedir, '.db_version').read_text().isnumeric())
+        self.assertTrue(Path(self.cachedir, '.db_version').read_text().isnumeric())
 
     def testRefusesWrongDatabaseVersion(self):
         r = self.Pkgfile(['-u'])
