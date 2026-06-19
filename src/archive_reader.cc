@@ -33,6 +33,13 @@ int ArchiveReader::ConsumeBlock() {
 }
 
 int ArchiveReader::GetLine(std::string_view* line) {
+  if (block_.empty()) {
+    int r = ConsumeBlock();
+    if (r != ARCHIVE_OK) {
+      return r;
+    }
+  }
+
   // Take from the block if there's still newline-delimited bytes available.
   if (auto pos = block_.find('\n'); pos != block_.npos) {
     *line = {block_.data(), pos};
