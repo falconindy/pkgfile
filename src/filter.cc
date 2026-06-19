@@ -31,7 +31,7 @@ bool Bin::Matches(std::string_view line) const {
 
 Glob::Glob(std::string glob_pattern, bool case_sensitive)
     : glob_pattern_(std::move(glob_pattern)), flags_(FNM_PATHNAME) {
-  if (case_sensitive) {
+  if (!case_sensitive) {
     flags_ |= FNM_CASEFOLD;
   }
 }
