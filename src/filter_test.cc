@@ -65,6 +65,35 @@ TEST(RegexFilterTest, MatchesByRegex) {
   }
 }
 
+TEST(GlobFilter, MatchesByGlobCaseSensitive) {
+  pkgfile::filter::Glob filter("/usr/bin/*.so", true);
+
+  EXPECT_TRUE(filter.Matches("/usr/bin/foo.so"));
+  EXPECT_FALSE(filter.Matches("/usr/bin/foo.SO"));
+  // FNM_PATHNAME: '*' does not cross directory separators.
+  EXPECT_FALSE(filter.Matches("/usr/bin/sub/foo.so"));
+  EXPECT_FALSE(filter.Matches("/usr/lib/foo.so"));
+}
+
+TEST(GlobFilter, MatchesByGlobCaseInsensitive) {
+  pkgfile::filter::Glob filter("/usr/bin/*.so", false);
+
+  EXPECT_TRUE(filter.Matches("/usr/bin/foo.so"));
+  EXPECT_TRUE(filter.Matches("/usr/bin/FOO.SO"));
+  EXPECT_FALSE(filter.Matches("/usr/lib/foo.so"));
+}
+
+TEST(GlobFilter, ReusedFilterHandlesVaryingLengthInputs) {
+  // Exercises the reused per-thread buffer: a shorter input following a longer
+  // one must not match against stale trailing bytes.
+  pkgfile::filter::Glob filter("*.h", true);
+
+  EXPECT_TRUE(filter.Matches("a_very_long_header_name.h"));
+  EXPECT_TRUE(filter.Matches("x.h"));
+  EXPECT_FALSE(filter.Matches("x.c"));
+  EXPECT_TRUE(filter.Matches("a_very_long_header_name.h"));
+}
+
 TEST(AndFilterTest, MatchesByComposite) {
   auto regex_filter = pkgfile::filter::Regex::Compile("some.*regex.*", true);
   auto regex = regex_filter.get();

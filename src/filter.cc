@@ -37,7 +37,13 @@ Glob::Glob(std::string glob_pattern, bool case_sensitive)
 }
 
 bool Glob::Matches(std::string_view line) const {
-  return fnmatch(glob_pattern_.c_str(), std::string(line).c_str(), flags_) == 0;
+  // fnmatch needs a NUL-terminated string, but this runs on every candidate
+  // line. Reuse a per-thread buffer to avoid an allocation per call. Matching
+  // happens concurrently across worker threads, so the buffer must be
+  // thread_local rather than a member.
+  thread_local std::string buf;
+  buf.assign(line);
+  return fnmatch(glob_pattern_.c_str(), buf.c_str(), flags_) == 0;
 }
 
 Regex::~Regex() {
