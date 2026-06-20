@@ -2,7 +2,6 @@
 
 #include <pcre.h>
 
-#include <functional>
 #include <memory>
 #include <span>
 #include <string>
@@ -97,7 +96,8 @@ class Exact : public Filter {
   bool Matches(std::string_view line) const override;
 
  private:
-  std::function<bool(std::string_view)> predicate_;
+  std::string match_;
+  bool case_sensitive_;
 };
 
 class Basename : public Filter {

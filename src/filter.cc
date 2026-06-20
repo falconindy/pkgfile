@@ -80,20 +80,17 @@ bool Regex::Matches(std::string_view line) const {
                    PCRE_NO_UTF16_CHECK, nullptr, 0) >= 0;
 }
 
-Exact::Exact(std::string match, bool case_sensitive) {
-  if (case_sensitive) {
-    predicate_ = [m = std::move(match)](std::string_view line) {
-      return m == line;
-    };
-  } else {
-    predicate_ = [m = std::move(match)](std::string_view line) {
-      return line.size() == m.size() &&
-             strncasecmp(line.data(), m.data(), m.size()) == 0;
-    };
-  }
-}
+Exact::Exact(std::string match, bool case_sensitive)
+    : match_(std::move(match)), case_sensitive_(case_sensitive) {}
 
-bool Exact::Matches(std::string_view line) const { return predicate_(line); }
+bool Exact::Matches(std::string_view line) const {
+  if (case_sensitive_) {
+    return line == match_;
+  }
+
+  return line.size() == match_.size() &&
+         strncasecmp(line.data(), match_.data(), match_.size()) == 0;
+}
 
 Basename::Basename(std::string match, bool case_sensitive)
     : predicate_(std::make_unique<Exact>(match, case_sensitive)) {}
