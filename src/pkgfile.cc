@@ -252,9 +252,9 @@ int Pkgfile::SearchRepoChunks(Database::RepoChunks repo_chunks,
   workers.reserve(num_workers);
   for (int i = 0; i < num_workers; ++i) {
     workers.push_back(std::thread([&] {
-      while (!queue.empty()) {
-        WorkItem item = queue.dequeue();
-        ProcessRepo(*item.reponame, *item.filepath, *item.filter, item.result);
+      while (auto item = queue.try_dequeue()) {
+        ProcessRepo(*item->reponame, *item->filepath, *item->filter,
+                    item->result);
       }
     }));
   }

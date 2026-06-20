@@ -187,6 +187,7 @@ if gtest.found() and gmock.found()
             files(
                 '''
         src/filter_test.cc
+        src/queue_test.cc
         src/repo_test.cc
       '''.split(),
             ),
