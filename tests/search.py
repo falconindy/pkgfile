@@ -69,6 +69,13 @@ class TestUpdate(pkgfile_test.TestCase):
         r = self.Pkgfile(['-s', 'filedoesntexist'])
         self.assertNotEqual(r.returncode, 0)
 
+    def testSearchDirectoryWithoutDirectoriesFlagFindsNothing(self):
+        # A trailing-slash query names a directory; without -d it must be
+        # excluded, even though it's an exact match for a directory entry.
+        r = self.Pkgfile(['-s', '/usr/lib/dhcpcd/dhcpcd-hooks/'])
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(r.stdout.decode(), '')
+
     def testSearchDirectories(self):
         r = self.Pkgfile(['-s', '-d', '/usr/lib/dhcpcd/dhcpcd-hooks/'])
         self.assertEqual(r.returncode, 0)
