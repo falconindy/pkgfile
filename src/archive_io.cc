@@ -44,7 +44,7 @@ ReadOnlyFile::~ReadOnlyFile() { close(fd_); }
 std::unique_ptr<ReadArchive> ReadArchive::New(int fd, const char** error) {
   std::unique_ptr<ReadArchive> a(new ReadArchive(fd));
 
-  if (archive_read_open_fd(a->a_, fd, BUFSIZ) != ARCHIVE_OK) {
+  if (archive_read_open_fd(a->a_, fd, 1024 * 128) != ARCHIVE_OK) {
     *error = strerror(archive_errno(a->a_));
     return nullptr;
   }
