@@ -272,11 +272,10 @@ void Updater::TidyCacheDir(const std::set<std::string>& known_repos) {
   }
 
   for (const auto& entry : fs::directory_iterator(cachedir_, ec)) {
-    const fs::path filename = entry.path().filename();
-    const fs::path reponame = entry.path().stem().stem();
+    const auto reponame =
+        RepoNameFromCacheFile(entry.path().filename().native());
 
-    if (!FilenameHasRepoSuffix(filename.c_str()) ||
-        !known_repos.contains(reponame)) {
+    if (!reponame || !known_repos.contains(*reponame)) {
       std::error_code ec;
       fs::remove(entry, ec);
       if (ec.value() != 0) {

@@ -188,4 +188,14 @@ bool FilenameHasRepoSuffix(std::string_view path) {
   return ndigits == 3;
 }
 
+std::optional<std::string> RepoNameFromCacheFile(std::string_view filename) {
+  if (!FilenameHasRepoSuffix(filename)) {
+    return std::nullopt;
+  }
+
+  // FilenameHasRepoSuffix guarantees the form "<repo>.files.NNN" with exactly
+  // two dots, so the repo name is everything up to the ".files." suffix.
+  return std::string(filename.substr(0, filename.find(".files.")));
+}
+
 // vim: set ts=2 sw=2 et:

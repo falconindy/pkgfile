@@ -4,7 +4,9 @@
 
 #include <chrono>
 #include <future>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 enum class DownloadResult {
@@ -64,5 +66,10 @@ struct AlpmConfig {
 // Verifies that the given file path has a format of "${reponame}.files.nnn"
 // where 'n' is an 0-indexed, zero-padded, increasing integer.
 bool FilenameHasRepoSuffix(std::string_view path);
+
+// Returns the repo name a pkgfile cache database file belongs to, e.g.
+// "core.files.000" -> "core", or std::nullopt if the filename is not a chunked
+// repo database file (as recognized by FilenameHasRepoSuffix).
+std::optional<std::string> RepoNameFromCacheFile(std::string_view filename);
 
 // vim: set ts=2 sw=2 et:

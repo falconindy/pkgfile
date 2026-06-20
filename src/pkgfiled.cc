@@ -3,17 +3,22 @@
 #include <systemd/sd-event.h>
 #include <utime.h>
 
+#include <algorithm>
 #include <chrono>
 #include <format>
 #include <future>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "archive_converter.hh"
 #include "compress.hh"
+#include "repo.hh"
 
 namespace fs = std::filesystem;
 
@@ -55,13 +60,18 @@ class Pkgfiled {
     // If true, synchronize the watch path with the pkgfile cache and then
     // exit.
     bool oneshot = false;
+
+    // Path to the pacman config file describing which repos are enabled.
+    std::string config = DEFAULT_PACMAN_CONF;
   };
 
   Pkgfiled(std::string_view watch_path, std::string_view pkgfile_cache,
            Options options)
       : watch_path_(watch_path),
         pkgfile_cache_(pkgfile_cache),
-        options_(options) {
+        config_path_(options.config),
+        options_(options),
+        enabled_repos_(ReadEnabledRepos().value_or(std::set<std::string>{})) {
     const int shutdown_signal = isatty(fileno(stdin)) ? SIGINT : SIGTERM;
 
     BlockSignals({shutdown_signal, SIGUSR1, SIGUSR2}, &saved_ss_);
@@ -71,6 +81,18 @@ class Pkgfiled {
     sd_event_add_inotify(sd_event_, &inotify_source_, watch_path_.c_str(),
                          IN_MOVED_TO, &Pkgfiled::OnInotifyEvent, this);
     sd_event_source_set_priority(inotify_source_, SD_EVENT_PRIORITY_IMPORTANT);
+
+    // Watch the directory containing the config file rather than the file
+    // itself so that we still notice changes when an editor replaces the file
+    // by rename (write-to-temp + rename-over). No IN_CREATE because editors
+    // like vim do an open with O_CREAT|O_TRUNC and then rewrite the file. This
+    // would trigger the inotify watch twice, with the first time deleting the
+    // whole cache.
+    sd_event_add_inotify(sd_event_, &config_source_,
+                         config_path_.parent_path().c_str(),
+                         IN_CLOSE_WRITE | IN_MOVED_TO,
+                         &Pkgfiled::OnConfigEvent, this);
+    sd_event_source_set_priority(config_source_, SD_EVENT_PRIORITY_IMPORTANT);
 
     sd_event_add_signal(sd_event_, &sigterm_source_, shutdown_signal,
                         &Pkgfiled::OnSignalEvent, this);
@@ -84,6 +106,7 @@ class Pkgfiled {
 
   ~Pkgfiled() {
     sd_event_source_unref(inotify_source_);
+    sd_event_source_unref(config_source_);
     sd_event_source_unref(sigterm_source_);
     sd_event_source_unref(sigusr1_source_);
     sd_event_source_unref(sigusr2_source_);
@@ -107,6 +130,10 @@ class Pkgfiled {
 
     for (auto& p : fs::directory_iterator(watch_path_)) {
       if (!p.is_regular_file() || p.path().extension() != kFilesExt) {
+        continue;
+      }
+
+      if (!enabled_repos_.contains(p.path().stem().string())) {
         continue;
       }
 
@@ -153,16 +180,64 @@ class Pkgfiled {
       std::chrono::duration<double> dur =
           std::chrono::system_clock::now() - start_time;
 
-      std::cerr << std::format("finished repacking {} ({:.3f})\n",
+      std::cerr << std::format("finished repacking {} ({:.3f}s)\n",
                                changed_path.filename().string(), dur.count());
     }
 
     return ok;
   }
 
+  // Reads the set of enabled repo names from the pacman config file, or
+  // std::nullopt if the config could not be parsed. Callers keep their current
+  // set on failure, so a malformed config (e.g. an editor mid-save) can never
+  // wipe the cache.
+  std::optional<std::set<std::string>> ReadEnabledRepos() {
+    AlpmConfig alpm_config;
+    if (AlpmConfig::LoadFromFile(config_path_.c_str(), &alpm_config) < 0) {
+      std::cerr << std::format("warning: failed to parse {}\n",
+                               config_path_.string());
+      return std::nullopt;
+    }
+
+    std::set<std::string> repos;
+    for (auto& repo : alpm_config.repos) {
+      repos.insert(std::move(repo.name));
+    }
+
+    return repos;
+  }
+
+  // Removes the pkgfile cache DBs belonging to any of the given repos. Unlike
+  // Updater::TidyCacheDir, this only touches files owned by the named repos,
+  // leaving the rest of the cache (e.g. the .db_version marker) untouched.
+  void RemoveReposFromCache(const std::set<std::string>& repos) {
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(pkgfile_cache_, ec)) {
+      const auto reponame =
+          RepoNameFromCacheFile(entry.path().filename().native());
+      if (!reponame || !repos.contains(*reponame)) {
+        continue;
+      }
+
+      fs::remove(entry, ec);
+      if (ec.value() != 0) {
+        std::cerr << std::format(
+            "warning: failed to remove cache file {}: {}\n",
+            entry.path().string(), ec.message());
+      } else {
+        std::cerr << std::format("removed cache for disabled repo: {}\n",
+                                 entry.path().filename().string());
+      }
+    }
+  }
+
   int OnInotifyEvent(const struct inotify_event* event) {
     const fs::path changed_path(event->name);
     if (changed_path.extension() != kFilesExt) {
+      return 0;
+    }
+
+    if (!enabled_repos_.contains(changed_path.stem().string())) {
       return 0;
     }
 
@@ -174,6 +249,51 @@ class Pkgfiled {
   static int OnInotifyEvent(sd_event_source*, const struct inotify_event* event,
                             void* userdata) {
     return static_cast<Pkgfiled*>(userdata)->OnInotifyEvent(event);
+  }
+
+  int OnConfigEvent(const struct inotify_event* event) {
+    if (config_path_.filename() != event->name) {
+      return 0;
+    }
+
+    auto parsed = ReadEnabledRepos();
+    if (!parsed.has_value() || *parsed == enabled_repos_) {
+      return 0;
+    }
+    std::set<std::string>& next = *parsed;
+
+    std::vector<std::string> added;
+    std::set<std::string> removed;
+    std::set_difference(next.begin(), next.end(), enabled_repos_.begin(),
+                        enabled_repos_.end(), std::back_inserter(added));
+    std::set_difference(enabled_repos_.begin(), enabled_repos_.end(),
+                        next.begin(), next.end(),
+                        std::inserter(removed, removed.end()));
+
+    enabled_repos_ = std::move(next);
+
+    std::cerr << std::format(
+        "{} changed: {} repo(s) added, {} repo(s) removed\n",
+        config_path_.string(), added.size(), removed.size());
+
+    RemoveReposFromCache(removed);
+
+    // Catch up on newly-enabled repos whose .files already exist in the watch
+    // path; future updates arrive via the normal inotify path.
+    for (const auto& reponame : added) {
+      const fs::path input = reponame + std::string(kFilesExt);
+      std::error_code ec;
+      if (fs::exists(watch_path_ / input, ec)) {
+        RepackRepo(input);
+      }
+    }
+
+    return 0;
+  }
+
+  static int OnConfigEvent(sd_event_source*, const struct inotify_event* event,
+                           void* userdata) {
+    return static_cast<Pkgfiled*>(userdata)->OnConfigEvent(event);
   }
 
   int OnSignalEvent(const struct signalfd_siginfo* si) {
@@ -204,10 +324,13 @@ class Pkgfiled {
 
   fs::path watch_path_;
   fs::path pkgfile_cache_;
+  fs::path config_path_;
   Options options_;
+  std::set<std::string> enabled_repos_;
 
   sd_event* sd_event_;
   sd_event_source* inotify_source_;
+  sd_event_source* config_source_;
   sd_event_source* sigterm_source_;
   sd_event_source* sigusr1_source_;
   sd_event_source* sigusr2_source_;
@@ -221,7 +344,10 @@ namespace {
 void Usage() {
   std::cout << "pkgfiled " PACKAGE_VERSION
                "\nUsage: pkgfiled [options] pacman_source pkgfile_dest\n\n";
-  std::cout << "  -f, --force             repack all repos on initial sync\n"
+  std::cout << "  -C, --config <file>     use an alternate pacman config "
+               "(default: " DEFAULT_PACMAN_CONF
+               ")\n"
+               "  -f, --force             repack all repos on initial sync\n"
                "  -o, --oneshot           exit after initial sync \n"
                "  -z, --compress[=type]   compress downloaded repos\n\n"
                "  -h, --help              display this help and exit\n"
@@ -231,14 +357,15 @@ void Usage() {
 void Version(void) { std::cout << "pkgfiled v" PACKAGE_VERSION "\n"; }
 
 std::optional<pkgfile::Pkgfiled::Options> ParseOpts(int* argc, char*** argv) {
-  static constexpr char kShortOpts[] = "hofVz:";
+  static constexpr char kShortOpts[] = "C:hofVz:";
   static constexpr struct option kLongOpts[] = {
       // clang-format off
+      { "config",     required_argument,  0, 'C' },
       { "oneshot",    no_argument,        0, 'o' },
       { "help",       no_argument,        0, 'h' },
       { "force",      no_argument,        0, 'f' },
       { "compress",   required_argument,  0, 'z' },
-      { "version",    required_argument,  0, 'V' },
+      { "version",    no_argument,        0, 'V' },
       { 0, 0, 0, 0 },
       // clang-format on
   };
@@ -254,6 +381,9 @@ std::optional<pkgfile::Pkgfiled::Options> ParseOpts(int* argc, char*** argv) {
       case 'h':
         Usage();
         exit(0);
+      case 'C':
+        opts.config = optarg;
+        break;
       case 'o':
         opts.oneshot = true;
         break;

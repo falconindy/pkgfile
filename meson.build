@@ -208,6 +208,7 @@ if py3.found() and py3.language_version().version_compare(python_requirement)
     integration_tests = [
       'tests/database.py',
       'tests/list.py',
+      'tests/pkgfiled.py',
       'tests/search.py',
       'tests/update.py'
     ]

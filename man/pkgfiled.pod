@@ -17,13 +17,26 @@ pacman database files from (typically under I</var/lib/pacman/sync>), and a
 destination directory which pkgfile will read from (typically
 I</var/cache/pkgfile>). A systemd unit facilitates management of the daemon.
 
+pkgfiled reads the set of enabled repositories from B<pacman>'s configuration
+file (see B<--config>) and only repackages databases for those repositories;
+databases for repositories which are not enabled are ignored.
+
 Upon starting, pkgfiled will compare the contents of the pacman database with
 the pkgfile cache and catch up with anything out of sync. After this, it will
 only wake up when changes occur to the pacman database.
 
+pkgfiled also watches the pacman configuration file. When it changes, pkgfiled
+re-reads the enabled repositories, removes cached databases for repositories
+which are no longer enabled, and syncs databases for newly enabled repositories.
+
 =head1 OPTIONS
 
 =over 4
+
+=item B<-C>, B<--config> I<FILE>
+
+Read enabled repositories from the pacman configuration file I<FILE> rather than
+the default of I</etc/pacman.conf>.
 
 =item B<-f>, B<--force>
 

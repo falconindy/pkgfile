@@ -14,4 +14,12 @@ TEST(RepoTest, FilenameHasRepoSuffix) {
   EXPECT_FALSE(FilenameHasRepoSuffix("extra.files.00"));
 }
 
+TEST(RepoTest, RepoNameFromCacheFile) {
+  EXPECT_EQ(RepoNameFromCacheFile("extra.files.000"), "extra");
+  EXPECT_EQ(RepoNameFromCacheFile("core.files.999"), "core");
+  EXPECT_EQ(RepoNameFromCacheFile("extra.files"), std::nullopt);
+  EXPECT_EQ(RepoNameFromCacheFile("extra.000"), std::nullopt);
+  EXPECT_EQ(RepoNameFromCacheFile(".db_version"), std::nullopt);
+}
+
 }  // namespace
