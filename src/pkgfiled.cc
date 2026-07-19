@@ -88,10 +88,9 @@ class Pkgfiled {
     // like vim do an open with O_CREAT|O_TRUNC and then rewrite the file. This
     // would trigger the inotify watch twice, with the first time deleting the
     // whole cache.
-    sd_event_add_inotify(sd_event_, &config_source_,
-                         config_path_.parent_path().c_str(),
-                         IN_CLOSE_WRITE | IN_MOVED_TO,
-                         &Pkgfiled::OnConfigEvent, this);
+    sd_event_add_inotify(
+        sd_event_, &config_source_, config_path_.parent_path().c_str(),
+        IN_CLOSE_WRITE | IN_MOVED_TO, &Pkgfiled::OnConfigEvent, this);
     sd_event_source_set_priority(config_source_, SD_EVENT_PRIORITY_IMPORTANT);
 
     sd_event_add_signal(sd_event_, &sigterm_source_, shutdown_signal,

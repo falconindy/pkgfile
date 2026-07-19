@@ -58,7 +58,8 @@ TEST(ThreadSafeQueueTest, ConcurrentDrainConsumesEveryItemExactlyOnce) {
     queue.enqueue(int{i});
   }
 
-  const unsigned num_workers = std::max(2u, std::thread::hardware_concurrency());
+  const unsigned num_workers =
+      std::max(2u, std::thread::hardware_concurrency());
   std::vector<std::atomic<int>> seen(kItems);
   std::atomic<int> total_consumed{0};
 
@@ -81,7 +82,7 @@ TEST(ThreadSafeQueueTest, ConcurrentDrainConsumesEveryItemExactlyOnce) {
   EXPECT_EQ(queue.size(), 0u);
   for (int i = 0; i < kItems; ++i) {
     EXPECT_EQ(seen[i].load(), 1) << "item " << i << " consumed wrong number of "
-                                << "times";
+                                 << "times";
   }
 }
 
