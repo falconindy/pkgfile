@@ -293,28 +293,39 @@ int Pkgfile::SearchRepoChunks(Database::RepoChunks repo_chunks,
 }
 
 std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
-    const Pkgfile::Options& options, const std::string& match) {
+    const Pkgfile::Options& options, std::string query) {
   std::unique_ptr<filter::Filter> filter;
 
   switch (options.filterby) {
     case FilterStyle::EXACT:
       if (options.mode == MODE_SEARCH) {
-        if (match.find('/') != match.npos) {
+
+#ifdef _WIN32
+        // In Windows-like environments, binaries can be executed by name
+        // without their .exe suffix. Provide the same allowance to pkgfile.
+        // This mainly facilitates the cmd-not-found hooks, but direct calls
+        // to `pkgfile -b` can benefit as well.
+        if (options.binaries && !std::string_view(query).ends_with(".exe")) {
+          query.append(".exe");
+        }
+#endif
+
+        if (query.find('/') != query.npos) {
           filter =
-              std::make_unique<filter::Exact>(match, options.case_sensitive);
+              std::make_unique<filter::Exact>(query, options.case_sensitive);
         } else {
           filter =
-              std::make_unique<filter::Basename>(match, options.case_sensitive);
+              std::make_unique<filter::Basename>(query, options.case_sensitive);
         }
       } else if (options.mode == MODE_LIST) {
-        filter = std::make_unique<filter::Exact>(match, options.case_sensitive);
+        filter = std::make_unique<filter::Exact>(query, options.case_sensitive);
       }
       break;
     case FilterStyle::GLOB:
-      filter = std::make_unique<filter::Glob>(match, options.case_sensitive);
+      filter = std::make_unique<filter::Glob>(query, options.case_sensitive);
       break;
     case FilterStyle::REGEX:
-      filter = filter::Regex::Compile(match, options.case_sensitive);
+      filter = filter::Regex::Compile(query, options.case_sensitive);
       if (filter == nullptr) {
         return nullptr;
       }

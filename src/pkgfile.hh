@@ -66,7 +66,7 @@ class Pkgfile {
       const ParsedPkgname& pkg, Result* result, ArchiveReader* reader)>;
 
   std::unique_ptr<filter::Filter> BuildFilterFromOptions(
-      const Options& config, const std::string& match);
+      const Options& config, std::string query);
 
   static bool ParsePkgname(ParsedPkgname* pkg, std::string_view entryname);
 
