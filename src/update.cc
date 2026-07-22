@@ -69,7 +69,7 @@ std::string PrepareUrl(const std::string& url_template, const std::string& repo,
 }
 
 size_t WriteHandler(void* ptr, size_t size, size_t nmemb, void* data) {
-  struct Repo* repo = (Repo*)data;
+  pkgfile::DownloadJob* job = (pkgfile::DownloadJob*)data;
   const uint8_t* p = (uint8_t*)ptr;
   size_t nbytes = size * nmemb;
   ssize_t n = 0;
@@ -77,7 +77,7 @@ size_t WriteHandler(void* ptr, size_t size, size_t nmemb, void* data) {
   while (nbytes > 0) {
     ssize_t k;
 
-    k = write(repo->tmpfile.fd, p, nbytes);
+    k = write(job->tmpfile.fd, p, nbytes);
     if (k < 0 && errno == EINTR) {
       continue;
     }
@@ -136,11 +136,12 @@ int PrintRate(double xfer, const char* xfer_label, double rate,
   }
 }
 
-void PrintDownloadSuccess(struct Repo* repo, int remaining, double elapsed) {
-  double rate = repo->tmpfile.size / elapsed;
-  auto [xfered_human, xfered_label] = Humanize(repo->tmpfile.size);
+void PrintDownloadSuccess(pkgfile::DownloadJob* job, int remaining,
+                          double elapsed) {
+  double rate = job->tmpfile.size / elapsed;
+  auto [xfered_human, xfered_label] = Humanize(job->tmpfile.size);
 
-  printf("  download complete: %-20s [", repo->name.c_str());
+  printf("  download complete: %-20s [", job->repo.name.c_str());
 
   int width;
   if (fabs(rate - INFINITY) < DBL_EPSILON) {
@@ -157,16 +158,17 @@ void PrintRepackSuccess(const std::string& reponame, double elapsed) {
                            elapsed);
 }
 
-int WaitForRepacking(std::vector<Repo>* repos, bool show_message) {
+int WaitForRepacking(std::vector<pkgfile::DownloadJob>* jobs,
+                     bool show_message) {
   if (show_message) {
-    int running =
-        std::count_if(repos->begin(), repos->end(), [](const Repo& repo) {
+    int running = std::count_if(
+        jobs->begin(), jobs->end(), [](const pkgfile::DownloadJob& job) {
           // The future won't be valid if the repo was up to date.
-          if (!repo.worker.valid()) {
+          if (!job.worker.valid()) {
             return false;
           }
 
-          return repo.worker.wait_for(chrono::seconds::zero()) !=
+          return job.worker.wait_for(chrono::seconds::zero()) !=
                  std::future_status::ready;
         });
 
@@ -177,9 +179,10 @@ int WaitForRepacking(std::vector<Repo>* repos, bool show_message) {
     }
   }
 
-  return std::count_if(repos->begin(), repos->end(), [](Repo& repo) {
-    return repo.worker.valid() && !repo.worker.get();
-  });
+  return std::count_if(jobs->begin(), jobs->end(),
+                       [](pkgfile::DownloadJob& job) {
+                         return job.worker.valid() && !job.worker.get();
+                       });
 }
 
 // curl's xfer info callback: reports download progress for one repo's
@@ -188,9 +191,9 @@ int WaitForRepacking(std::vector<Repo>* repos, bool show_message) {
 // rest, since repack progress does come from other threads.
 int XferInfoCallback(void* clientp, curl_off_t dltotal, curl_off_t dlnow,
                      curl_off_t, curl_off_t) {
-  auto* repo = static_cast<Repo*>(clientp);
-  if (repo->progress != nullptr) {
-    repo->progress->UpdateDownload(repo->progress_index, dlnow, dltotal);
+  auto* job = static_cast<pkgfile::DownloadJob*>(clientp);
+  if (job->progress != nullptr) {
+    job->progress->UpdateDownload(job->progress_index, dlnow, dltotal);
   }
   return 0;
 }
@@ -199,108 +202,115 @@ int XferInfoCallback(void* clientp, curl_off_t dltotal, curl_off_t dlnow,
 
 namespace pkgfile {
 
-int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
-  if (repo->curl == nullptr) {
-    if (repo->servers.empty()) {
+DownloadJob::~DownloadJob() {
+  if (tmpfile.fd >= 0) {
+    close(tmpfile.fd);
+  }
+}
+
+int Updater::DownloadQueueRequest(CURLM* multi, DownloadJob* job) {
+  if (job->curl == nullptr) {
+    if (job->repo.servers.empty()) {
       std::cerr << std::format("error: no servers configured for repo {}\n",
-                               repo->name);
+                               job->repo.name);
       return -1;
     }
-    repo->curl = curl_easy_init();
-    repo->server_iter = repo->servers.begin();
+    job->curl = curl_easy_init();
+    job->server_iter = job->repo.servers.begin();
 
-    repo->diskfile = cachedir_ + "/" + repo->name + ".files";
-    curl_easy_setopt(repo->curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(repo->curl, CURLOPT_FILETIME, 1L);
-    curl_easy_setopt(repo->curl, CURLOPT_WRITEFUNCTION, WriteHandler);
-    curl_easy_setopt(repo->curl, CURLOPT_WRITEDATA, repo);
-    curl_easy_setopt(repo->curl, CURLOPT_PRIVATE, repo);
-    curl_easy_setopt(repo->curl, CURLOPT_ERRORBUFFER, repo->errmsg);
-    curl_easy_setopt(repo->curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
-    curl_easy_setopt(repo->curl, CURLOPT_USERAGENT,
+    job->diskfile = cachedir_ + "/" + job->repo.name + ".files";
+    curl_easy_setopt(job->curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(job->curl, CURLOPT_FILETIME, 1L);
+    curl_easy_setopt(job->curl, CURLOPT_WRITEFUNCTION, WriteHandler);
+    curl_easy_setopt(job->curl, CURLOPT_WRITEDATA, job);
+    curl_easy_setopt(job->curl, CURLOPT_PRIVATE, job);
+    curl_easy_setopt(job->curl, CURLOPT_ERRORBUFFER, job->errmsg);
+    curl_easy_setopt(job->curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY);
+    curl_easy_setopt(job->curl, CURLOPT_USERAGENT,
                      PACKAGE_NAME "/v" PACKAGE_VERSION);
-    curl_easy_setopt(repo->curl, CURLOPT_NETRC, CURL_NETRC_OPTIONAL);
-    curl_easy_setopt(repo->curl, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(repo->curl, CURLOPT_XFERINFOFUNCTION, XferInfoCallback);
-    curl_easy_setopt(repo->curl, CURLOPT_XFERINFODATA, repo);
-    repo->tmpfile.fd = OpenTmpfile(O_RDWR | O_NONBLOCK);
-    if (repo->tmpfile.fd < 0) {
+    curl_easy_setopt(job->curl, CURLOPT_NETRC, CURL_NETRC_OPTIONAL);
+    curl_easy_setopt(job->curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(job->curl, CURLOPT_XFERINFOFUNCTION, XferInfoCallback);
+    curl_easy_setopt(job->curl, CURLOPT_XFERINFODATA, job);
+    job->tmpfile.fd = OpenTmpfile(O_RDWR | O_NONBLOCK);
+    if (job->tmpfile.fd < 0) {
       std::cerr << std::format(
           "error: failed to create temporary file for download: {}\n",
-          strerror(-repo->tmpfile.fd));
+          strerror(-job->tmpfile.fd));
       return -1;
     }
   } else {
-    curl_multi_remove_handle(multi, repo->curl);
-    lseek(repo->tmpfile.fd, 0, SEEK_SET);
-    repo->server_iter++;
+    curl_multi_remove_handle(multi, job->curl);
+    lseek(job->tmpfile.fd, 0, SEEK_SET);
+    job->server_iter++;
   }
 
-  if (repo->server_iter == repo->servers.end()) {
-    std::cerr << std::format("error: failed to update repo: {}\n", repo->name);
+  if (job->server_iter == job->repo.servers.end()) {
+    std::cerr << std::format("error: failed to update repo: {}\n",
+                             job->repo.name);
     return -1;
   }
 
-  std::string url = PrepareUrl(*repo->server_iter, repo->name, repo->arch);
+  std::string url = PrepareUrl(*job->server_iter, job->repo.name, job->arch);
 
-  curl_easy_setopt(repo->curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(job->curl, CURLOPT_URL, url.c_str());
 
-  if (repo->force == 0) {
+  if (!job->force) {
     // The db file's own mtime is stamped with the upstream archive's mtime
     // when it's (re)written (see DbBuilder::WriteToFile), so a plain stat()
     // here tells us what we last saw from the server.
     struct stat st;
-    if (stat(repo->diskfile.c_str(), &st) == 0) {
-      curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
-      curl_easy_setopt(repo->curl, CURLOPT_TIMECONDITION,
+    if (stat(job->diskfile.c_str(), &st) == 0) {
+      curl_easy_setopt(job->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
+      curl_easy_setopt(job->curl, CURLOPT_TIMECONDITION,
                        CURL_TIMECOND_IFMODSINCE);
     }
   }
 
-  repo->dl_time_start = now();
-  curl_multi_add_handle(multi, repo->curl);
+  job->dl_time_start = now();
+  curl_multi_add_handle(multi, job->curl);
 
   return 0;
 }
 
-bool Updater::RepackRepoData(const struct Repo* repo) {
+bool Updater::RepackRepoData(const DownloadJob* job) {
   const auto start = now();
-  auto FinishRepack = [repo, start](ProgressDisplay::Stage stage) {
+  auto FinishRepack = [job, start](ProgressDisplay::Stage stage) {
     const double elapsed = chrono::duration<double>(now() - start).count();
-    if (repo->progress != nullptr) {
+    if (job->progress != nullptr) {
       if (stage == ProgressDisplay::Stage::kDone &&
-          !repo->progress->IsInteractive()) {
-        PrintRepackSuccess(repo->name, elapsed);
+          !job->progress->IsInteractive()) {
+        PrintRepackSuccess(job->repo.name, elapsed);
       }
-      repo->progress->FinishRepack(repo->progress_index, stage, elapsed);
+      job->progress->FinishRepack(job->progress_index, stage, elapsed);
     }
   };
 
   const char* error;
   auto builder = db::DbBuilder::FromArchive(
-      repo->name, repo->tmpfile.fd, &error, [repo](int64_t bytes_read) {
-        if (repo->progress != nullptr) {
-          repo->progress->UpdateRepack(repo->progress_index, bytes_read,
-                                       repo->tmpfile.size);
+      job->repo.name, job->tmpfile.fd, &error, [job](int64_t bytes_read) {
+        if (job->progress != nullptr) {
+          job->progress->UpdateRepack(job->progress_index, bytes_read,
+                                      job->tmpfile.size);
         }
       });
   if (builder == nullptr) {
     std::cerr << std::format("error: failed to read archive for {}: {}\n",
-                             repo->name, error);
+                             job->repo.name, error);
     FinishRepack(ProgressDisplay::Stage::kFailed);
     return false;
   }
 
   struct stat st;
-  if (fstat(repo->tmpfile.fd, &st) < 0) {
+  if (fstat(job->tmpfile.fd, &st) < 0) {
     std::cerr << std::format(
-        "error: failed to stat downloaded archive for {}: {}\n", repo->name,
+        "error: failed to stat downloaded archive for {}: {}\n", job->repo.name,
         strerror(errno));
     FinishRepack(ProgressDisplay::Stage::kFailed);
     return false;
   }
 
-  const bool ok = builder->WriteToFile(repo->diskfile, st.st_mtim.tv_sec);
+  const bool ok = builder->WriteToFile(job->diskfile, st.st_mtim.tv_sec);
   FinishRepack(ok ? ProgressDisplay::Stage::kDone
                   : ProgressDisplay::Stage::kFailed);
   return ok;
@@ -372,72 +382,72 @@ int Updater::DownloadCheckComplete(CURLM* multi, int remaining) {
   if (msg->msg == CURLMSG_DONE) {
     long uptodate, resp;
     char* effective_url;
-    struct Repo* repo;
+    DownloadJob* job;
     time_t remote_mtime;
 
-    curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &repo);
+    curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &job);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_CONDITION_UNMET, &uptodate);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &resp);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL, &effective_url);
     curl_easy_getinfo(msg->easy_handle, CURLINFO_FILETIME_T, &remote_mtime);
 
     if (uptodate) {
-      if (repo->progress != nullptr) {
-        if (!repo->progress->IsInteractive()) {
-          std::cout << std::format("  {} is up to date\n", repo->name);
+      if (job->progress != nullptr) {
+        if (!job->progress->IsInteractive()) {
+          std::cout << std::format("  {} is up to date\n", job->repo.name);
         }
-        repo->progress->FinishDownload(repo->progress_index,
-                                       ProgressDisplay::Stage::kSkipped);
-        repo->progress->FinishRepack(repo->progress_index,
-                                     ProgressDisplay::Stage::kSkipped);
+        job->progress->FinishDownload(job->progress_index,
+                                      ProgressDisplay::Stage::kSkipped);
+        job->progress->FinishRepack(job->progress_index,
+                                    ProgressDisplay::Stage::kSkipped);
       }
-      repo->dl_result = DownloadResult::UPTODATE;
+      job->dl_result = DownloadResult::UPTODATE;
       return 0;
     }
 
     // was it a success?
     if (msg->data.result != CURLE_OK || resp >= 400) {
-      repo->dl_result = DownloadResult::ERROR;
-      if (*repo->errmsg) {
+      job->dl_result = DownloadResult::ERROR;
+      if (*job->errmsg) {
         std::cerr << std::format("warning: download failed: {}: {}\n",
-                                 effective_url, repo->errmsg);
+                                 effective_url, job->errmsg);
       } else {
         std::cerr << std::format("warning: download failed: {} [error {}]\n",
                                  effective_url, resp);
       }
 
-      const int r = DownloadQueueRequest(multi, repo);
-      if (r != 0 && repo->progress != nullptr) {
+      const int r = DownloadQueueRequest(multi, job);
+      if (r != 0 && job->progress != nullptr) {
         // No more servers left to retry: this repo is done for good.
-        repo->progress->FinishDownload(repo->progress_index,
-                                       ProgressDisplay::Stage::kFailed);
-        repo->progress->FinishRepack(repo->progress_index,
-                                     ProgressDisplay::Stage::kFailed);
+        job->progress->FinishDownload(job->progress_index,
+                                      ProgressDisplay::Stage::kFailed);
+        job->progress->FinishRepack(job->progress_index,
+                                    ProgressDisplay::Stage::kFailed);
       }
       return r;
     }
 
-    repo->tmpfile.size = lseek(repo->tmpfile.fd, 0, SEEK_CUR);
-    lseek(repo->tmpfile.fd, 0, SEEK_SET);
+    job->tmpfile.size = lseek(job->tmpfile.fd, 0, SEEK_CUR);
+    lseek(job->tmpfile.fd, 0, SEEK_SET);
 
     struct timeval times[2] = {
         {remote_mtime, 0},
         {remote_mtime, 0},
     };
-    futimes(repo->tmpfile.fd, times);
+    futimes(job->tmpfile.fd, times);
 
-    if (repo->progress != nullptr) {
+    if (job->progress != nullptr) {
       const double elapsed =
-          chrono::duration<double>(now() - repo->dl_time_start).count();
-      if (!repo->progress->IsInteractive()) {
-        PrintDownloadSuccess(repo, remaining, elapsed);
+          chrono::duration<double>(now() - job->dl_time_start).count();
+      if (!job->progress->IsInteractive()) {
+        PrintDownloadSuccess(job, remaining, elapsed);
       }
-      repo->progress->FinishDownload(repo->progress_index,
-                                     ProgressDisplay::Stage::kDone, elapsed);
+      job->progress->FinishDownload(job->progress_index,
+                                    ProgressDisplay::Stage::kDone, elapsed);
     }
-    repo->worker = std::async(std::launch::async,
-                              [this, repo] { return RepackRepoData(repo); });
-    repo->dl_result = DownloadResult::OK;
+    job->worker = std::async(std::launch::async,
+                             [this, job] { return RepackRepoData(job); });
+    job->dl_result = DownloadResult::OK;
   }
 
   return 0;
@@ -484,14 +494,23 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
   }
   progress_ = std::make_unique<ProgressDisplay>(std::move(repo_names));
 
+  // One DownloadJob per repo, holding all state for this update run.
+  // References into `repos` stay valid: AlpmConfig::LoadFromFile already
+  // populated it and nothing resizes it afterwards.
+  std::vector<DownloadJob> jobs;
+  jobs.reserve(repos.size());
+  for (const auto& repo : repos) {
+    jobs.emplace_back(repo);
+  }
+
   // prime the handle by adding a URL from each repo
-  for (size_t i = 0; i < repos.size(); ++i) {
-    Repo& repo = repos[i];
-    repo.arch = alpm_config.architecture;
-    repo.force = force;
-    repo.progress = progress_.get();
-    repo.progress_index = i;
-    r = DownloadQueueRequest(curl_multi_, &repo);
+  for (size_t i = 0; i < jobs.size(); ++i) {
+    DownloadJob& job = jobs[i];
+    job.arch = alpm_config.architecture;
+    job.force = force;
+    job.progress = progress_.get();
+    job.progress_index = i;
+    r = DownloadQueueRequest(curl_multi_, &job);
     if (r != 0) {
       ret = r;
     }
@@ -500,11 +519,11 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
   DownloadWaitLoop(curl_multi_);
 
   // remove handles, check for errors
-  for (auto& repo : repos) {
-    curl_multi_remove_handle(curl_multi_, repo.curl);
-    curl_easy_cleanup(repo.curl);
+  for (auto& job : jobs) {
+    curl_multi_remove_handle(curl_multi_, job.curl);
+    curl_easy_cleanup(job.curl);
 
-    switch (repo.dl_result) {
+    switch (job.dl_result) {
       case DownloadResult::OK:
       case DownloadResult::UPTODATE:
         break;
@@ -512,13 +531,13 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
         ret = 1;
         break;
       default:
-        fprintf(stderr, "BUG: unhandled repo->dl_result=%d\n",
-                static_cast<int>(repo.dl_result));
+        fprintf(stderr, "BUG: unhandled job->dl_result=%d\n",
+                static_cast<int>(job.dl_result));
         break;
     }
   }
 
-  if (WaitForRepacking(&repos, !progress_->IsInteractive()) != 0) {
+  if (WaitForRepacking(&jobs, !progress_->IsInteractive()) != 0) {
     ret = 1;
   }
 

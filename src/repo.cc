@@ -5,7 +5,6 @@
 #include <glob.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include <format>
 #include <iostream>
@@ -158,12 +157,6 @@ int AlpmConfig::LoadFromFile(const char* filename, AlpmConfig* alpm_config) {
   }
 
   return 0;
-}
-
-Repo::~Repo() {
-  if (tmpfile.fd >= 0) {
-    close(tmpfile.fd);
-  }
 }
 
 std::optional<std::string> RepoNameFromCacheFile(std::string_view filename) {
