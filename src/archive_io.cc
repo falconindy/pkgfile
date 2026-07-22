@@ -22,8 +22,11 @@ std::unique_ptr<ReadOnlyFile> ReadOnlyFile::Open(const std::string& path,
 
   std::optional<ReadOnlyFile::MMappedRegion> mapped;
   if (try_mmap) {
-    void* ptr =
-        mmap(0, st.st_size, PROT_READ, MAP_SHARED | MAP_POPULATE, fd, 0);
+    // No MAP_POPULATE: callers that only touch a sparse subset of pages
+    // (e.g. a binary search over an indexed db) shouldn't pay for faulting
+    // in the whole file up front. MAP_PRIVATE rather than MAP_SHARED since
+    // this is PROT_READ-only and never written back.
+    void* ptr = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (ptr != MAP_FAILED) {
       mapped = std::make_optional<ReadOnlyFile::MMappedRegion>(ptr, st.st_size);
     }

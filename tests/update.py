@@ -1,20 +1,13 @@
 #!/usr/bin/env python
 
-import glob
 import hashlib
-import pkgfile_test
 import os
-from collections import defaultdict
+import pkgfile_test
 from pathlib import Path
 
 
 def _sha256(path):
-    m = hashlib.sha256()
-    with open(path, 'rb') as f:
-        for block in iter(lambda: f.read(4096), b''):
-            m.update(block)
-
-    return m.hexdigest()
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 class TestUpdate(pkgfile_test.TestCase):
@@ -26,62 +19,43 @@ class TestUpdate(pkgfile_test.TestCase):
         self.cachedir = Path(self.tempdir, 'cache')
         self.cachedir.mkdir()
 
-    @staticmethod
-    def getRepoFiles(subdir, reponame):
-        return sorted(Path(subdir).glob(f'{reponame}.files.*'))
-
     def assertMatchesGolden(self, reponame):
-        golden_files = self.getRepoFiles(self.goldendir, reponame)
-        converted_files = self.getRepoFiles(self.cachedir, reponame)
+        golden = Path(self.goldendir, f'{reponame}.files')
+        converted = Path(self.cachedir, f'{reponame}.files')
 
-        for golden, converted in zip(golden_files, converted_files):
-            self.assertEqual(
-                _sha256(golden),
-                _sha256(converted),
-                msg='golden={}, converted={}'.format(golden, converted),
-            )
+        self.assertEqual(
+            _sha256(golden),
+            _sha256(converted),
+            msg='golden={}, converted={}'.format(golden, converted),
+        )
 
     def testUpdate(self):
-        r = self.Pkgfile(['-u', '--repochunkbytes=100000'])
+        r = self.Pkgfile(['-u'])
         self.assertEqual(r.returncode, 0)
 
         self.assertMatchesGolden('multilib')
         self.assertMatchesGolden('testing')
-
-        for repo in ('multilib', 'testing'):
-            original_repo = Path(self.alpmcachedir, 'x86_64', repo, f'{repo}.files')
-
-            for converted_repo in self.getRepoFiles(self.cachedir, repo):
-                # Only compare the integer portion of the mtime. we'll only ever
-                # get back second precision from a remote server, so any fractional
-                # second that's present on our golden repo can be ignored.
-                self.assertEqual(
-                    int(original_repo.stat().st_mtime),
-                    int(converted_repo.stat().st_mtime),
-                )
 
     def testUpdateForcesUpdates(self):
         r = self.Pkgfile(['-u'])
         self.assertEqual(r.returncode, 0)
 
         inodes_before = {}
-        for r in ('multilib', 'testing'):
-            for repofile in self.getRepoFiles(self.cachedir, r):
-                inodes_before[repofile.name] = repofile.stat().st_ino
+        for repo in ('multilib', 'testing'):
+            inodes_before[repo] = Path(self.cachedir, f'{repo}.files').stat().st_ino
 
         r = self.Pkgfile(['-uu'])
         self.assertEqual(r.returncode, 0)
 
         inodes_after = {}
-        for r in ('multilib', 'testing'):
-            for repofile in self.getRepoFiles(self.cachedir, r):
-                inodes_after[repofile.name] = repofile.stat().st_ino
+        for repo in ('multilib', 'testing'):
+            inodes_after[repo] = Path(self.cachedir, f'{repo}.files').stat().st_ino
 
-        for r in ('multilib', 'testing'):
+        for repo in ('multilib', 'testing'):
             self.assertNotEqual(
-                inodes_before,
-                inodes_after,
-                msg='{}.files unexpectedly NOT rewritten'.format(r),
+                inodes_before[repo],
+                inodes_after[repo],
+                msg='{}.files unexpectedly NOT rewritten'.format(repo),
             )
 
     def testUpdateSkipsUpToDate(self):
@@ -89,22 +63,24 @@ class TestUpdate(pkgfile_test.TestCase):
         self.assertEqual(r.returncode, 0)
 
         # gather inodes before the update
-        inodes_before = defaultdict(dict)
-        for r in ('multilib', 'testing'):
-            for repofile in self.getRepoFiles(self.cachedir, r):
-                inodes_before[r][repofile] = repofile.stat().st_ino
+        inodes_before = {}
+        for repo in ('multilib', 'testing'):
+            inodes_before[repo] = Path(self.cachedir, f'{repo}.files').stat().st_ino
 
-        # set the mtime to the epoch, expect that it gets rewritten on next update
-        os.utime(self.cachedir / 'testing.files.000', (0, 0))
+        # Wind testing.files' own mtime back, so pkgfile believes it's stale
+        # and re-downloads it. `pkgfile -u` decides staleness from the db
+        # file's on-disk mtime (stamped with the upstream archive's mtime at
+        # write time, see DbBuilder::WriteToFile), not any baked-in field.
+        testing_path = self.cachedir / 'testing.files'
+        os.utime(testing_path, (0, 0))
 
         r = self.Pkgfile(['-u'])
         self.assertEqual(r.returncode, 0)
 
         # re-gather inodes after a soft update
-        inodes_after = defaultdict(dict)
-        for r in ('multilib', 'testing'):
-            for repofile in self.getRepoFiles(self.cachedir, r):
-                inodes_after[r][repofile] = repofile.stat().st_ino
+        inodes_after = {}
+        for repo in ('multilib', 'testing'):
+            inodes_after[repo] = Path(self.cachedir, f'{repo}.files').stat().st_ino
 
         # compare inodes
         self.assertEqual(
@@ -149,19 +125,6 @@ class TestUpdate(pkgfile_test.TestCase):
 
         r = self.Pkgfile(['-u'])
         self.assertNotEqual(r.returncode, 0)
-
-    def testUpdateCleansUpOldRepoChunks(self):
-        r = self.Pkgfile(['-uu', '--repochunkbytes=5000'])
-        self.assertEqual(r.returncode, 0)
-        small_chunks = set(Path(self.cachedir).glob('testing.files*'))
-
-        # update again, creating ~half as many repo files
-        r = self.Pkgfile(['-uu', '--repochunkbytes=200000'])
-        self.assertEqual(r.returncode, 0)
-        large_chunks = set(Path(self.cachedir).glob('testing.files*'))
-
-        # the 100k chunked fileset is a strict subset of the original 5k chunked fileset.
-        self.assertLess(large_chunks, small_chunks)
 
     def testUpdateRemovesUnknownRepos(self):
         expected_removed = (

@@ -14,8 +14,8 @@
 #include <format>
 #include <iostream>
 
-#include "archive_converter.hh"
 #include "db.hh"
+#include "db_builder.hh"
 #include "repo.hh"
 
 namespace chrono = std::chrono;
@@ -192,8 +192,6 @@ int WaitForRepacking(std::vector<Repo>* repos) {
 namespace pkgfile {
 
 int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
-  struct stat st;
-
   if (repo->curl == nullptr) {
     if (repo->servers.empty()) {
       std::cerr << std::format("error: no servers configured for repo {}\n",
@@ -236,11 +234,16 @@ int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
 
   curl_easy_setopt(repo->curl, CURLOPT_URL, url.c_str());
 
-  std::string first_repo_chunk = std::format("{}.000", repo->diskfile);
-  if (repo->force == 0 && stat(first_repo_chunk.c_str(), &st) == 0) {
-    curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
-    curl_easy_setopt(repo->curl, CURLOPT_TIMECONDITION,
-                     CURL_TIMECOND_IFMODSINCE);
+  if (repo->force == 0) {
+    // The db file's own mtime is stamped with the upstream archive's mtime
+    // when it's (re)written (see DbBuilder::WriteToFile), so a plain stat()
+    // here tells us what we last saw from the server.
+    struct stat st;
+    if (stat(repo->diskfile.c_str(), &st) == 0) {
+      curl_easy_setopt(repo->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
+      curl_easy_setopt(repo->curl, CURLOPT_TIMECONDITION,
+                       CURL_TIMECOND_IFMODSINCE);
+    }
   }
 
   repo->dl_time_start = now();
@@ -250,11 +253,24 @@ int Updater::DownloadQueueRequest(CURLM* multi, struct Repo* repo) {
 }
 
 bool Updater::RepackRepoData(const struct Repo* repo) {
-  auto converter = pkgfile::ArchiveConverter::New(repo->name, repo->tmpfile.fd,
-                                                  repo->diskfile, compress_,
-                                                  repo_chunk_bytes_);
+  const char* error;
+  auto builder =
+      db::DbBuilder::FromArchive(repo->name, repo->tmpfile.fd, &error);
+  if (builder == nullptr) {
+    std::cerr << std::format("error: failed to read archive for {}: {}\n",
+                             repo->name, error);
+    return false;
+  }
 
-  return converter != nullptr && converter->RewriteArchive();
+  struct stat st;
+  if (fstat(repo->tmpfile.fd, &st) < 0) {
+    std::cerr << std::format(
+        "error: failed to stat downloaded archive for {}: {}\n", repo->name,
+        strerror(errno));
+    return false;
+  }
+
+  return builder->WriteToFile(repo->diskfile, st.st_mtim.tv_sec);
 }
 
 void Updater::TidyCacheDir(const std::set<std::string>& known_repos) {
@@ -465,10 +481,7 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
   return ret;
 }
 
-Updater::Updater(std::string cachedir, int compress, int repo_chunk_bytes)
-    : cachedir_(cachedir),
-      compress_(compress),
-      repo_chunk_bytes_(repo_chunk_bytes) {
+Updater::Updater(std::string cachedir) : cachedir_(cachedir) {
   curl_global_init(CURL_GLOBAL_ALL);
   curl_multi_ = curl_multi_init();
 }

@@ -1,10 +1,13 @@
+#include <errno.h>
 #include <getopt.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <systemd/sd-event.h>
 #include <utime.h>
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <format>
 #include <future>
 #include <iostream>
@@ -16,8 +19,8 @@
 #include <string_view>
 #include <vector>
 
-#include "archive_converter.hh"
-#include "compress.hh"
+#include "archive_io.hh"
+#include "db_builder.hh"
 #include "repo.hh"
 
 namespace fs = std::filesystem;
@@ -50,8 +53,6 @@ class Pkgfiled {
  public:
   struct Options {
     Options() {}
-
-    int compress = 0;  // ARCHIVE_FILTER_NONE
 
     // If true, skip mtime comparisons between the watch path and pkgfile cache,
     // transcoding all repos found in the watch path.
@@ -160,17 +161,34 @@ class Pkgfiled {
       std::cerr << std::format("processing new files DB: {}\n",
                                input_repo.c_str());
 
-      const auto input_file = ReadOnlyFile::Open(input_repo, /*try_mmap=*/true);
+      // DbBuilder::FromArchive only reads via the fd (libarchive does its own
+      // buffered reads), so there's no reason to mmap the input here.
+      const auto input_file =
+          ReadOnlyFile::Open(input_repo, /*try_mmap=*/false);
       if (input_file == nullptr) {
         return false;
       }
 
       const std::string reponame = changed_path.filename().stem();
-      auto converter = pkgfile::ArchiveConverter::New(
-          reponame, input_file->fd(), pkgfile_cache_ / changed_path,
-          options_.compress, -1);
 
-      return converter != nullptr && converter->RewriteArchive();
+      const char* error;
+      auto builder = pkgfile::db::DbBuilder::FromArchive(
+          reponame, input_file->fd(), &error);
+      if (builder == nullptr) {
+        std::cerr << std::format("error: failed to read archive {}: {}\n",
+                                 input_repo, error);
+        return false;
+      }
+
+      struct stat st;
+      if (fstat(input_file->fd(), &st) < 0) {
+        std::cerr << std::format("error: failed to stat {}: {}\n", input_repo,
+                                 strerror(errno));
+        return false;
+      }
+
+      return builder->WriteToFile(pkgfile_cache_ / changed_path,
+                                  st.st_mtim.tv_sec);
     };
 
     const auto start_time = std::chrono::system_clock::now();
@@ -348,7 +366,6 @@ void Usage() {
                ")\n"
                "  -f, --force             repack all repos on initial sync\n"
                "  -o, --oneshot           exit after initial sync \n"
-               "  -z, --compress[=type]   compress downloaded repos\n\n"
                "  -h, --help              display this help and exit\n"
                "  -V, --version           display the version and exit\n\n";
 }
@@ -393,16 +410,8 @@ std::optional<pkgfile::Pkgfiled::Options> ParseOpts(int* argc, char*** argv) {
         Version();
         exit(0);
       case 'z':
-        if (optarg != nullptr) {
-          opts.compress = pkgfile::ValidateCompression(optarg).value_or(-1);
-          if (opts.compress < 0) {
-            std::cerr << std::format("error: invalid compression option {}\n",
-                                     optarg);
-            return std::nullopt;
-          }
-        } else {
-          opts.compress = ARCHIVE_FILTER_GZIP;
-        }
+        // Accepted for backwards compatibility, but silently ignored: the
+        // on-disk database is no longer compressed.
         break;
       default:
         return std::nullopt;

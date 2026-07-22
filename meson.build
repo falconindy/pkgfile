@@ -4,7 +4,7 @@ project(
     version: '25',
     license: 'MIT',
     meson_version: '>=0.56',
-    default_options: ['cpp_std=c++20', 'warning_level=3', 'prefix=/usr'],
+    default_options: ['cpp_std=c++23', 'warning_level=3', 'prefix=/usr'],
 )
 
 conf = configuration_data()
@@ -45,12 +45,13 @@ libcommon = static_library(
     'pkgfile',
     files(
         '''
-    src/archive_converter.cc src/archive_converter.hh
     src/archive_io.cc src/archive_io.hh
     src/archive_reader.cc src/archive_reader.hh
-    src/compress.cc src/compress.hh
     src/db.cc src/db.hh
+    src/db_builder.cc src/db_builder.hh
+    src/db_format.hh
     src/filter.cc src/filter.hh
+    src/mapped_repo.cc src/mapped_repo.hh
     src/repo.cc src/repo.hh
     src/result.cc src/result.hh
     src/update.cc src/update.hh
@@ -85,6 +86,16 @@ executable(
     link_with: [libcommon],
     dependencies: [libsystemd, stdcppfs],
     install: true,
+)
+
+# Debugging aid for inspecting the PFDB repo database format; not part of
+# the supported user-facing tooling, so it's never installed.
+executable(
+    'pfdb-dump',
+    'src/pfdb_dump.cc',
+    link_with: [libcommon],
+    dependencies: [stdcppfs],
+    install: false,
 )
 
 custom_target(
@@ -186,13 +197,14 @@ if gtest.found() and gmock.found()
             'unit_tests',
             files(
                 '''
+        src/db_test.cc
         src/filter_test.cc
         src/queue_test.cc
         src/repo_test.cc
       '''.split(),
             ),
             link_with: [libcommon, gtest_main],
-            dependencies: [gmock, gtest, libpcre],
+            dependencies: [gmock, gtest, libpcre, stdcppfs],
         ),
         protocol: 'gtest',
     )

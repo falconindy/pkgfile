@@ -1,21 +1,19 @@
 #include "pkgfile.hh"
 
-#include <archive_entry.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <getopt.h>
 #include <locale.h>
 #include <string.h>
 
+#include <algorithm>
 #include <format>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <optional>
 #include <set>
+#include <thread>
 #include <vector>
 
-#include "archive_io.hh"
-#include "compress.hh"
 #include "db.hh"
 #include "filter.hh"
 #include "queue.hh"
@@ -86,23 +84,10 @@ std::vector<std::string> ParsePathVarToBins(const char* var) {
 }  // namespace
 
 Pkgfile::Pkgfile(Options options) : options_(options) {
-  switch (options_.mode) {
-    case MODE_SEARCH:
-      try_mmap_ = true;
-      entry_callback_ = std::bind_front(&Pkgfile::SearchMetafile, this);
-      break;
-    case MODE_LIST:
-      try_mmap_ = false;
-      entry_callback_ = std::bind_front(&Pkgfile::ListMetafile, this);
-      break;
-    default:
-      break;
-  }
-
   bins_ = ParsePathVarToBins(getenv("PATH"));
 }
 
-std::string Pkgfile::FormatSearchResult(const std::string& repo,
+std::string Pkgfile::FormatSearchResult(std::string_view repo,
                                         const ParsedPkgname& pkg) {
   if (options_.verbose) {
     return std::format("{}/{} {}", repo, pkg.name, pkg.version);
@@ -115,181 +100,20 @@ std::string Pkgfile::FormatSearchResult(const std::string& repo,
   return std::format("{}/{}", repo, pkg.name);
 }
 
-int Pkgfile::SearchMetafile(const std::string& repo,
-                            const pkgfile::filter::Filter& filter,
-                            const ParsedPkgname& pkg, pkgfile::Result* result,
-                            pkgfile::ArchiveReader* reader) {
-  std::string_view line;
-  while (reader->GetLine(&line) == ARCHIVE_OK) {
-    if (!filter.Matches(line)) {
-      continue;
-    }
-
-    result->Add(FormatSearchResult(repo, pkg),
-                options_.verbose ? std::string(line) : std::string());
-
-    if (!options_.verbose) {
-      return 0;
-    }
+std::string Pkgfile::NormalizeQuery(std::string query) const {
+#ifdef _WIN32
+  // In Windows-like environments, binaries can be executed by name without
+  // their .exe suffix. Provide the same allowance to pkgfile. This mainly
+  // facilitates the cmd-not-found hooks, but direct calls to `pkgfile -b` can
+  // benefit as well.
+  if (options_.mode == MODE_SEARCH && options_.binaries &&
+      options_.filterby == FilterStyle::EXACT &&
+      !std::string_view(query).ends_with(".exe")) {
+    query.append(".exe");
   }
+#endif
 
-  return 0;
-}
-
-int Pkgfile::ListMetafile(const std::string& repo,
-                          const pkgfile::filter::Filter& filter,
-                          const ParsedPkgname& pkg, pkgfile::Result* result,
-                          pkgfile::ArchiveReader* reader) {
-  if (!filter.Matches(pkg.name)) {
-    return 0;
-  }
-
-  const pkgfile::filter::Bin is_bin(bins_);
-  std::string_view line;
-  while (reader->GetLine(&line) == ARCHIVE_OK) {
-    if (options_.binaries && !is_bin.Matches(line)) {
-      continue;
-    }
-
-    std::string out;
-    if (options_.quiet) {
-      out = line;
-    } else {
-      out = std::format("{}/{}", repo, pkg.name);
-    }
-    result->Add(std::move(out),
-                options_.quiet ? std::string() : std::string(line));
-  }
-
-  // When we encounter a match with fixed string matching, we know we're done.
-  // However, for other filter methods, we can't be sure that our pattern won't
-  // produce further matches, so we signal our caller to continue.
-  return options_.filterby == FilterStyle::EXACT ? -1 : 0;
-}
-
-// static
-bool Pkgfile::ParsePkgname(ParsedPkgname* pkg, std::string_view entryname) {
-  const auto pkgrel = entryname.rfind('-');
-  if (pkgrel == entryname.npos) {
-    return false;
-  }
-
-  const auto pkgver = entryname.substr(0, pkgrel).rfind('-');
-  if (pkgver == entryname.npos) {
-    return false;
-  }
-
-  pkg->name = entryname.substr(0, pkgver);
-  pkg->version = entryname.substr(pkgver + 1);
-
-  return true;
-}
-
-void Pkgfile::ProcessRepo(const std::string& reponame,
-                          const std::string& repopath,
-                          const filter::Filter& filter, Result* result) {
-  auto fd = ReadOnlyFile::Open(repopath, try_mmap_);
-  if (fd == nullptr) {
-    if (errno != ENOENT) {
-      std::cerr << std::format("failed to open {} for reading: {}\n", repopath,
-                               strerror(errno));
-    }
-    return;
-  }
-
-  const char* err;
-  const auto read_archive = ReadArchive::New(*fd, &err);
-  if (read_archive == nullptr) {
-    std::cerr << std::format(
-        "failed to create new archive for reading: {}: {}\n", repopath, err);
-    return;
-  }
-
-  ArchiveReader reader(read_archive->read_archive());
-
-  archive_entry* e;
-  while (reader.Next(&e) == ARCHIVE_OK) {
-    const char* entryname = archive_entry_pathname(e);
-
-    ParsedPkgname pkg;
-    if (!ParsePkgname(&pkg, entryname)) {
-      std::cerr << std::format("error parsing pkgname from: {}\n", entryname);
-      continue;
-    }
-
-    if (entry_callback_(reponame, filter, pkg, result, &reader) < 0) {
-      break;
-    }
-  }
-}
-
-int Pkgfile::SearchRepoChunks(Database::RepoChunks repo_chunks,
-                              const filter::Filter& filter) {
-  using ResultMap = std::map<std::string, std::unique_ptr<Result>>;
-  ResultMap results;
-
-  struct WorkItem {
-    const std::string* reponame;
-    const std::string* filepath;
-    const filter::Filter* filter;
-    Result* result;
-  };
-
-  ThreadSafeQueue<WorkItem> queue;
-  for (auto& [reponame, filepath] : repo_chunks) {
-    auto& result = results[reponame];
-    if (result == nullptr) {
-      result = std::make_unique<Result>();
-    }
-
-    queue.enqueue(WorkItem{&reponame, &filepath, &filter, result.get()});
-  }
-
-  const auto num_workers =
-      std::min<int>(std::thread::hardware_concurrency(), queue.size());
-
-  std::vector<std::thread> workers;
-  workers.reserve(num_workers);
-  for (int i = 0; i < num_workers; ++i) {
-    workers.push_back(std::thread([&] {
-      while (auto item = queue.try_dequeue()) {
-        ProcessRepo(*item->reponame, *item->filepath, *item->filter,
-                    item->result);
-      }
-    }));
-  }
-
-  for (auto& worker : workers) {
-    worker.join();
-  }
-
-  for (auto iter = results.begin(); iter != results.end();) {
-    if (iter->second->Empty()) {
-      results.erase(iter++);
-    } else {
-      ++iter;
-    }
-  }
-
-  if (results.empty()) {
-    return 1;
-  }
-
-  const size_t prefixlen =
-      options_.raw ? 0
-                   : std::max_element(results.begin(), results.end(),
-                                      [](const ResultMap::value_type& a,
-                                         const ResultMap::value_type& b) {
-                                        return a.second->MaxPrefixlen() <
-                                               b.second->MaxPrefixlen();
-                                      })
-                         ->second->MaxPrefixlen();
-
-  for (auto& [repo, result] : results) {
-    result->Print(prefixlen, options_.eol);
-  }
-
-  return 0;
+  return query;
 }
 
 std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
@@ -299,17 +123,6 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
   switch (options.filterby) {
     case FilterStyle::EXACT:
       if (options.mode == MODE_SEARCH) {
-
-#ifdef _WIN32
-        // In Windows-like environments, binaries can be executed by name
-        // without their .exe suffix. Provide the same allowance to pkgfile.
-        // This mainly facilitates the cmd-not-found hooks, but direct calls
-        // to `pkgfile -b` can benefit as well.
-        if (options.binaries && !std::string_view(query).ends_with(".exe")) {
-          query.append(".exe");
-        }
-#endif
-
         if (query.find('/') != query.npos) {
           filter =
               std::make_unique<filter::Exact>(query, options.case_sensitive);
@@ -348,10 +161,479 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
   return filter;
 }
 
+std::vector<const db::MappedRepo*> Pkgfile::SelectRepos(
+    const Database& database, std::string_view reponame) {
+  std::vector<const db::MappedRepo*> repos;
+
+  if (reponame.empty()) {
+    for (const auto& repo : database.GetAllRepos()) {
+      repos.push_back(repo.get());
+    }
+  } else if (const auto* repo = database.GetRepo(reponame)) {
+    repos.push_back(repo);
+  }
+
+  return repos;
+}
+
+void Pkgfile::ParallelFor(
+    size_t count, const std::function<void(size_t begin, size_t end)>& work) {
+  if (count == 0) {
+    return;
+  }
+
+  const size_t num_workers = std::max<size_t>(
+      1, std::min<size_t>(std::thread::hardware_concurrency(), count));
+  const size_t chunk = (count + num_workers - 1) / num_workers;
+
+  std::vector<std::thread> workers;
+  workers.reserve(num_workers);
+  for (size_t i = 0; i < num_workers; ++i) {
+    const size_t begin = i * chunk;
+    const size_t end = std::min(count, begin + chunk);
+    if (begin >= end) {
+      break;
+    }
+    workers.emplace_back(work, begin, end);
+  }
+
+  for (auto& worker : workers) {
+    worker.join();
+  }
+}
+
+std::vector<Pkgfile::ScanChunk> Pkgfile::BuildScanChunks(
+    std::span<const db::MappedRepo* const> repos,
+    const std::function<size_t(const db::MappedRepo&, size_t)>& weight) {
+  size_t total = 0;
+  for (const auto* repo : repos) {
+    const size_t count = repo->packages().size();
+    for (size_t i = 0; i < count; ++i) {
+      total += weight(*repo, i);
+    }
+  }
+
+  const size_t num_workers =
+      std::max<size_t>(1, std::thread::hardware_concurrency());
+  const size_t target = std::max<size_t>(1, total / (num_workers * 4));
+
+  std::vector<ScanChunk> chunks;
+  for (const auto* repo : repos) {
+    const size_t count = repo->packages().size();
+    size_t begin = 0;
+    size_t running = 0;
+    for (size_t i = 0; i < count; ++i) {
+      running += weight(*repo, i);
+      if (running >= target) {
+        chunks.push_back(ScanChunk{repo, begin, i + 1});
+        begin = i + 1;
+        running = 0;
+      }
+    }
+    if (begin < count) {
+      chunks.push_back(ScanChunk{repo, begin, count});
+    }
+  }
+
+  return chunks;
+}
+
+void Pkgfile::RunOverChunks(std::vector<ScanChunk> chunks,
+                            const std::function<void(const ScanChunk&)>& work) {
+  if (chunks.empty()) {
+    return;
+  }
+
+  ThreadSafeQueue<ScanChunk> queue;
+  for (auto& chunk : chunks) {
+    queue.enqueue(std::move(chunk));
+  }
+
+  const size_t num_workers = std::min<size_t>(
+      std::max<size_t>(1, std::thread::hardware_concurrency()), queue.size());
+
+  std::vector<std::thread> workers;
+  workers.reserve(num_workers);
+  for (size_t i = 0; i < num_workers; ++i) {
+    workers.emplace_back([&] {
+      while (auto chunk = queue.try_dequeue()) {
+        work(*chunk);
+      }
+    });
+  }
+
+  for (auto& worker : workers) {
+    worker.join();
+  }
+}
+
+// -- search mode --
+
+void Pkgfile::SearchBasenameIndexed(const db::MappedRepo& repo,
+                                    std::span<const db::Posting> postings,
+                                    Result* result) {
+  const filter::Bin is_bin(bins_);
+  std::optional<db::PkgId> last_emitted;
+  std::string resolved;
+
+  for (const auto& posting : postings) {
+    if (db::IsDirOf(posting.path) && !options_.directories) {
+      continue;
+    }
+    if (!options_.verbose && last_emitted == posting.pkg) {
+      continue;
+    }
+
+    if (options_.binaries || options_.verbose) {
+      repo.ResolvePathInto(posting.path, &resolved);
+      if (options_.binaries && !is_bin.Matches(resolved)) {
+        continue;
+      }
+    }
+
+    const auto& pkg = repo.packages()[posting.pkg];
+    result->Add(
+        FormatSearchResult(repo.reponame(), {repo.ResolveString(pkg.name),
+                                             repo.ResolveString(pkg.version)}),
+        options_.verbose ? resolved : std::string());
+    last_emitted = posting.pkg;
+  }
+}
+
+bool Pkgfile::PathMatches(const db::MappedRepo& repo, uint32_t tagged_path,
+                          std::string_view query) const {
+  db::PathId id = db::PathIdOf(tagged_path);
+  std::string_view remaining = query;
+
+  for (;;) {
+    const auto slash = remaining.rfind('/');
+    const std::string_view component =
+        slash == remaining.npos ? remaining : remaining.substr(slash + 1);
+
+    if (id == db::kRootPath) {
+      return false;
+    }
+
+    const db::PathNode& node = repo.PathNodeAt(id);
+    if (repo.ResolveString(node.name) != component) {
+      return false;
+    }
+    id = node.parent;
+
+    if (slash == remaining.npos) {
+      break;
+    }
+    remaining = remaining.substr(0, slash);
+  }
+
+  return id == db::kRootPath;
+}
+
+void Pkgfile::SearchFullPathIndexed(const db::MappedRepo& repo,
+                                    std::string_view query, Result* result) {
+  if (!query.starts_with('/')) {
+    // Every stored path has a leading slash, so a query without one can
+    // never match.
+    return;
+  }
+  query.remove_prefix(1);
+
+  bool want_dir = false;
+  if (query.ends_with('/')) {
+    want_dir = true;
+    query.remove_suffix(1);
+  }
+
+  if (query.empty()) {
+    return;
+  }
+
+  if (want_dir && !options_.directories) {
+    // A directory-style query can only ever match a directory occurrence,
+    // and those are excluded entirely unless -d was given.
+    return;
+  }
+
+  const auto last_slash = query.rfind('/');
+  const std::string_view basename =
+      last_slash == query.npos ? query : query.substr(last_slash + 1);
+
+  const auto* entry = repo.FindBasename(basename);
+  if (entry == nullptr) {
+    return;
+  }
+
+  const filter::Bin is_bin(bins_);
+  std::string resolved;
+
+  db::Posting scratch;
+  for (const auto& posting : repo.PostingsFor(*entry, &scratch)) {
+    if (db::IsDirOf(posting.path) != want_dir) {
+      continue;
+    }
+    if (!PathMatches(repo, posting.path, query)) {
+      continue;
+    }
+
+    repo.ResolvePathInto(posting.path, &resolved);
+    if (options_.binaries && !is_bin.Matches(resolved)) {
+      continue;
+    }
+
+    const auto& pkg = repo.packages()[posting.pkg];
+    result->Add(
+        FormatSearchResult(repo.reponame(), {repo.ResolveString(pkg.name),
+                                             repo.ResolveString(pkg.version)}),
+        options_.verbose ? resolved : std::string());
+  }
+}
+
+void Pkgfile::SearchExactIndexed(const db::MappedRepo& repo,
+                                 std::string_view query, Result* result) {
+  if (query.find('/') == query.npos) {
+    if (const auto* entry = repo.FindBasename(query)) {
+      db::Posting scratch;
+      SearchBasenameIndexed(repo, repo.PostingsFor(*entry, &scratch), result);
+    }
+  } else {
+    SearchFullPathIndexed(repo, query, result);
+  }
+}
+
+void Pkgfile::ScanBasenamesCaseInsensitive(const db::MappedRepo& repo,
+                                           const filter::Filter& filter,
+                                           Result* result) {
+  std::vector<bool> emitted(repo.packages().size(), false);
+  std::string resolved;
+
+  for (const auto& entry : repo.basename_index()) {
+    db::Posting scratch;
+    for (const auto& posting : repo.PostingsFor(entry, &scratch)) {
+      if (!options_.verbose && emitted[posting.pkg]) {
+        continue;
+      }
+
+      repo.ResolvePathInto(posting.path, &resolved);
+      if (!filter.Matches(resolved)) {
+        continue;
+      }
+
+      const auto& pkg = repo.packages()[posting.pkg];
+      result->Add(FormatSearchResult(repo.reponame(),
+                                     {repo.ResolveString(pkg.name),
+                                      repo.ResolveString(pkg.version)}),
+                  options_.verbose ? resolved : std::string());
+      emitted[posting.pkg] = true;
+    }
+  }
+}
+
+void Pkgfile::ScanAllFiles(const db::MappedRepo& repo,
+                           const filter::Filter& filter, size_t pkg_begin,
+                           size_t pkg_end, Result* result) {
+  const auto pkgs = repo.packages();
+  std::string resolved;
+
+  for (size_t i = pkg_begin; i < pkg_end; ++i) {
+    const auto& pkg = pkgs[i];
+    bool emitted = false;
+
+    for (const auto tagged_path : repo.PackageFiles(pkg)) {
+      if (!options_.verbose && emitted) {
+        break;
+      }
+
+      repo.ResolvePathInto(tagged_path, &resolved);
+      if (!filter.Matches(resolved)) {
+        continue;
+      }
+
+      result->Add(FormatSearchResult(repo.reponame(),
+                                     {repo.ResolveString(pkg.name),
+                                      repo.ResolveString(pkg.version)}),
+                  options_.verbose ? resolved : std::string());
+      emitted = true;
+    }
+  }
+}
+
+// -- list mode --
+
+void Pkgfile::EmitPackageFileList(const db::MappedRepo& repo,
+                                  const db::Package& pkg, Result* result) {
+  const filter::Bin is_bin(bins_);
+
+  for (const auto tagged_path : repo.PackageFiles(pkg)) {
+    std::string resolved;
+    repo.ResolvePathInto(tagged_path, &resolved);
+    if (options_.binaries && !is_bin.Matches(resolved)) {
+      continue;
+    }
+
+    if (options_.quiet) {
+      result->Add(std::move(resolved), std::string());
+    } else {
+      result->Add(
+          std::format("{}/{}", repo.reponame(), repo.ResolveString(pkg.name)),
+          std::move(resolved));
+    }
+  }
+}
+
+void Pkgfile::ListExactCaseInsensitive(const db::MappedRepo& repo,
+                                       std::string_view query, Result* result) {
+  for (const auto& pkg : repo.packages()) {
+    const auto name = repo.ResolveString(pkg.name);
+    if (name.size() == query.size() &&
+        strncasecmp(name.data(), query.data(), query.size()) == 0) {
+      EmitPackageFileList(repo, pkg, result);
+      return;
+    }
+  }
+}
+
+void Pkgfile::ListScan(const db::MappedRepo& repo, const filter::Filter& filter,
+                       size_t pkg_begin, size_t pkg_end, Result* result) {
+  const auto pkgs = repo.packages();
+
+  for (size_t i = pkg_begin; i < pkg_end; ++i) {
+    const auto& pkg = pkgs[i];
+    if (filter.Matches(repo.ResolveString(pkg.name))) {
+      EmitPackageFileList(repo, pkg, result);
+    }
+  }
+}
+
+// -- top level --
+
+int Pkgfile::RunSearch(const Database& database, std::string_view reponame,
+                       std::string_view query_in) {
+  const std::string query = NormalizeQuery(std::string(query_in));
+  const auto repos = SelectRepos(database, reponame);
+
+  const bool use_index =
+      options_.filterby == FilterStyle::EXACT && options_.case_sensitive;
+
+  std::unique_ptr<filter::Filter> filter;
+  if (!use_index) {
+    filter = BuildFilterFromOptions(options_, query);
+    if (filter == nullptr) {
+      return 1;
+    }
+  }
+
+  std::map<std::string, std::unique_ptr<Result>> results;
+  for (const auto* repo : repos) {
+    results.emplace(std::string(repo->reponame()), std::make_unique<Result>());
+  }
+  auto result_for = [&](const db::MappedRepo& repo) {
+    return results[std::string(repo.reponame())].get();
+  };
+
+  if (use_index) {
+    ParallelFor(repos.size(), [&](size_t begin, size_t end) {
+      for (size_t i = begin; i < end; ++i) {
+        SearchExactIndexed(*repos[i], query, result_for(*repos[i]));
+      }
+    });
+  } else if (options_.filterby == FilterStyle::EXACT) {
+    // Case-insensitive exact/basename search: the index is sorted
+    // case-sensitively, so fall back to scanning the (much smaller) set of
+    // distinct basenames instead of every file.
+    ParallelFor(repos.size(), [&](size_t begin, size_t end) {
+      for (size_t i = begin; i < end; ++i) {
+        ScanBasenamesCaseInsensitive(*repos[i], *filter, result_for(*repos[i]));
+      }
+    });
+  } else {
+    // Glob/regex has to scan every file, which for a single large repo can
+    // dwarf what one thread can chew through. Partition by total file count
+    // across every selected repo combined -- rather than one work item per
+    // repo -- so a search scoped to a single repo still saturates every
+    // core.
+    auto chunks = BuildScanChunks(repos, [](const db::MappedRepo& r, size_t i) {
+      return static_cast<size_t>(r.packages()[i].files_count);
+    });
+
+    RunOverChunks(std::move(chunks), [&](const ScanChunk& chunk) {
+      ScanAllFiles(*chunk.repo, *filter, chunk.begin, chunk.end,
+                   result_for(*chunk.repo));
+    });
+  }
+
+  std::erase_if(results, [](auto& result) { return result.second->Empty(); });
+
+  if (results.empty()) {
+    return 1;
+  }
+
+  const size_t prefixlen =
+      options_.raw ? 0
+                   : std::max_element(results.begin(), results.end(),
+                                      [](const auto& a, const auto& b) {
+                                        return a.second->MaxPrefixlen() <
+                                               b.second->MaxPrefixlen();
+                                      })
+                         ->second->MaxPrefixlen();
+
+  for (auto& [repo, result] : results) {
+    result->Print(prefixlen, options_.eol);
+  }
+
+  return 0;
+}
+
+int Pkgfile::RunList(const Database& database, std::string_view reponame,
+                     std::string_view query) {
+  const auto repos = SelectRepos(database, reponame);
+
+  const bool use_index =
+      options_.filterby == FilterStyle::EXACT && options_.case_sensitive;
+
+  std::unique_ptr<filter::Filter> filter;
+  if (!use_index) {
+    filter = BuildFilterFromOptions(options_, std::string(query));
+    if (filter == nullptr) {
+      return 1;
+    }
+  }
+
+  Result result;
+
+  if (use_index) {
+    for (const auto* repo : repos) {
+      if (const auto* pkg = repo->FindPackageByName(query)) {
+        EmitPackageFileList(*repo, *pkg, &result);
+      }
+    }
+  } else if (options_.filterby == FilterStyle::EXACT) {
+    for (const auto* repo : repos) {
+      ListExactCaseInsensitive(*repo, query, &result);
+    }
+  } else {
+    // Same reasoning as the search-mode glob/regex path: partition by
+    // package count across every selected repo combined so a listing scoped
+    // to one repo can still use every core.
+    auto chunks = BuildScanChunks(
+        repos, [](const db::MappedRepo&, size_t) { return size_t{1}; });
+
+    RunOverChunks(std::move(chunks), [&](const ScanChunk& chunk) {
+      ListScan(*chunk.repo, *filter, chunk.begin, chunk.end, &result);
+    });
+  }
+
+  if (result.Empty()) {
+    return 1;
+  }
+
+  result.Print(options_.raw ? 0 : result.MaxPrefixlen(), options_.eol);
+
+  return 0;
+}
+
 int Pkgfile::Run(const std::vector<std::string>& args) {
   if (options_.mode & MODE_UPDATE) {
-    return Updater(options_.cachedir, options_.compress,
-                   options_.repo_chunk_bytes)
+    return Updater(options_.cachedir)
         .Update(options_.cfgfile, options_.mode == MODE_UPDATE_FORCE);
   }
 
@@ -390,16 +672,11 @@ int Pkgfile::Run(const std::vector<std::string>& args) {
 
   auto [repo, query] = ParseQueryInput(args[0]);
 
-  const auto filter = BuildFilterFromOptions(options_, std::string(query));
-  if (filter == nullptr) {
-    return 1;
+  if (options_.mode == MODE_LIST) {
+    return RunList(*database, repo, query);
   }
 
-  if (!repo.empty()) {
-    return SearchRepoChunks(database->GetRepoChunks(repo), *filter);
-  }
-
-  return SearchRepoChunks(database->GetAllRepoChunks(), *filter);
+  return RunSearch(*database, repo, query);
 }
 
 }  // namespace pkgfile
@@ -430,9 +707,6 @@ void Usage(void) {
       "  -v, --verbose           output more\n"
       "  -w, --raw               disable output justification\n"
       "  -0, --null              null terminate output\n\n";
-  std::cout <<  //
-      " Downloading:\n"
-      "  -z, --compress[=type]   compress downloaded repos\n\n";
   std::cout <<  //
       " General:\n  -C, --config <file>     use an alternate config (default: "
       "/etc/pacman.conf)\n"
@@ -467,7 +741,6 @@ std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
     { "verbose",        no_argument,        0, 'v' },
     { "raw",            no_argument,        0, 'w' },
     { "null",           no_argument,        0, '0' },
-    { "repochunkbytes", required_argument,  0, '~' + 1 },  // undocumented
     { 0, 0, 0, 0 },
     // clang-format pn
   };
@@ -536,19 +809,8 @@ std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
         options.raw = true;
         break;
       case 'z':
-        if (optarg != nullptr) {
-          auto compress = pkgfile::ValidateCompression(optarg);
-          if (compress == std::nullopt) {
-            std::cerr << std::format("error: invalid compression option {}\n", optarg);
-            return std::nullopt;
-          }
-          options.compress = compress.value();
-        } else {
-          options.compress = ARCHIVE_FILTER_GZIP;
-        }
-        break;
-      case '~' + 1:
-        options.repo_chunk_bytes = atoi(optarg);
+        // Accepted for backwards compatibility, but silently ignored: the
+        // on-disk database is no longer compressed.
         break;
       default:
         return std::nullopt;

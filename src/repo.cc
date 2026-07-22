@@ -166,36 +166,14 @@ Repo::~Repo() {
   }
 }
 
-bool FilenameHasRepoSuffix(std::string_view path) {
-  const auto ndots = std::count(path.begin(), path.end(), '.');
-  if (ndots != 2) {
-    return false;
-  }
-
-  auto pos = path.rfind('.');
-  if (!path.substr(0, pos).ends_with(".files")) {
-    return false;
-  }
-
-  int ndigits = 0;
-  for (++pos; pos < path.size(); ++pos) {
-    if (!isdigit(path[pos])) {
-      return false;
-    }
-    ++ndigits;
-  }
-
-  return ndigits == 3;
-}
-
 std::optional<std::string> RepoNameFromCacheFile(std::string_view filename) {
-  if (!FilenameHasRepoSuffix(filename)) {
+  static constexpr std::string_view kSuffix = ".files";
+
+  if (!filename.ends_with(kSuffix) || filename.size() == kSuffix.size()) {
     return std::nullopt;
   }
 
-  // FilenameHasRepoSuffix guarantees the form "<repo>.files.NNN" with exactly
-  // two dots, so the repo name is everything up to the ".files." suffix.
-  return std::string(filename.substr(0, filename.find(".files.")));
+  return std::string(filename.substr(0, filename.size() - kSuffix.size()));
 }
 
 // vim: set ts=2 sw=2 et:

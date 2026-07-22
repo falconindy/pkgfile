@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -23,28 +24,6 @@ std::string DatabaseError::message(int condition) const {
     default:
       return "Unknown error";
   }
-}
-
-bool Database::FilenameHasRepoSuffix(std::string_view path) {
-  const auto ndots = std::count(path.begin(), path.end(), '.');
-  if (ndots != 2) {
-    return false;
-  }
-
-  auto pos = path.rfind('.');
-  if (!path.substr(0, pos).ends_with(".files")) {
-    return false;
-  }
-
-  int ndigits = 0;
-  for (++pos; pos < path.size(); ++pos) {
-    if (!isdigit(path[pos])) {
-      return false;
-    }
-    ++ndigits;
-  }
-
-  return ndigits == 3;
 }
 
 std::unique_ptr<Database> Database::Open(std::string_view dbpath,
@@ -79,40 +58,45 @@ std::unique_ptr<Database> Database::Open(std::string_view dbpath,
   Repos repos;
   for (const auto& entry : fs::directory_iterator(dbpath, ec)) {
     const fs::path& pathname = entry.path();
-    if (!entry.is_regular_file() ||
-        !FilenameHasRepoSuffix(pathname.filename().native())) {
+    if (!entry.is_regular_file() || pathname.extension() != ".files") {
       continue;
     }
 
-    repos.emplace_back(pathname.stem().stem().string(), pathname);
+    db::MappedRepo::OpenError open_error;
+    auto repo = db::MappedRepo::Open(pathname.string(), &open_error);
+    if (repo == nullptr) {
+      std::cerr << std::format(
+          "warning: failed to open repo database {}, ignoring (you may need "
+          "to run `pkgfile --update`)\n",
+          pathname.string());
+      continue;
+    }
+
+    repos.push_back(std::move(repo));
   }
 
   if (ec.value() != 0) {
     return nullptr;
   }
 
-  std::sort(repos.begin(), repos.end());
+  std::sort(repos.begin(), repos.end(), [](const auto& a, const auto& b) {
+    return a->reponame() < b->reponame();
+  });
 
   return std::unique_ptr<Database>(new Database(std::move(repos)));
 }
 
-Database::RepoChunks Database::GetAllRepoChunks() const {
-  return {repos_.begin(), repos_.end()};
-}
+const db::MappedRepo* Database::GetRepo(std::string_view reponame) const {
+  const auto iter =
+      std::lower_bound(repos_.begin(), repos_.end(), reponame,
+                       [](const auto& repo, std::string_view name) {
+                         return repo->reponame() < name;
+                       });
 
-Database::RepoChunks Database::GetRepoChunks(std::string_view reponame) const {
-  const auto lower = std::find_if(
-      repos_.begin(), repos_.end(),
-      [&reponame](const Entry& entry) { return entry.reponame == reponame; });
-
-  auto upper = lower;
-  for (; upper != repos_.end(); ++upper) {
-    if (upper->reponame != reponame) {
-      break;
-    }
+  if (iter == repos_.end() || (*iter)->reponame() != reponame) {
+    return nullptr;
   }
-
-  return {lower, upper};
+  return iter->get();
 }
 
 bool Database::WriteDatabaseVersion(std::string_view dbpath) {

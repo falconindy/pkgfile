@@ -7,6 +7,8 @@
 #include <string_view>
 #include <vector>
 
+#include "mapped_repo.hh"
+
 namespace pkgfile {
 
 // grow this into a more generic pkgfile-wide error category
@@ -32,34 +34,30 @@ class DatabaseError : public std::error_category {
   static bool Is(std::error_code& ec) { return ec.category() == Get(); }
 };
 
+// Database is the set of pkgfile-format repo files (one mmap'd MappedRepo
+// per repo) found in a cachedir.
 class Database {
  public:
   static std::unique_ptr<Database> Open(std::string_view dbpath,
                                         std::error_code& ec);
 
-  static bool FilenameHasRepoSuffix(std::string_view path);
-
   static bool WriteDatabaseVersion(std::string_view dbpath);
 
-  struct Entry {
-    std::string reponame;
-    std::string filename;
+  // Returns the repo named `reponame`, or nullptr if the cachedir has no such
+  // repo.
+  const db::MappedRepo* GetRepo(std::string_view reponame) const;
 
-    auto operator<=>(const Entry&) const = default;
-  };
-
-  using RepoChunks = std::span<const Entry>;
-
-  RepoChunks GetRepoChunks(std::string_view reponame) const;
-  RepoChunks GetAllRepoChunks() const;
+  std::span<const std::unique_ptr<db::MappedRepo>> GetAllRepos() const {
+    return repos_;
+  }
 
   bool empty() const { return repos_.empty(); }
 
  private:
-  static constexpr int kVersion = 0;
+  static constexpr int kVersion = 1;
   static constexpr std::string_view kVersionFilename = ".db_version";
 
-  using Repos = std::vector<Entry>;
+  using Repos = std::vector<std::unique_ptr<db::MappedRepo>>;
 
   Database(Repos repos) : repos_(std::move(repos)) {}
 

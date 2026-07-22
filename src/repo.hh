@@ -63,13 +63,9 @@ struct AlpmConfig {
   std::string architecture;
 };
 
-// Verifies that the given file path has a format of "${reponame}.files.nnn"
-// where 'n' is an 0-indexed, zero-padded, increasing integer.
-bool FilenameHasRepoSuffix(std::string_view path);
-
 // Returns the repo name a pkgfile cache database file belongs to, e.g.
-// "core.files.000" -> "core", or std::nullopt if the filename is not a chunked
-// repo database file (as recognized by FilenameHasRepoSuffix).
+// "core.files" -> "core", or std::nullopt if the filename doesn't have a
+// ".files" suffix.
 std::optional<std::string> RepoNameFromCacheFile(std::string_view filename);
 
 // vim: set ts=2 sw=2 et:

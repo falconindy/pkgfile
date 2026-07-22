@@ -1,10 +1,13 @@
 #pragma once
 
 #include <functional>
+#include <span>
+#include <string>
+#include <vector>
 
-#include "archive_reader.hh"
 #include "db.hh"
 #include "filter.hh"
+#include "mapped_repo.hh"
 #include "result.hh"
 
 namespace pkgfile {
@@ -46,8 +49,6 @@ class Pkgfile {
     bool verbose = false;
     bool raw = false;
     char eol = '\n';
-    int compress = ARCHIVE_FILTER_NONE;
-    int repo_chunk_bytes = -1;  // <=0 implies default chunk size
   };
 
   Pkgfile(Options options);
@@ -61,35 +62,84 @@ class Pkgfile {
     std::string_view version;
   };
 
-  using ArchiveEntryCallback = std::function<int(
-      const std::string& repo, const filter::Filter& filter,
-      const ParsedPkgname& pkg, Result* result, ArchiveReader* reader)>;
-
-  std::unique_ptr<filter::Filter> BuildFilterFromOptions(
-      const Options& config, std::string query);
-
-  static bool ParsePkgname(ParsedPkgname* pkg, std::string_view entryname);
-
-  void ProcessRepo(const std::string& reponame, const std::string& repopath,
-                   const filter::Filter& filter, Result* result);
-
-  std::string FormatSearchResult(const std::string& repo,
+  std::string FormatSearchResult(std::string_view repo,
                                  const ParsedPkgname& pkg);
 
-  int SearchRepoChunks(Database::RepoChunks repo_chunks,
-                       const filter::Filter& filter);
+  // Normalizes the raw query text before it's used to search or build a
+  // filter, e.g. appending ".exe" on Windows for exact binary searches.
+  std::string NormalizeQuery(std::string query) const;
 
-  int SearchMetafile(const std::string& repo, const filter::Filter& filter,
-                     const ParsedPkgname& pkg, Result* result,
-                     ArchiveReader* reader);
-  int ListMetafile(const std::string& repo, const filter::Filter& filter,
-                   const ParsedPkgname& pkg, Result* result,
-                   ArchiveReader* reader);
+  std::unique_ptr<filter::Filter> BuildFilterFromOptions(const Options& config,
+                                                         std::string query);
+
+  std::vector<const db::MappedRepo*> SelectRepos(const Database& database,
+                                                 std::string_view reponame);
+
+  int RunSearch(const Database& database, std::string_view reponame,
+                std::string_view query);
+  int RunList(const Database& database, std::string_view reponame,
+              std::string_view query);
+
+  // -- search mode --
+
+  void SearchExactIndexed(const db::MappedRepo& repo, std::string_view query,
+                          Result* result);
+  void SearchBasenameIndexed(const db::MappedRepo& repo,
+                             std::span<const db::Posting> postings,
+                             Result* result);
+  void SearchFullPathIndexed(const db::MappedRepo& repo, std::string_view query,
+                             Result* result);
+  bool PathMatches(const db::MappedRepo& repo, uint32_t tagged_path,
+                   std::string_view query) const;
+
+  void ScanBasenamesCaseInsensitive(const db::MappedRepo& repo,
+                                    const filter::Filter& filter,
+                                    Result* result);
+  void ScanAllFiles(const db::MappedRepo& repo, const filter::Filter& filter,
+                    size_t pkg_begin, size_t pkg_end, Result* result);
+
+  // A [begin, end) slice of one repo's package table, sized so that scanning
+  // it takes roughly the same work as any other chunk -- see
+  // BuildScanChunks().
+  struct ScanChunk {
+    const db::MappedRepo* repo;
+    size_t begin;
+    size_t end;
+  };
+
+  // Splits every repo's package table into chunks and flattens them into one
+  // list spanning all of `repos`, so a scan over a single (large) repo can
+  // still be spread across every worker thread rather than being stuck on
+  // one thread merely because it's the only repo in play. Each repo's
+  // packages are split so that the sum of `weight(repo, pkg_index)` per
+  // chunk is roughly `total_weight / (hardware_concurrency * 4)` --
+  // oversubscribing a bit so chunks can be load-balanced via work stealing.
+  std::vector<ScanChunk> BuildScanChunks(
+      std::span<const db::MappedRepo* const> repos,
+      const std::function<size_t(const db::MappedRepo&, size_t pkg_index)>&
+          weight);
+
+  // Runs `work` over every chunk in `chunks`, dispatched across a pool of
+  // worker threads via a shared queue (rather than a static split) so chunks
+  // from small repos and large repos even out.
+  void RunOverChunks(std::vector<ScanChunk> chunks,
+                     const std::function<void(const ScanChunk&)>& work);
+
+  // -- list mode --
+
+  void EmitPackageFileList(const db::MappedRepo& repo, const db::Package& pkg,
+                           Result* result);
+  void ListExactCaseInsensitive(const db::MappedRepo& repo,
+                                std::string_view query, Result* result);
+  void ListScan(const db::MappedRepo& repo, const filter::Filter& filter,
+                size_t pkg_begin, size_t pkg_end, Result* result);
+
+  // Runs `work` across [0, count) partitioned into ranges, one per worker
+  // thread, and blocks until all workers finish.
+  void ParallelFor(size_t count,
+                   const std::function<void(size_t begin, size_t end)>& work);
 
   Options options_;
-  ArchiveEntryCallback entry_callback_;
-  bool try_mmap_;
-
   std::vector<std::string> bins_;
 };
 
