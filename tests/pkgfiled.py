@@ -65,6 +65,12 @@ class TestPkgfiled(pkgfile_test.TestCase):
         """Set of repo names currently present in the pkgfile cache."""
         return {p.name.split('.files')[0] for p in self.pkgfilecache.glob('*.files*')}
 
+    def VersionMarkerPath(self):
+        return Path(self.pkgfilecache, '.db_version')
+
+    def ReadVersionMarker(self):
+        return int(self.VersionMarkerPath().read_text().strip())
+
     def RunOneshot(self, extra_args=None):
         return subprocess.run(
             [
@@ -124,6 +130,75 @@ class TestPkgfiled(pkgfile_test.TestCase):
         r = self.RunOneshot()
         self.assertEqual(r.returncode, 0, msg=r.stderr.decode())
         self.assertEqual(self.CachedRepos(), {'testing'})
+
+    # --- .db_version marker ------------------------------------------------
+
+    def testOneshotWritesVersionMarkerOnEmptyCache(self):
+        self.WriteConfig([])
+
+        r = self.RunOneshot()
+        self.assertEqual(r.returncode, 0, msg=r.stderr.decode())
+        self.assertTrue(self.VersionMarkerPath().exists())
+        # Just needs to parse as an int; the specific value is an
+        # implementation detail of the current db format.
+        self.ReadVersionMarker()
+
+    def testOneshotForcesFullResyncWhenMarkerIsOlder(self):
+        self.WriteConfig(['testing'])
+        self.StageRepo('testing', 'testing.files')
+
+        r = self.RunOneshot()
+        self.assertEqual(r.returncode, 0, msg=r.stderr.decode())
+        current_version = self.ReadVersionMarker()
+
+        # Simulate a cache left behind by an older pkgfiled: corrupt the
+        # repacked repo file, but stamp its mtime ahead of the source .files
+        # in the watch dir, so a plain mtime comparison would consider it
+        # already up to date and skip it.
+        cached_repo = Path(self.pkgfilecache, 'testing.files')
+        cached_repo.write_bytes(b'not a real pfdb')
+        future = time.time() + 3600
+        os.utime(cached_repo, (future, future))
+        self.VersionMarkerPath().write_text(str(current_version - 1))
+
+        r = self.RunOneshot()
+        self.assertEqual(r.returncode, 0, msg=r.stderr.decode())
+
+        self.assertNotEqual(
+            cached_repo.read_bytes(),
+            b'not a real pfdb',
+            msg='stale-versioned repo was not force-repacked despite an up to '
+            'date mtime',
+        )
+        self.assertEqual(
+            self.ReadVersionMarker(),
+            current_version,
+            msg='version marker was not brought up to date after a full resync',
+        )
+
+    def testOneshotFailsOnNewerVersionMarker(self):
+        self.WriteConfig(['testing'])
+        self.StageRepo('testing', 'testing.files')
+
+        r = self.RunOneshot()
+        self.assertEqual(r.returncode, 0, msg=r.stderr.decode())
+        current_version = self.ReadVersionMarker()
+
+        newer_version = current_version + 1
+        self.VersionMarkerPath().write_text(str(newer_version))
+
+        r = self.RunOneshot()
+
+        self.assertNotEqual(
+            r.returncode,
+            0,
+            msg='pkgfiled did not fail on a database version newer than it understands',
+        )
+        self.assertEqual(
+            self.ReadVersionMarker(),
+            newer_version,
+            msg='version marker newer than this pkgfiled understands was overwritten',
+        )
 
     # --- live inotify on the sync dir ------------------------------------
 

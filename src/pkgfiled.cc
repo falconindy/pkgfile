@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "archive_io.hh"
+#include "db.hh"
 #include "db_builder.hh"
 #include "repo.hh"
 
@@ -116,7 +117,33 @@ class Pkgfiled {
   }
 
   int Run() {
-    Sync(options_.force);
+    // A missing or older marker means the cache (if it has anything in it at
+    // all) was written by a format this binary predates, so every repo needs
+    // repacking regardless of mtime. A newer marker means the opposite: some
+    // future pkgfiled has already written a format we don't understand, so
+    // there's nothing safe to do but bail out rather than risk writing
+    // older-format repos alongside it (or clobbering its version claim).
+    const auto on_disk_version =
+        pkgfile::Database::ReadDatabaseVersion(pkgfile_cache_.string());
+    if (!options_.force &&
+        on_disk_version.value_or(-1) > pkgfile::Database::Version()) {
+      std::cerr << std::format(
+          "error: {} has database version {}, newer than this pkgfiled "
+          "understands ({})\n",
+          pkgfile_cache_.string(), *on_disk_version,
+          pkgfile::Database::Version());
+      return 1;
+    }
+    const bool needs_full_resync =
+        options_.force || !on_disk_version ||
+        *on_disk_version < pkgfile::Database::Version();
+
+    Sync(needs_full_resync);
+
+    if (needs_full_resync &&
+        !pkgfile::Database::WriteDatabaseVersion(pkgfile_cache_.string())) {
+      std::cerr << "warning: failed to write database version marker\n";
+    }
 
     if (options_.oneshot) {
       return 0;

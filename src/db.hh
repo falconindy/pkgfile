@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -40,6 +41,13 @@ class Database {
  public:
   static std::unique_ptr<Database> Open(std::string_view dbpath,
                                         std::error_code& ec);
+
+  // The db format version this binary reads and writes.
+  static constexpr int Version() { return kVersion; }
+
+  // Returns the version recorded in dbpath's .db_version marker, or
+  // std::nullopt if the marker is missing or unreadable.
+  static std::optional<int> ReadDatabaseVersion(std::string_view dbpath);
 
   static bool WriteDatabaseVersion(std::string_view dbpath);
 

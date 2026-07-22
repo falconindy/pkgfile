@@ -39,18 +39,13 @@ std::unique_ptr<Database> Database::Open(std::string_view dbpath,
       return nullptr;
   }
 
-  std::ifstream version_file(fs::path(dbpath) / kVersionFilename,
-                             std::ios::binary);
-  if (!version_file.is_open()) {
+  const auto version = ReadDatabaseVersion(dbpath);
+  if (!version.has_value()) {
     ec.assign(DatabaseError::VERSION_FILE_NOT_FOUND, DatabaseError::Get());
     return nullptr;
   }
 
-  int version;
-  version_file >> version;
-  version_file.close();
-
-  if (version != kVersion) {
+  if (*version != kVersion) {
     ec.assign(DatabaseError::WRONG_VERSION, DatabaseError::Get());
     return nullptr;
   }
@@ -97,6 +92,22 @@ const db::MappedRepo* Database::GetRepo(std::string_view reponame) const {
     return nullptr;
   }
   return iter->get();
+}
+
+std::optional<int> Database::ReadDatabaseVersion(std::string_view dbpath) {
+  std::ifstream version_file(fs::path(dbpath) / kVersionFilename,
+                             std::ios::binary);
+  if (!version_file.is_open()) {
+    return std::nullopt;
+  }
+
+  int version;
+  version_file >> version;
+  if (version_file.fail()) {
+    return std::nullopt;
+  }
+
+  return version;
 }
 
 bool Database::WriteDatabaseVersion(std::string_view dbpath) {
