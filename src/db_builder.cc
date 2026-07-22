@@ -38,8 +38,7 @@ ParsePkgNameVersion(std::string_view entryname) {
     return std::nullopt;
   }
 
-  return std::make_pair(entryname.substr(0, pkgver),
-                        entryname.substr(pkgver + 1));
+  return std::pair(entryname.substr(0, pkgver), entryname.substr(pkgver + 1));
 }
 
 // Appends raw bytes of `value` to `buf`, then pads `buf` out to `align` bytes.
@@ -121,9 +120,9 @@ void DbBuilder::AddPackage(
 }
 
 // static
-std::unique_ptr<DbBuilder> DbBuilder::FromArchive(std::string reponame,
-                                                  int fd_in,
-                                                  const char** error) {
+std::unique_ptr<DbBuilder> DbBuilder::FromArchive(
+    std::string reponame, int fd_in, const char** error,
+    const std::function<void(int64_t bytes_read)>& on_progress) {
   auto reader = ReadArchive::New(fd_in, error);
   if (reader == nullptr) {
     return nullptr;
@@ -163,6 +162,10 @@ std::unique_ptr<DbBuilder> DbBuilder::FromArchive(std::string reponame,
     }
 
     builder->AddPackage(name, version, files);
+
+    if (on_progress) {
+      on_progress(archive_filter_bytes(reader->read_archive(), -1));
+    }
   }
 
   return builder;

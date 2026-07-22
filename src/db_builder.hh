@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -29,8 +30,14 @@ class DbBuilder {
   // archive on `fd_in` (a tarball of `$pkgname-$pkgver-$pkgrel/files` member
   // files) and interns it into a new builder. Returns nullptr and sets
   // *error on failure.
-  static std::unique_ptr<DbBuilder> FromArchive(std::string reponame, int fd_in,
-                                                const char** error);
+  //
+  // If given, `on_progress` is called after each package with the
+  // cumulative number of (compressed) bytes consumed from `fd_in` so far --
+  // compare against the archive's known total size for a repack progress
+  // indicator.
+  static std::unique_ptr<DbBuilder> FromArchive(
+      std::string reponame, int fd_in, const char** error,
+      const std::function<void(int64_t bytes_read)>& on_progress = nullptr);
 
   // Interns one package's file list. `files` pairs a path (no leading slash,
   // no trailing slash even for directories) with whether it's a directory.

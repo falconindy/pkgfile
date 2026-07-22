@@ -266,15 +266,15 @@ TEST_F(MappedRepoCorruptionTest, ResolveStringRejectsIdPastTableEnd) {
   auto repo = MappedRepo::Open(path_, &error);
   ASSERT_NE(repo, nullptr);
 
-  EXPECT_EQ(repo->ResolveString(
-               static_cast<StringId>(repo->string_count() + 100)),
-           "");
+  EXPECT_EQ(
+      repo->ResolveString(static_cast<StringId>(repo->string_count() + 100)),
+      "");
 }
 
 TEST_F(MappedRepoCorruptionTest, PathNodeAtRejectsForwardParent) {
   DbBuilder builder("testrepo");
-  builder.AddPackage("pkg", "1-1",
-                     {{"usr", true}, {"usr/bin", true}, {"usr/bin/foo", false}});
+  builder.AddPackage(
+      "pkg", "1-1", {{"usr", true}, {"usr/bin", true}, {"usr/bin/foo", false}});
   ASSERT_TRUE(builder.WriteToFile(path_, 0));
 
   std::string bytes = ReadWholeFile(path_);
@@ -288,7 +288,8 @@ TEST_F(MappedRepoCorruptionTest, PathNodeAtRejectsForwardParent) {
   // infinite loop on a corrupt file.
   PathNode original;
   memcpy(&original, bytes.data() + header.path_table_offset, sizeof(original));
-  PokeAt(&bytes, header.path_table_offset, PathNode{/*parent=*/2, original.name});
+  PokeAt(&bytes, header.path_table_offset,
+         PathNode{/*parent=*/2, original.name});
   WriteWholeFile(path_, bytes);
 
   MappedRepo::OpenError error;
@@ -336,8 +337,8 @@ TEST_F(MappedRepoCorruptionTest, PackageFilesClampsCorruptSlice) {
 
   // Claim far more files than the package files pool actually holds.
   PokeAt(&bytes, pkg_offset,
-        Package{original.name, original.version, /*files_start=*/0,
-                /*files_count=*/1'000'000});
+         Package{original.name, original.version, /*files_start=*/0,
+                 /*files_count=*/1'000'000});
   WriteWholeFile(path_, bytes);
 
   MappedRepo::OpenError error;
@@ -356,8 +357,8 @@ TEST_F(MappedRepoCorruptionTest, PackageFilesClampsCorruptSlice) {
   // rather than being treated as in-bounds.
   bytes = ReadWholeFile(path_);
   PokeAt(&bytes, pkg_offset,
-        Package{original.name, original.version, /*files_start=*/1'000'000,
-                /*files_count=*/1});
+         Package{original.name, original.version, /*files_start=*/1'000'000,
+                 /*files_count=*/1});
   WriteWholeFile(path_, bytes);
 
   repo = MappedRepo::Open(path_, &error);
@@ -439,8 +440,8 @@ TEST_F(MappedRepoCorruptionTest, PostingsForRejectsCorruptInlinePkg) {
   // largest value the mask can hold -- well past this repo's one-entry
   // package table.
   PokeAt(&bytes, entry_offset,
-        BasenameEntry{original.name, kInlinePostingBit | kPostingsStartMask,
-                      original.postings_count});
+         BasenameEntry{original.name, kInlinePostingBit | kPostingsStartMask,
+                       original.postings_count});
   WriteWholeFile(path_, bytes);
 
   MappedRepo::OpenError error;

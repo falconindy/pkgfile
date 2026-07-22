@@ -100,7 +100,8 @@ class MappedRepo {
   std::span<const uint32_t> PackageFiles(const Package& pkg) const {
     const uint64_t table_count = header_->package_files_count;
     const uint64_t start = std::min<uint64_t>(pkg.files_start, table_count);
-    const uint64_t count = std::min<uint64_t>(pkg.files_count, table_count - start);
+    const uint64_t count =
+        std::min<uint64_t>(pkg.files_count, table_count - start);
     return {PtrAt<uint32_t>(header_->package_files_offset) + start, count};
   }
 

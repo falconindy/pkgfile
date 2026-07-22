@@ -2,8 +2,10 @@
 
 #include <curl/curl.h>
 
+#include <memory>
 #include <set>
 
+#include "progress_display.hh"
 #include "repo.hh"
 
 namespace pkgfile {
@@ -24,6 +26,7 @@ class Updater {
 
   std::string cachedir_;
   CURLM* curl_multi_;
+  std::unique_ptr<ProgressDisplay> progress_;
 };
 
 }  // namespace pkgfile

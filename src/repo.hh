@@ -3,11 +3,16 @@
 #include <curl/curl.h>
 
 #include <chrono>
+#include <cstddef>
 #include <future>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace pkgfile {
+class ProgressDisplay;
+}  // namespace pkgfile
 
 enum class DownloadResult {
   UNKNOWN,
@@ -45,6 +50,12 @@ struct Repo {
   short force = false;
   // start time for download
   std::chrono::time_point<std::chrono::system_clock> dl_time_start;
+
+  // Shared display this repo's row lives in, and which row it is. Not
+  // owned; null (and progress_index unused) if progress reporting is off
+  // (e.g. stdout isn't a terminal).
+  pkgfile::ProgressDisplay* progress = nullptr;
+  size_t progress_index = 0;
 
   std::future<bool> worker;
 

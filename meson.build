@@ -52,6 +52,7 @@ libcommon = static_library(
     src/db_format.hh
     src/filter.cc src/filter.hh
     src/mapped_repo.cc src/mapped_repo.hh
+    src/progress_display.cc src/progress_display.hh
     src/repo.cc src/repo.hh
     src/result.cc src/result.hh
     src/update.cc src/update.hh
