@@ -82,36 +82,4 @@ class ReadArchive {
   archive* a_ = archive_read_new();
   bool opened_ = false;
 };
-
-class WriteArchive {
- public:
-  ~WriteArchive();
-
-  WriteArchive(const WriteArchive&) = delete;
-  WriteArchive& operator=(const WriteArchive&) = delete;
-
-  WriteArchive(WriteArchive&&) = default;
-  WriteArchive& operator=(WriteArchive&&) = default;
-
-  static std::unique_ptr<WriteArchive> New(const std::string& path,
-                                           int compress, const char** error);
-
-  const std::string& path() const { return path_; }
-
-  archive* write_archive() { return a_; }
-
-  bool Close();
-
- private:
-  WriteArchive(const std::string& path, int compress) : path_(path) {
-    archive_write_set_format_cpio_newc(a_);
-    archive_write_add_filter(a_, compress);
-  }
-
-  archive* a_ = archive_write_new();
-  std::string tmppath_;
-  std::string path_;
-  bool opened_ = false;
-};
-
 }  // namespace pkgfile

@@ -88,33 +88,4 @@ std::unique_ptr<ReadArchive> ReadArchive::New(const ReadOnlyFile& file,
   return a;
 }
 
-// static
-std::unique_ptr<WriteArchive> WriteArchive::New(const std::string& path,
-                                                int compress,
-                                                const char** error) {
-  std::unique_ptr<WriteArchive> a(new WriteArchive(path, compress));
-
-  if (archive_write_open_filename(a->a_, path.c_str()) != ARCHIVE_OK) {
-    *error = strerror(archive_errno(a->a_));
-    return nullptr;
-  }
-
-  a->opened_ = true;
-  return a;
-}
-
-bool WriteArchive::Close() {
-  if (opened_) {
-    opened_ = false;
-    return archive_write_close(a_) == ARCHIVE_OK;
-  }
-
-  return true;
-}
-
-WriteArchive::~WriteArchive() {
-  Close();
-  archive_write_free(a_);
-}
-
 }  // namespace pkgfile
