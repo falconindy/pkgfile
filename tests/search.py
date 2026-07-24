@@ -116,6 +116,39 @@ class TestUpdate(pkgfile_test.TestCase):
         """).lstrip('\n'),
         )
 
+    def testSearchCaseInsensitiveFullPath(self):
+        r = self.Pkgfile(
+            ['-s', '-i', '/USR/LIB/dhcpcd/dhcpcd-hooks/01-TEST']
+        )
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(
+            r.stdout.decode(),
+            textwrap.dedent("""
+            testing/dhcpcd
+        """).lstrip('\n'),
+        )
+
+        # The basename matches but the containing directory doesn't, so this
+        # must not match.
+        r = self.Pkgfile(['-s', '-i', '/usr/lib/WRONGDIR/01-test'])
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(r.stdout.decode(), '')
+
+    def testSearchCaseInsensitiveDirectoryWithoutDirectoriesFlagFindsNothing(self):
+        r = self.Pkgfile(['-s', '-i', '/USR/LIB/DHCPCD/dhcpcd-hooks/'])
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(r.stdout.decode(), '')
+
+    def testSearchCaseInsensitiveDirectories(self):
+        r = self.Pkgfile(['-s', '-i', '-d', '/USR/LIB/DHCPCD/dhcpcd-hooks/'])
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(
+            r.stdout.decode(),
+            textwrap.dedent("""
+            testing/dhcpcd
+        """).lstrip('\n'),
+        )
+
 
 if __name__ == '__main__':
     pkgfile_test.main()

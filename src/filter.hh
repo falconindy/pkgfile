@@ -100,15 +100,5 @@ class Exact : public Filter {
   bool case_sensitive_;
 };
 
-class Basename : public Filter {
- public:
-  Basename(std::string match, bool case_sensitive);
-
-  bool Matches(std::string_view line) const override;
-
- private:
-  std::unique_ptr<Exact> predicate_;
-};
-
 }  // namespace filter
 }  // namespace pkgfile

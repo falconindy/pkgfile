@@ -147,24 +147,4 @@ TEST(ExactFilter, MatchesByExactCaseInensitive) {
   EXPECT_TRUE(filter.Matches("DERP"));
 }
 
-TEST(BasenameFilter, MatchesByBasenameCaseSensitive) {
-  pkgfile::filter::Basename filter("derp", true);
-
-  EXPECT_TRUE(filter.Matches("derp"));
-  EXPECT_TRUE(filter.Matches("/bin/derp"));
-  EXPECT_FALSE(filter.Matches("dErp"));
-  EXPECT_FALSE(filter.Matches("/bin/DERP"));
-  EXPECT_FALSE(filter.Matches("/bin/derpp"));
-}
-
-TEST(BasenameFilter, MatchesByBasenameCaseInsensitive) {
-  pkgfile::filter::Basename filter("deRp", false);
-
-  EXPECT_TRUE(filter.Matches("derp"));
-  EXPECT_TRUE(filter.Matches("/bin/derp"));
-  EXPECT_TRUE(filter.Matches("dErp"));
-  EXPECT_FALSE(filter.Matches("/bin/derpp"));
-  EXPECT_TRUE(filter.Matches("/bin/DERP"));
-}
-
 }  // namespace

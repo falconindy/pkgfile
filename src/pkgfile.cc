@@ -122,17 +122,7 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
 
   switch (options.filterby) {
     case FilterStyle::EXACT:
-      if (options.mode == MODE_SEARCH) {
-        if (query.find('/') != query.npos) {
-          filter =
-              std::make_unique<filter::Exact>(query, options.case_sensitive);
-        } else {
-          filter =
-              std::make_unique<filter::Basename>(query, options.case_sensitive);
-        }
-      } else if (options.mode == MODE_LIST) {
-        filter = std::make_unique<filter::Exact>(query, options.case_sensitive);
-      }
+      filter = std::make_unique<filter::Exact>(query, options.case_sensitive);
       break;
     case FilterStyle::GLOB:
       filter = std::make_unique<filter::Glob>(query, options.case_sensitive);
@@ -400,21 +390,55 @@ void Pkgfile::SearchExactIndexed(const db::MappedRepo& repo,
   }
 }
 
-void Pkgfile::ScanBasenamesCaseInsensitive(const db::MappedRepo& repo,
-                                           const filter::Filter& filter,
-                                           Result* result) {
+void Pkgfile::ScanExactCaseInsensitive(const db::MappedRepo& repo,
+                                       std::string_view query, Result* result) {
+  const bool full_path_query = query.find('/') != query.npos;
+
+  // The basename of whatever this query is looking for -- for a bare query
+  // like "foo" that's the whole thing; for a full-path query like
+  // "/usr/bin/foo" or a directory query like "/usr/bin/" (trailing slash
+  // stripped first) it's the last path component.
+  std::string_view for_basename = query;
+  if (for_basename.ends_with('/')) {
+    for_basename.remove_suffix(1);
+  }
+  const auto last_slash = for_basename.rfind('/');
+  const std::string_view query_basename =
+      last_slash == for_basename.npos ? for_basename
+                                      : for_basename.substr(last_slash + 1);
+
+  const filter::Bin is_bin(bins_);
   std::vector<bool> emitted(repo.packages().size(), false);
   std::string resolved;
 
   for (const auto& entry : repo.basename_index()) {
+    const std::string_view name = repo.ResolveString(entry.name);
+    if (name.size() != query_basename.size() ||
+        strncasecmp(name.data(), query_basename.data(), name.size()) != 0) {
+      continue;
+    }
+
     db::Posting scratch;
     for (const auto& posting : repo.PostingsFor(entry, &scratch)) {
       if (!options_.verbose && emitted[posting.pkg]) {
         continue;
       }
+      if (db::IsDirOf(posting.path) && !options_.directories) {
+        continue;
+      }
 
       repo.ResolvePathInto(posting.path, &resolved);
-      if (!filter.Matches(resolved)) {
+
+      // Full-path query (e.g. "/usr/bin/foo" or "/usr/bin/"): the basename
+      // already matched above, but the rest of the path -- including a
+      // trailing slash for a directory query -- must too.
+      if (full_path_query &&
+          (resolved.size() != query.size() ||
+           strncasecmp(resolved.data(), query.data(), query.size()) != 0)) {
+        continue;
+      }
+
+      if (options_.binaries && !is_bin.Matches(resolved)) {
         continue;
       }
 
@@ -515,7 +539,7 @@ int Pkgfile::RunSearch(const Database& database, std::string_view reponame,
       options_.filterby == FilterStyle::EXACT && options_.case_sensitive;
 
   std::unique_ptr<filter::Filter> filter;
-  if (!use_index) {
+  if (!use_index && options_.filterby != FilterStyle::EXACT) {
     filter = BuildFilterFromOptions(options_, query);
     if (filter == nullptr) {
       return 1;
@@ -542,7 +566,7 @@ int Pkgfile::RunSearch(const Database& database, std::string_view reponame,
     // distinct basenames instead of every file.
     ParallelFor(repos.size(), [&](size_t begin, size_t end) {
       for (size_t i = begin; i < end; ++i) {
-        ScanBasenamesCaseInsensitive(*repos[i], *filter, result_for(*repos[i]));
+        ScanExactCaseInsensitive(*repos[i], query, result_for(*repos[i]));
       }
     });
   } else {

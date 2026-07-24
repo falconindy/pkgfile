@@ -92,9 +92,8 @@ class Pkgfile {
   bool PathMatches(const db::MappedRepo& repo, uint32_t tagged_path,
                    std::string_view query) const;
 
-  void ScanBasenamesCaseInsensitive(const db::MappedRepo& repo,
-                                    const filter::Filter& filter,
-                                    Result* result);
+  void ScanExactCaseInsensitive(const db::MappedRepo& repo,
+                                std::string_view query, Result* result);
   void ScanAllFiles(const db::MappedRepo& repo, const filter::Filter& filter,
                     size_t pkg_begin, size_t pkg_end, Result* result);
 
