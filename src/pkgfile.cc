@@ -862,6 +862,11 @@ std::optional<pkgfile::Pkgfile::Options> ParseOpts(int* argc, char*** argv) {
 
 int main(int argc, char* argv[]) {
   setlocale(LC_ALL, "");
+  // Filenames are raw bytes with no guaranteed encoding, so glob/fnmatch
+  // should match byte-for-byte rather than decoding through the user's
+  // locale. Under a multibyte LC_CTYPE, glibc's fnmatch() takes a much
+  // slower path that converts every candidate string to wchar_t first.
+  setlocale(LC_CTYPE, "C");
 
   const auto options = ParseOpts(&argc, &argv);
   if (options == std::nullopt) {
