@@ -8,7 +8,6 @@
 #include <format>
 #include <functional>
 #include <iostream>
-#include <map>
 #include <optional>
 #include <set>
 #include <thread>
@@ -227,20 +226,22 @@ std::vector<Pkgfile::ScanChunk> Pkgfile::BuildScanChunks(
   const size_t target = std::max<size_t>(1, total / (num_workers * 4));
 
   std::vector<ScanChunk> chunks;
-  for (const auto* repo : repos) {
+  for (size_t r = 0; r < repos.size(); ++r) {
+    const db::MappedRepo* repo = repos[r];
+
     const size_t count = repo->packages().size();
     size_t begin = 0;
     size_t running = 0;
     for (size_t i = 0; i < count; ++i) {
       running += weight(*repo, i);
       if (running >= target) {
-        chunks.push_back(ScanChunk{repo, begin, i + 1});
+        chunks.push_back(ScanChunk{r, begin, i + 1});
         begin = i + 1;
         running = 0;
       }
     }
     if (begin < count) {
-      chunks.push_back(ScanChunk{repo, begin, count});
+      chunks.push_back(ScanChunk{r, begin, count});
     }
   }
 
@@ -564,19 +565,15 @@ int Pkgfile::RunSearch(const Database& database, std::string_view reponame,
     }
   }
 
-  std::map<std::string, std::unique_ptr<Result>> results;
-  for (const auto* repo : repos) {
-    results.emplace(std::string(repo->reponame()), std::make_unique<Result>());
-  }
-  auto result_for = [&](const db::MappedRepo& repo) {
-    return results[std::string(repo.reponame())].get();
-  };
+  std::vector<std::unique_ptr<Result>> results(repos.size());
+  std::generate(results.begin(), results.end(),
+                [] { return std::make_unique<Result>(); });
 
   switch (strategy) {
     case SearchStrategy::kIndexedExact:
       ParallelFor(repos.size(), [&](size_t begin, size_t end) {
         for (size_t i = begin; i < end; ++i) {
-          SearchExactIndexed(*repos[i], query, result_for(*repos[i]));
+          SearchExactIndexed(*repos[i], query, results[i].get());
         }
       });
       break;
@@ -586,7 +583,7 @@ int Pkgfile::RunSearch(const Database& database, std::string_view reponame,
       // (much smaller) set of distinct basenames instead of every file.
       ParallelFor(repos.size(), [&](size_t begin, size_t end) {
         for (size_t i = begin; i < end; ++i) {
-          ScanCaseInsensitive(*repos[i], query, result_for(*repos[i]));
+          ScanCaseInsensitive(*repos[i], query, results[i].get());
         }
       });
       break;
@@ -603,29 +600,29 @@ int Pkgfile::RunSearch(const Database& database, std::string_view reponame,
           });
 
       RunOverChunks(std::move(chunks), [&](const ScanChunk& chunk) {
-        ScanAllFiles(*chunk.repo, *filter, chunk.begin, chunk.end,
-                     result_for(*chunk.repo));
+        ScanAllFiles(*repos[chunk.repo_idx], *filter, chunk.begin, chunk.end,
+                     results[chunk.repo_idx].get());
       });
       break;
     }
   }
 
-  std::erase_if(results, [](auto& result) { return result.second->Empty(); });
-
+  std::erase_if(results, [](auto& result) { return result->Empty(); });
   if (results.empty()) {
     return 1;
   }
 
   const size_t prefixlen =
-      options_.raw ? 0
-                   : std::max_element(results.begin(), results.end(),
-                                      [](const auto& a, const auto& b) {
-                                        return a.second->MaxPrefixlen() <
-                                               b.second->MaxPrefixlen();
-                                      })
-                         ->second->MaxPrefixlen();
+      options_.raw
+          ? 0
+          : std::max_element(results.begin(), results.end(),
+                             [](const auto& a, const auto& b) {
+                               return a->MaxPrefixlen() < b->MaxPrefixlen();
+                             })
+                ->get()
+                ->MaxPrefixlen();
 
-  for (auto& [repo, result] : results) {
+  for (const auto& result : results) {
     result->Print(prefixlen, options_.eol);
   }
 
@@ -671,7 +668,7 @@ int Pkgfile::RunList(const Database& database, std::string_view reponame,
           repos, [](const db::MappedRepo&, size_t) { return size_t{1}; });
 
       RunOverChunks(std::move(chunks), [&](const ScanChunk& chunk) {
-        ListScan(*chunk.repo, *filter, chunk.begin, chunk.end, &result);
+        ListScan(*repos[chunk.repo_idx], *filter, chunk.begin, chunk.end, &result);
       });
       break;
     }

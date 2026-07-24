@@ -99,9 +99,10 @@ class Pkgfile {
 
   // A [begin, end) slice of one repo's package table, sized so that scanning
   // it takes roughly the same work as any other chunk -- see
-  // BuildScanChunks().
+  // BuildScanChunks(). repo_idx represents an offset into the span of repos
+  // that this ScanChunk was created over; used to retrieve the db::MappedRepo.
   struct ScanChunk {
-    const db::MappedRepo* repo;
+    size_t repo_idx;
     size_t begin;
     size_t end;
   };
