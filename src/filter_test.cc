@@ -129,22 +129,4 @@ TEST(AndFilterTest, MatchesByComposite) {
   }
 }
 
-TEST(ExactFilter, MatchesByExactCaseSensitive) {
-  pkgfile::filter::Exact filter("derp", true);
-
-  EXPECT_TRUE(filter.Matches("derp"));
-  EXPECT_FALSE(filter.Matches("derpp"));
-  EXPECT_FALSE(filter.Matches("dderp"));
-  EXPECT_FALSE(filter.Matches("DERP"));
-}
-
-TEST(ExactFilter, MatchesByExactCaseInensitive) {
-  pkgfile::filter::Exact filter("derp", false);
-
-  EXPECT_TRUE(filter.Matches("derp"));
-  EXPECT_FALSE(filter.Matches("derpp"));
-  EXPECT_FALSE(filter.Matches("dderp"));
-  EXPECT_TRUE(filter.Matches("DERP"));
-}
-
 }  // namespace

@@ -12,6 +12,7 @@
 #include <optional>
 #include <set>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "db.hh"
@@ -138,8 +139,10 @@ std::unique_ptr<filter::Filter> Pkgfile::BuildFilterFromOptions(
 
   switch (options.filterby) {
     case FilterStyle::EXACT:
-      filter = std::make_unique<filter::Exact>(query, options.case_sensitive);
-      break;
+      // SelectStrategy() never routes an EXACT query through here -- exact
+      // matches are handled by the index/scan strategies in
+      // RunSearch/RunList instead.
+      std::unreachable();
     case FilterStyle::GLOB:
       filter = std::make_unique<filter::Glob>(query, options.case_sensitive);
       break;

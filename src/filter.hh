@@ -89,16 +89,5 @@ class Glob : public Filter {
   int flags_;
 };
 
-class Exact : public Filter {
- public:
-  Exact(std::string match, bool case_sensitive);
-
-  bool Matches(std::string_view line) const override;
-
- private:
-  std::string match_;
-  bool case_sensitive_;
-};
-
 }  // namespace filter
 }  // namespace pkgfile

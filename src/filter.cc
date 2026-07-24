@@ -1,7 +1,6 @@
 #include "filter.hh"
 
 #include <fnmatch.h>
-#include <strings.h>
 
 #include <format>
 #include <iostream>
@@ -78,18 +77,6 @@ std::unique_ptr<Regex> Regex::Compile(const std::string& pattern,
 bool Regex::Matches(std::string_view line) const {
   return pcre_exec(re_, re_extra_, line.data(), line.size(), 0,
                    PCRE_NO_UTF16_CHECK, nullptr, 0) >= 0;
-}
-
-Exact::Exact(std::string match, bool case_sensitive)
-    : match_(std::move(match)), case_sensitive_(case_sensitive) {}
-
-bool Exact::Matches(std::string_view line) const {
-  if (case_sensitive_) {
-    return line == match_;
-  }
-
-  return line.size() == match_.size() &&
-         strncasecmp(line.data(), match_.data(), match_.size()) == 0;
 }
 
 }  // namespace filter
