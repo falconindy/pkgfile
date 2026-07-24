@@ -28,6 +28,24 @@ void Result::Add(std::string prefix, std::string entry) {
   lines_.emplace_back(std::move(prefix), std::move(entry));
 }
 
+void Result::MergeFrom(Batch* batch) {
+  if (batch->lines_.empty()) {
+    return;
+  }
+
+  std::lock_guard l(mu_);
+
+  if (batch->max_prefixlen_ > max_prefixlen_) {
+    max_prefixlen_ = batch->max_prefixlen_;
+  }
+
+  lines_.insert(lines_.end(), std::make_move_iterator(batch->lines_.begin()),
+                std::make_move_iterator(batch->lines_.end()));
+
+  batch->lines_.clear();
+  batch->max_prefixlen_ = 0;
+}
+
 void Result::Print(size_t prefixlen, char eol) {
   if (lines_.empty()) {
     return;

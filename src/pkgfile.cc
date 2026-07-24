@@ -478,6 +478,14 @@ void Pkgfile::ScanAllFiles(const db::MappedRepo& repo,
   std::string resolved;
   db::MappedRepo::PathCache path_cache;
 
+  // Chunks are partitioned by file count across every selected repo
+  // combined, so multiple worker threads can end up scanning different
+  // chunks of the *same* repo concurrently, all targeting the same
+  // Result. Accumulate matches locally and merge once per chunk instead of
+  // once per match, so a broad pattern doesn't turn every match into a
+  // contended lock acquisition.
+  Result::Batch batch;
+
   for (size_t i = pkg_begin; i < pkg_end; ++i) {
     const auto& pkg = pkgs[i];
     bool emitted = false;
@@ -492,13 +500,15 @@ void Pkgfile::ScanAllFiles(const db::MappedRepo& repo,
         continue;
       }
 
-      result->Add(FormatSearchResult(repo.reponame(),
-                                     {repo.ResolveString(pkg.name),
-                                      repo.ResolveString(pkg.version)}),
-                  options_.verbose ? resolved : std::string());
+      batch.Add(FormatSearchResult(repo.reponame(),
+                                   {repo.ResolveString(pkg.name),
+                                    repo.ResolveString(pkg.version)}),
+                options_.verbose ? resolved : std::string());
       emitted = true;
     }
   }
+
+  result->MergeFrom(&batch);
 }
 
 // -- list mode --
@@ -508,6 +518,12 @@ void Pkgfile::EmitPackageFileList(const db::MappedRepo& repo,
   const filter::Bin is_bin(bins_);
   db::MappedRepo::PathCache path_cache;
 
+  // See the matching comment in ScanAllFiles: ListScan's chunks can put
+  // different packages from the same repo on different worker threads, all
+  // targeting this same Result, so batch this package's files and merge
+  // once instead of locking per file.
+  Result::Batch batch;
+
   for (const auto tagged_path : repo.PackageFiles(pkg)) {
     std::string resolved;
     repo.ResolvePathInto(tagged_path, &resolved, &path_cache);
@@ -516,13 +532,15 @@ void Pkgfile::EmitPackageFileList(const db::MappedRepo& repo,
     }
 
     if (options_.quiet) {
-      result->Add(std::move(resolved), std::string());
+      batch.Add(std::move(resolved), std::string());
     } else {
-      result->Add(
+      batch.Add(
           std::format("{}/{}", repo.reponame(), repo.ResolveString(pkg.name)),
           std::move(resolved));
     }
   }
+
+  result->MergeFrom(&batch);
 }
 
 void Pkgfile::ListCaseInsensitive(const db::MappedRepo& repo,

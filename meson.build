@@ -198,6 +198,7 @@ if gtest.found() and gmock.found()
         src/filter_test.cc
         src/queue_test.cc
         src/repo_test.cc
+        src/result_test.cc
       '''.split(),
             ),
             link_with: [libcommon, gtest_main],
