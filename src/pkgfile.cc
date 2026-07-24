@@ -184,30 +184,14 @@ std::vector<const db::MappedRepo*> Pkgfile::SelectRepos(
   return repos;
 }
 
-void Pkgfile::ParallelFor(
-    size_t count, const std::function<void(size_t begin, size_t end)>& work) {
-  if (count == 0) {
-    return;
+std::vector<Pkgfile::ScanChunk> Pkgfile::WholeRepoChunks(
+    std::span<const db::MappedRepo* const> repos) {
+  std::vector<ScanChunk> chunks;
+  chunks.reserve(repos.size());
+  for (size_t i = 0; i < repos.size(); ++i) {
+    chunks.push_back(ScanChunk{i, 0, repos[i]->packages().size()});
   }
-
-  const size_t num_workers = std::max<size_t>(
-      1, std::min<size_t>(std::thread::hardware_concurrency(), count));
-  const size_t chunk = (count + num_workers - 1) / num_workers;
-
-  std::vector<std::thread> workers;
-  workers.reserve(num_workers);
-  for (size_t i = 0; i < num_workers; ++i) {
-    const size_t begin = i * chunk;
-    const size_t end = std::min(count, begin + chunk);
-    if (begin >= end) {
-      break;
-    }
-    workers.emplace_back(work, begin, end);
-  }
-
-  for (auto& worker : workers) {
-    worker.join();
-  }
+  return chunks;
 }
 
 std::vector<Pkgfile::ScanChunk> Pkgfile::BuildScanChunks(
@@ -571,20 +555,18 @@ int Pkgfile::RunSearch(const Database& database, std::string_view reponame,
 
   switch (strategy) {
     case SearchStrategy::kIndexedExact:
-      ParallelFor(repos.size(), [&](size_t begin, size_t end) {
-        for (size_t i = begin; i < end; ++i) {
-          SearchExactIndexed(*repos[i], query, results[i].get());
-        }
+      RunOverChunks(WholeRepoChunks(repos), [&](const ScanChunk& chunk) {
+        SearchExactIndexed(*repos[chunk.repo_idx], query,
+                           results[chunk.repo_idx].get());
       });
       break;
 
     case SearchStrategy::kCaseInsensitive:
       // The index is sorted case-sensitively, so fall back to scanning the
       // (much smaller) set of distinct basenames instead of every file.
-      ParallelFor(repos.size(), [&](size_t begin, size_t end) {
-        for (size_t i = begin; i < end; ++i) {
-          ScanCaseInsensitive(*repos[i], query, results[i].get());
-        }
+      RunOverChunks(WholeRepoChunks(repos), [&](const ScanChunk& chunk) {
+        ScanCaseInsensitive(*repos[chunk.repo_idx], query,
+                            results[chunk.repo_idx].get());
       });
       break;
 
@@ -668,7 +650,8 @@ int Pkgfile::RunList(const Database& database, std::string_view reponame,
           repos, [](const db::MappedRepo&, size_t) { return size_t{1}; });
 
       RunOverChunks(std::move(chunks), [&](const ScanChunk& chunk) {
-        ListScan(*repos[chunk.repo_idx], *filter, chunk.begin, chunk.end, &result);
+        ListScan(*repos[chunk.repo_idx], *filter, chunk.begin, chunk.end,
+                 &result);
       });
       break;
     }

@@ -119,6 +119,13 @@ class Pkgfile {
       const std::function<size_t(const db::MappedRepo&, size_t pkg_index)>&
           weight);
 
+  // One chunk per repo, spanning that repo's whole package table. Used by
+  // strategies that operate on a repo as a unit rather than needing it split
+  // further, so they still get RunOverChunks' work-stealing across repos of
+  // uneven size.
+  std::vector<ScanChunk> WholeRepoChunks(
+      std::span<const db::MappedRepo* const> repos);
+
   // Runs `work` over every chunk in `chunks`, dispatched across a pool of
   // worker threads via a shared queue (rather than a static split) so chunks
   // from small repos and large repos even out.
@@ -133,11 +140,6 @@ class Pkgfile {
                            Result* result);
   void ListScan(const db::MappedRepo& repo, const filter::Filter& filter,
                 size_t pkg_begin, size_t pkg_end, Result* result);
-
-  // Runs `work` across [0, count) partitioned into ranges, one per worker
-  // thread, and blocks until all workers finish.
-  void ParallelFor(size_t count,
-                   const std::function<void(size_t begin, size_t end)>& work);
 
   Options options_;
   std::vector<std::string> bins_;
