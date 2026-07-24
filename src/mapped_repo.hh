@@ -34,6 +34,21 @@ class MappedRepo {
     return ResolveString(header_->repo_name);
   }
 
+  // Advises the kernel about the access pattern about to be used against
+  // this mapping. Open() doesn't do this itself: indexed lookups
+  // (FindPackageByName, FindBasename, ...) binary-search sorted tables and
+  // want MADV_RANDOM so the kernel doesn't fault in neighboring pages that
+  // will never be touched, but a full scan (ScanAllFiles or
+  // EmitPackageFileList walking every package's file list) wants the
+  // opposite -- disabling readahead there means every page is its own
+  // synchronous fault instead of being pulled in ahead of time. Which one
+  // applies depends on the query strategy, decided after the repo is
+  // already open, so the caller advises once it knows. Advisory only --
+  // cheap, and a failure here isn't fatal; the choice only matters for a
+  // cold page cache.
+  void AdviseRandomAccess() const;
+  void AdviseSequentialAccess() const;
+
   std::string_view ResolveString(StringId id) const;
 
   // Speeds up a sequence of ResolvePathInto() calls that tend to share an

@@ -39,11 +39,11 @@ std::unique_ptr<MappedRepo> MappedRepo::Open(const std::string& path,
     return nullptr;
   }
 
-  // Lookups binary-search sorted tables, which is the opposite of the
-  // sequential access the kernel's default readahead assumes; tell it not
-  // to bother, so it doesn't fault in and cache neighboring pages we're not
-  // going to touch. Advisory only -- a failure here isn't fatal.
-  madvise(mapped->ptr, mapped->size, MADV_RANDOM);
+  // No madvise() here: the right access-pattern hint depends on which query
+  // strategy ends up using this repo (an indexed lookup vs. a full scan
+  // want opposite advice -- see AdviseRandomAccess()/AdviseSequentialAccess()
+  // below), and that isn't known yet at open time. Callers advise once they
+  // know.
 
   const uint64_t file_size = static_cast<uint64_t>(mapped->size);
   if (file_size < sizeof(Header)) {
@@ -84,6 +84,16 @@ std::unique_ptr<MappedRepo> MappedRepo::Open(const std::string& path,
   }
 
   return std::unique_ptr<MappedRepo>(new MappedRepo(std::move(file), header));
+}
+
+void MappedRepo::AdviseRandomAccess() const {
+  const auto& mapped = file_->mmapped();
+  madvise(mapped->ptr, mapped->size, MADV_RANDOM);
+}
+
+void MappedRepo::AdviseSequentialAccess() const {
+  const auto& mapped = file_->mmapped();
+  madvise(mapped->ptr, mapped->size, MADV_SEQUENTIAL);
 }
 
 std::string_view MappedRepo::ResolveString(StringId id) const {

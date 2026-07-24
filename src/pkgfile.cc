@@ -42,6 +42,21 @@ SearchStrategy SelectStrategy(const Pkgfile::Options& options) {
                                 : SearchStrategy::kCaseInsensitive;
 }
 
+// kScanAllFiles walks every package's file list start to finish; the other
+// two strategies binary-search sorted tables. Point the kernel's readahead
+// at whichever one this query is actually about to do -- see
+// MappedRepo::AdviseRandomAccess()/AdviseSequentialAccess().
+void AdviseRepos(std::span<const db::MappedRepo* const> repos,
+                 SearchStrategy strategy) {
+  for (const auto* repo : repos) {
+    if (strategy == SearchStrategy::kScanAllFiles) {
+      repo->AdviseSequentialAccess();
+    } else {
+      repo->AdviseRandomAccess();
+    }
+  }
+}
+
 bool IsValidBin(std::string_view path) {
   if (path.empty() || path.starts_with("/home") || !path.starts_with('/')) {
     return false;
@@ -542,6 +557,7 @@ int Pkgfile::RunSearch(const Database& database, std::string_view reponame,
   const auto repos = SelectRepos(database, reponame);
 
   const SearchStrategy strategy = SelectStrategy(options_);
+  AdviseRepos(repos, strategy);
 
   std::unique_ptr<filter::Filter> filter;
   if (strategy == SearchStrategy::kScanAllFiles) {
@@ -618,6 +634,7 @@ int Pkgfile::RunList(const Database& database, std::string_view reponame,
   const auto repos = SelectRepos(database, reponame);
 
   const SearchStrategy strategy = SelectStrategy(options_);
+  AdviseRepos(repos, strategy);
 
   std::unique_ptr<filter::Filter> filter;
   if (strategy == SearchStrategy::kScanAllFiles) {
