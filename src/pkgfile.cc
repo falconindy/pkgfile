@@ -26,6 +26,22 @@ namespace pkgfile {
 
 namespace {
 
+// Both search and list mode pick from the same three execution strategies,
+// keyed off the same (filterby, case_sensitive) combination.
+enum class SearchStrategy {
+  kIndexedExact,
+  kCaseInsensitive,
+  kScanAllFiles,
+};
+
+SearchStrategy SelectStrategy(const Pkgfile::Options& options) {
+  if (options.filterby != FilterStyle::EXACT) {
+    return SearchStrategy::kScanAllFiles;
+  }
+  return options.case_sensitive ? SearchStrategy::kIndexedExact
+                                : SearchStrategy::kCaseInsensitive;
+}
+
 bool IsValidBin(std::string_view path) {
   if (path.empty() || path.starts_with("/home") || !path.starts_with('/')) {
     return false;
@@ -390,8 +406,8 @@ void Pkgfile::SearchExactIndexed(const db::MappedRepo& repo,
   }
 }
 
-void Pkgfile::ScanExactCaseInsensitive(const db::MappedRepo& repo,
-                                       std::string_view query, Result* result) {
+void Pkgfile::ScanCaseInsensitive(const db::MappedRepo& repo,
+                                  std::string_view query, Result* result) {
   const bool full_path_query = query.find('/') != query.npos;
 
   // The basename of whatever this query is looking for -- for a bare query
@@ -504,8 +520,8 @@ void Pkgfile::EmitPackageFileList(const db::MappedRepo& repo,
   }
 }
 
-void Pkgfile::ListExactCaseInsensitive(const db::MappedRepo& repo,
-                                       std::string_view query, Result* result) {
+void Pkgfile::ListCaseInsensitive(const db::MappedRepo& repo,
+                                  std::string_view query, Result* result) {
   for (const auto& pkg : repo.packages()) {
     const auto name = repo.ResolveString(pkg.name);
     if (name.size() == query.size() &&
@@ -535,11 +551,10 @@ int Pkgfile::RunSearch(const Database& database, std::string_view reponame,
   const std::string query = NormalizeQuery(std::string(query_in));
   const auto repos = SelectRepos(database, reponame);
 
-  const bool use_index =
-      options_.filterby == FilterStyle::EXACT && options_.case_sensitive;
+  const SearchStrategy strategy = SelectStrategy(options_);
 
   std::unique_ptr<filter::Filter> filter;
-  if (!use_index && options_.filterby != FilterStyle::EXACT) {
+  if (strategy == SearchStrategy::kScanAllFiles) {
     filter = BuildFilterFromOptions(options_, query);
     if (filter == nullptr) {
       return 1;
@@ -554,35 +569,42 @@ int Pkgfile::RunSearch(const Database& database, std::string_view reponame,
     return results[std::string(repo.reponame())].get();
   };
 
-  if (use_index) {
-    ParallelFor(repos.size(), [&](size_t begin, size_t end) {
-      for (size_t i = begin; i < end; ++i) {
-        SearchExactIndexed(*repos[i], query, result_for(*repos[i]));
-      }
-    });
-  } else if (options_.filterby == FilterStyle::EXACT) {
-    // Case-insensitive exact/basename search: the index is sorted
-    // case-sensitively, so fall back to scanning the (much smaller) set of
-    // distinct basenames instead of every file.
-    ParallelFor(repos.size(), [&](size_t begin, size_t end) {
-      for (size_t i = begin; i < end; ++i) {
-        ScanExactCaseInsensitive(*repos[i], query, result_for(*repos[i]));
-      }
-    });
-  } else {
-    // Glob/regex has to scan every file, which for a single large repo can
-    // dwarf what one thread can chew through. Partition by total file count
-    // across every selected repo combined -- rather than one work item per
-    // repo -- so a search scoped to a single repo still saturates every
-    // core.
-    auto chunks = BuildScanChunks(repos, [](const db::MappedRepo& r, size_t i) {
-      return static_cast<size_t>(r.packages()[i].files_count);
-    });
+  switch (strategy) {
+    case SearchStrategy::kIndexedExact:
+      ParallelFor(repos.size(), [&](size_t begin, size_t end) {
+        for (size_t i = begin; i < end; ++i) {
+          SearchExactIndexed(*repos[i], query, result_for(*repos[i]));
+        }
+      });
+      break;
 
-    RunOverChunks(std::move(chunks), [&](const ScanChunk& chunk) {
-      ScanAllFiles(*chunk.repo, *filter, chunk.begin, chunk.end,
-                   result_for(*chunk.repo));
-    });
+    case SearchStrategy::kCaseInsensitive:
+      // The index is sorted case-sensitively, so fall back to scanning the
+      // (much smaller) set of distinct basenames instead of every file.
+      ParallelFor(repos.size(), [&](size_t begin, size_t end) {
+        for (size_t i = begin; i < end; ++i) {
+          ScanCaseInsensitive(*repos[i], query, result_for(*repos[i]));
+        }
+      });
+      break;
+
+    case SearchStrategy::kScanAllFiles: {
+      // Glob/regex has to scan every file, which for a single large repo can
+      // dwarf what one thread can chew through. Partition by total file
+      // count across every selected repo combined -- rather than one work
+      // item per repo -- so a search scoped to a single repo still saturates
+      // every core.
+      auto chunks =
+          BuildScanChunks(repos, [](const db::MappedRepo& r, size_t i) {
+            return static_cast<size_t>(r.packages()[i].files_count);
+          });
+
+      RunOverChunks(std::move(chunks), [&](const ScanChunk& chunk) {
+        ScanAllFiles(*chunk.repo, *filter, chunk.begin, chunk.end,
+                     result_for(*chunk.repo));
+      });
+      break;
+    }
   }
 
   std::erase_if(results, [](auto& result) { return result.second->Empty(); });
@@ -611,11 +633,10 @@ int Pkgfile::RunList(const Database& database, std::string_view reponame,
                      std::string_view query) {
   const auto repos = SelectRepos(database, reponame);
 
-  const bool use_index =
-      options_.filterby == FilterStyle::EXACT && options_.case_sensitive;
+  const SearchStrategy strategy = SelectStrategy(options_);
 
   std::unique_ptr<filter::Filter> filter;
-  if (!use_index) {
+  if (strategy == SearchStrategy::kScanAllFiles) {
     filter = BuildFilterFromOptions(options_, std::string(query));
     if (filter == nullptr) {
       return 1;
@@ -624,26 +645,33 @@ int Pkgfile::RunList(const Database& database, std::string_view reponame,
 
   Result result;
 
-  if (use_index) {
-    for (const auto* repo : repos) {
-      if (const auto* pkg = repo->FindPackageByName(query)) {
-        EmitPackageFileList(*repo, *pkg, &result);
+  switch (strategy) {
+    case SearchStrategy::kIndexedExact:
+      for (const auto* repo : repos) {
+        if (const auto* pkg = repo->FindPackageByName(query)) {
+          EmitPackageFileList(*repo, *pkg, &result);
+        }
       }
-    }
-  } else if (options_.filterby == FilterStyle::EXACT) {
-    for (const auto* repo : repos) {
-      ListExactCaseInsensitive(*repo, query, &result);
-    }
-  } else {
-    // Same reasoning as the search-mode glob/regex path: partition by
-    // package count across every selected repo combined so a listing scoped
-    // to one repo can still use every core.
-    auto chunks = BuildScanChunks(
-        repos, [](const db::MappedRepo&, size_t) { return size_t{1}; });
+      break;
 
-    RunOverChunks(std::move(chunks), [&](const ScanChunk& chunk) {
-      ListScan(*chunk.repo, *filter, chunk.begin, chunk.end, &result);
-    });
+    case SearchStrategy::kCaseInsensitive:
+      for (const auto* repo : repos) {
+        ListCaseInsensitive(*repo, query, &result);
+      }
+      break;
+
+    case SearchStrategy::kScanAllFiles: {
+      // Same reasoning as the search-mode glob/regex path: partition by
+      // package count across every selected repo combined so a listing
+      // scoped to one repo can still use every core.
+      auto chunks = BuildScanChunks(
+          repos, [](const db::MappedRepo&, size_t) { return size_t{1}; });
+
+      RunOverChunks(std::move(chunks), [&](const ScanChunk& chunk) {
+        ListScan(*chunk.repo, *filter, chunk.begin, chunk.end, &result);
+      });
+      break;
+    }
   }
 
   if (result.Empty()) {

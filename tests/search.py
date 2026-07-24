@@ -117,9 +117,7 @@ class TestUpdate(pkgfile_test.TestCase):
         )
 
     def testSearchCaseInsensitiveFullPath(self):
-        r = self.Pkgfile(
-            ['-s', '-i', '/USR/LIB/dhcpcd/dhcpcd-hooks/01-TEST']
-        )
+        r = self.Pkgfile(['-s', '-i', '/USR/LIB/dhcpcd/dhcpcd-hooks/01-TEST'])
         self.assertEqual(r.returncode, 0)
         self.assertEqual(
             r.stdout.decode(),
