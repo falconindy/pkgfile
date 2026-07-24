@@ -461,6 +461,7 @@ void Pkgfile::ScanAllFiles(const db::MappedRepo& repo,
                            size_t pkg_end, Result* result) {
   const auto pkgs = repo.packages();
   std::string resolved;
+  db::MappedRepo::PathCache path_cache;
 
   for (size_t i = pkg_begin; i < pkg_end; ++i) {
     const auto& pkg = pkgs[i];
@@ -471,7 +472,7 @@ void Pkgfile::ScanAllFiles(const db::MappedRepo& repo,
         break;
       }
 
-      repo.ResolvePathInto(tagged_path, &resolved);
+      repo.ResolvePathInto(tagged_path, &resolved, &path_cache);
       if (!filter.Matches(resolved)) {
         continue;
       }
@@ -490,10 +491,11 @@ void Pkgfile::ScanAllFiles(const db::MappedRepo& repo,
 void Pkgfile::EmitPackageFileList(const db::MappedRepo& repo,
                                   const db::Package& pkg, Result* result) {
   const filter::Bin is_bin(bins_);
+  db::MappedRepo::PathCache path_cache;
 
   for (const auto tagged_path : repo.PackageFiles(pkg)) {
     std::string resolved;
-    repo.ResolvePathInto(tagged_path, &resolved);
+    repo.ResolvePathInto(tagged_path, &resolved, &path_cache);
     if (options_.binaries && !is_bin.Matches(resolved)) {
       continue;
     }

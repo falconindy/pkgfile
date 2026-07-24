@@ -202,6 +202,58 @@ TEST_F(DbRoundTripTest, ResolvesPathsDeeperThanInlineStackBuffer) {
   EXPECT_EQ(resolved.size(), static_cast<size_t>(kDepth + 1));
 }
 
+TEST_F(DbRoundTripTest, PathCacheMatchesUncachedResolution) {
+  DbBuilder builder("testrepo");
+
+  // A mix designed to exercise every PathCache transition: runs of files
+  // sharing an immediate parent (cache hits), moves to a sibling directory
+  // (parent changes but shares an ancestor), a jump back up to a shallower
+  // directory, and -- since the trie is deduplicated repo-wide -- a second
+  // package landing back in a directory the first package already visited.
+  builder.AddPackage(
+      "pkg-a", "1-1",
+      {
+          {"usr", true},
+          {"usr/bin", true},
+          {"usr/bin/a1", false},
+          {"usr/bin/a2", false},
+          {"usr/bin/a3", false},
+          {"usr/share", true},
+          {"usr/share/doc", true},
+          {"usr/share/doc/pkg-a", true},
+          {"usr/share/doc/pkg-a/README", false},
+          {"usr/share/doc/pkg-a/CHANGELOG", false},
+          {"usr/bin", true},  // back up to a shallower, already-seen dir
+      });
+  builder.AddPackage("pkg-b", "1-1",
+                     {
+                         {"usr", true},
+                         {"usr/bin", true},
+                         {"usr/bin/b1", false},  // same parent as pkg-a's files
+                     });
+
+  ASSERT_TRUE(builder.WriteToFile(path_, 0));
+
+  MappedRepo::OpenError error;
+  auto repo = MappedRepo::Open(path_, &error);
+  ASSERT_NE(repo, nullptr);
+
+  MappedRepo::PathCache cache;
+  std::string cached;
+
+  for (const auto* name : {"pkg-a", "pkg-b"}) {
+    const Package* pkg = repo->FindPackageByName(name);
+    ASSERT_NE(pkg, nullptr);
+
+    for (const auto tagged : repo->PackageFiles(*pkg)) {
+      const std::string uncached = repo->ResolvePath(tagged);
+      repo->ResolvePathInto(tagged, &cached, &cache);
+      EXPECT_EQ(cached, uncached)
+          << "package " << name << " tagged path " << tagged;
+    }
+  }
+}
+
 // Below: MappedRepo is a zero-copy view straight over a PFDB file's bytes,
 // so nothing about a corrupt or maliciously crafted file stops it from
 // containing an in-range table full of out-of-range interior references (a

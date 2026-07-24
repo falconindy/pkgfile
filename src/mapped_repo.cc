@@ -109,9 +109,25 @@ namespace {
 constexpr size_t kMaxInlineDepth = 128;
 }  // namespace
 
-void MappedRepo::ResolvePathInto(uint32_t tagged_path, std::string* out) const {
+void MappedRepo::ResolvePathInto(uint32_t tagged_path, std::string* out,
+                                 PathCache* cache) const {
   const bool is_dir = IsDirOf(tagged_path);
   const PathId leaf = PathIdOf(tagged_path);
+  const PathNode& leaf_node = PathNodeAt(leaf);
+
+  // Fast path: the previous call in this cache resolved a file with the
+  // same immediate parent. Every ancestor beyond that parent is therefore
+  // identical too, so skip straight to gluing the leaf's own name onto the
+  // parent's already-resolved prefix instead of re-walking the trie.
+  if (cache != nullptr && cache->valid && leaf_node.parent == cache->parent) {
+    const std::string_view name = ResolveString(leaf_node.name);
+    out->assign(cache->prefix);
+    out->append(name);
+    if (is_dir) {
+      out->push_back('/');
+    }
+    return;
+  }
 
   // Single walk of the trie leaf-to-root: record each component in a
   // stack-resident array (no allocation) while accumulating the exact
@@ -122,8 +138,9 @@ void MappedRepo::ResolvePathInto(uint32_t tagged_path, std::string* out) const {
   size_t length = is_dir ? 1 : 0;
   bool overflowed = false;
 
-  for (PathId id = leaf; id != kRootPath; id = PathNodeAt(id).parent) {
-    const std::string_view name = ResolveString(PathNodeAt(id).name);
+  const PathNode* node = &leaf_node;
+  for (PathId id = leaf;;) {
+    const std::string_view name = ResolveString(node->name);
     length += 1 + name.size();
     if (depth < kMaxInlineDepth) {
       components[depth] = name;
@@ -131,36 +148,53 @@ void MappedRepo::ResolvePathInto(uint32_t tagged_path, std::string* out) const {
       overflowed = true;
     }
     ++depth;
+
+    id = node->parent;
+    if (id == kRootPath) {
+      break;
+    }
+    node = &PathNodeAt(id);
   }
 
   if (overflowed) {
     ResolvePathIntoSlow(tagged_path, length, out);
-    return;
+  } else {
+    // resize_and_overwrite hands us an uninitialized buffer of exactly
+    // `length` bytes rather than value-initializing it the way resize()
+    // would, which matters here since every one of those bytes is about to
+    // be overwritten anyway.
+    out->resize_and_overwrite(length, [&](char* buf, size_t n) {
+      size_t pos = n;
+      if (is_dir) {
+        buf[--pos] = '/';
+      }
+      // `components` was filled leaf-to-root (components[0] is the leaf);
+      // the write position walks backward from the end of the buffer as
+      // each component is consumed, so processing them in that same
+      // leaf-to-root order here lands the leaf nearest the end and the
+      // top-level component nearest the start -- exactly like the direct
+      // trie walk this array replaced.
+      for (size_t i = 0; i < depth; ++i) {
+        const std::string_view name = components[i];
+        pos -= name.size();
+        std::char_traits<char>::copy(buf + pos, name.data(), name.size());
+        buf[--pos] = '/';
+      }
+      return n;
+    });
   }
 
-  // resize_and_overwrite hands us an uninitialized buffer of exactly
-  // `length` bytes rather than value-initializing it the way resize()
-  // would, which matters here since every one of those bytes is about to
-  // be overwritten anyway.
-  out->resize_and_overwrite(length, [&](char* buf, size_t n) {
-    size_t pos = n;
-    if (is_dir) {
-      buf[--pos] = '/';
-    }
-    // `components` was filled leaf-to-root (components[0] is the leaf); the
-    // write position walks backward from the end of the buffer as each
-    // component is consumed, so processing them in that same leaf-to-root
-    // order here lands the leaf nearest the end and the top-level component
-    // nearest the start -- exactly like the direct trie walk this array
-    // replaced.
-    for (size_t i = 0; i < depth; ++i) {
-      const std::string_view name = components[i];
-      pos -= name.size();
-      std::char_traits<char>::copy(buf + pos, name.data(), name.size());
-      buf[--pos] = '/';
-    }
-    return n;
-  });
+  if (cache != nullptr && !overflowed) {
+    // Everything in `out` except the leaf's own name (and its trailing
+    // slash, if this occurrence is a directory) is exactly the parent's own
+    // resolved-as-a-directory path -- reuse it verbatim rather than paying
+    // for a second walk up to the parent.
+    const std::string_view leaf_name = components[0];
+    const size_t strip = leaf_name.size() + (is_dir ? 1 : 0);
+    cache->prefix.assign(*out, 0, out->size() - strip);
+    cache->parent = leaf_node.parent;
+    cache->valid = true;
+  }
 }
 
 void MappedRepo::ResolvePathIntoSlow(uint32_t tagged_path, size_t length,
@@ -173,11 +207,17 @@ void MappedRepo::ResolvePathIntoSlow(uint32_t tagged_path, size_t length,
     if (is_dir) {
       buf[--pos] = '/';
     }
-    for (PathId id = leaf; id != kRootPath; id = PathNodeAt(id).parent) {
-      const std::string_view name = ResolveString(PathNodeAt(id).name);
+    for (PathId id = leaf;;) {
+      const PathNode& node = PathNodeAt(id);
+      const std::string_view name = ResolveString(node.name);
       pos -= name.size();
       std::char_traits<char>::copy(buf + pos, name.data(), name.size());
       buf[--pos] = '/';
+
+      id = node.parent;
+      if (id == kRootPath) {
+        break;
+      }
     }
     return n;
   });
