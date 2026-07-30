@@ -30,8 +30,22 @@ libcurl = dependency('libcurl')
 libsystemd = dependency('libsystemd')
 pthreads = dependency('threads')
 stdcppfs = cpp.find_library('stdc++fs')
-gtest = dependency('gtest', required: false)
-gmock = dependency('gmock', required: false)
+gtest = declare_dependency(
+    dependencies: [
+        dependency(
+            'gtest',
+            version: '>=1.10.0',
+            required: get_option('unittests'),
+            disabler: true,
+        ),
+        dependency(
+            'gtest_main',
+            required: get_option('unittests'),
+            disabler: true,
+        ),
+    ],
+)
+gmock = dependency('gmock', required: false, disabler: true)
 
 pod2man = find_program('pod2man')
 pkgconfig = find_program('pkg-config')
@@ -185,30 +199,28 @@ install_data(
     install_dir: join_paths(get_option('datadir'), 'licenses/pkgfile'),
 )
 
-if gtest.found() and gmock.found()
-    gtest_main = static_library('gtest_main', 'src/test/gtest_main.cc')
-
-    test(
+test(
+    'unit_tests',
+    executable(
         'unit_tests',
-        executable(
-            'unit_tests',
-            files(
-                '''
-        src/db_test.cc
-        src/filter_test.cc
-        src/queue_test.cc
-        src/repo_test.cc
-        src/result_test.cc
-      '''.split(),
-            ),
-            link_with: [libcommon, gtest_main],
-            dependencies: [gmock, gtest, libpcre, stdcppfs],
+        files(
+            '''
+    src/db_test.cc
+    src/filter_test.cc
+    src/queue_test.cc
+    src/repo_test.cc
+    src/result_test.cc
+  '''.split(),
         ),
-        protocol: 'gtest',
-    )
-else
-    message('Skipping unit tests, gtest or gmock not found')
-endif
+        link_with: [libcommon],
+        dependencies: [gmock, gtest, libpcre, stdcppfs],
+    ),
+    env: [
+        'TZ=UTC',
+        'LC_TIME=C',
+    ],
+    protocol: 'gtest',
+)
 
 python = import('python')
 py3 = python.find_installation('python3')
@@ -216,11 +228,11 @@ py3 = python.find_installation('python3')
 python_requirement = '>=3.7'
 if py3.found() and py3.language_version().version_compare(python_requirement)
     integration_tests = [
-      'tests/database.py',
-      'tests/list.py',
-      'tests/pkgfiled.py',
-      'tests/search.py',
-      'tests/update.py'
+        'tests/database.py',
+        'tests/list.py',
+        'tests/pkgfiled.py',
+        'tests/search.py',
+        'tests/update.py',
     ]
     foreach input : integration_tests
         basename = input.split('/')[-1].split('.')[0]
@@ -230,7 +242,7 @@ if py3.found() and py3.language_version().version_compare(python_requirement)
             py3,
             args: [join_paths(meson.project_source_root(), input)],
             env: ['PYTHONDONTWRITEBYTECODE=1'],
-            suite: 'integration'
+            suite: 'integration',
         )
     endforeach
 else
