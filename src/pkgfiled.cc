@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <getopt.h>
+#include <malloc.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <systemd/sd-event.h>
@@ -103,6 +104,16 @@ class Pkgfiled {
                         &Pkgfiled::OnSignalEvent, this);
     sd_event_add_signal(sd_event_, &sigusr2_source_, SIGUSR2,
                         &Pkgfiled::OnSignalEvent, this);
+
+    // DB repacking can use a lot of RAM at peak, and glibc is stingy about
+    // releasing it. Schedule an idle priority event to trim the heap after
+    // higher priority events (repo and config processing) have been dispatched
+    // to drop idle RAM usage back down to kilobytes, instead of potentially
+    // hundreds of megabytes.
+    sd_event_add_defer(sd_event_, &malloc_trim_source_, &Pkgfiled::OnMallocTrim,
+                       this);
+    sd_event_source_set_priority(malloc_trim_source_, SD_EVENT_PRIORITY_IDLE);
+    sd_event_source_set_enabled(malloc_trim_source_, SD_EVENT_OFF);
   }
 
   ~Pkgfiled() {
@@ -111,6 +122,7 @@ class Pkgfiled {
     sd_event_source_unref(sigterm_source_);
     sd_event_source_unref(sigusr1_source_);
     sd_event_source_unref(sigusr2_source_);
+    sd_event_source_unref(malloc_trim_source_);
     sd_event_unref(sd_event_);
 
     sigprocmask(SIG_SETMASK, &saved_ss_, nullptr);
@@ -177,10 +189,24 @@ class Pkgfiled {
       f.get();
     }
 
+    ScheduleMallocTrim();
+
     return 0;
   }
 
  private:
+  // Arms the idle-priority malloc_trim defer source for a single dispatch.
+  // Re-arming while already armed is a no-op, so bursts of events in the same
+  // loop iteration still only trim once.
+  void ScheduleMallocTrim() {
+    sd_event_source_set_enabled(malloc_trim_source_, SD_EVENT_ONESHOT);
+  }
+
+  static int OnMallocTrim(sd_event_source*, void*) {
+    malloc_trim(0);
+    return 0;
+  }
+
   bool RepackRepo(const fs::path& changed_path) {
     auto repack = [&] {
       const std::string input_repo = watch_path_ / changed_path;
@@ -227,6 +253,8 @@ class Pkgfiled {
       std::cerr << std::format("finished repacking {} ({:.3f}s)\n",
                                changed_path.filename().string(), dur.count());
     }
+
+    ScheduleMallocTrim();
 
     return ok;
   }
@@ -378,6 +406,7 @@ class Pkgfiled {
   sd_event_source* sigterm_source_;
   sd_event_source* sigusr1_source_;
   sd_event_source* sigusr2_source_;
+  sd_event_source* malloc_trim_source_;
   sigset_t saved_ss_{};
 };
 
