@@ -149,13 +149,13 @@ and zsh implementations.
 
 =head1 AUTOMATING UPDATES
 
-It is recommended to use B<pkgfiled>(1) to keep .files DBs up as `pacman -Fy` is
+It is recommended to use B<pkgfiled>(1) to keep .pfdb DBs up as `pacman -Fy` is
 issued (either by a user or a cronjob/systemd timer). pkgfiled can be enabled with:
 
   systemctl enable --now pkgfiled
 
 Alternatively, pkgfile includes systemd timer and service units to automate
-periodic updates to the .files DBs. Assuming that pkgfile was built with
+periodic updates to the .pfdb DBs. Assuming that pkgfile was built with
 systemd support, this can be enabled with:
 
   systemctl enable --now pkgfile-update.timer

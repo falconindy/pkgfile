@@ -20,8 +20,8 @@ class TestUpdate(pkgfile_test.TestCase):
         self.cachedir.mkdir()
 
     def assertMatchesGolden(self, reponame):
-        golden = Path(self.goldendir, f'{reponame}.files')
-        converted = Path(self.cachedir, f'{reponame}.files')
+        golden = Path(self.goldendir, f'{reponame}.pfdb')
+        converted = Path(self.cachedir, f'{reponame}.pfdb')
 
         self.assertEqual(
             _sha256(golden),
@@ -42,20 +42,20 @@ class TestUpdate(pkgfile_test.TestCase):
 
         inodes_before = {}
         for repo in ('multilib', 'testing'):
-            inodes_before[repo] = Path(self.cachedir, f'{repo}.files').stat().st_ino
+            inodes_before[repo] = Path(self.cachedir, f'{repo}.pfdb').stat().st_ino
 
         r = self.Pkgfile(['-uu'])
         self.assertEqual(r.returncode, 0)
 
         inodes_after = {}
         for repo in ('multilib', 'testing'):
-            inodes_after[repo] = Path(self.cachedir, f'{repo}.files').stat().st_ino
+            inodes_after[repo] = Path(self.cachedir, f'{repo}.pfdb').stat().st_ino
 
         for repo in ('multilib', 'testing'):
             self.assertNotEqual(
                 inodes_before[repo],
                 inodes_after[repo],
-                msg='{}.files unexpectedly NOT rewritten'.format(repo),
+                msg='{}.pfdb unexpectedly NOT rewritten'.format(repo),
             )
 
     def testUpdateSkipsUpToDate(self):
@@ -65,13 +65,13 @@ class TestUpdate(pkgfile_test.TestCase):
         # gather inodes before the update
         inodes_before = {}
         for repo in ('multilib', 'testing'):
-            inodes_before[repo] = Path(self.cachedir, f'{repo}.files').stat().st_ino
+            inodes_before[repo] = Path(self.cachedir, f'{repo}.pfdb').stat().st_ino
 
-        # Wind testing.files' own mtime back, so pkgfile believes it's stale
+        # Wind testing.pfdb's own mtime back, so pkgfile believes it's stale
         # and re-downloads it. `pkgfile -u` decides staleness from the db
         # file's on-disk mtime (stamped with the upstream archive's mtime at
         # write time, see DbBuilder::WriteToFile), not any baked-in field.
-        testing_path = self.cachedir / 'testing.files'
+        testing_path = self.cachedir / 'testing.pfdb'
         os.utime(testing_path, (0, 0))
 
         r = self.Pkgfile(['-u'])
@@ -80,19 +80,19 @@ class TestUpdate(pkgfile_test.TestCase):
         # re-gather inodes after a soft update
         inodes_after = {}
         for repo in ('multilib', 'testing'):
-            inodes_after[repo] = Path(self.cachedir, f'{repo}.files').stat().st_ino
+            inodes_after[repo] = Path(self.cachedir, f'{repo}.pfdb').stat().st_ino
 
         # compare inodes
         self.assertEqual(
             inodes_before['multilib'],
             inodes_after['multilib'],
-            msg='multilib.files unexpectedly rewritten by `pkgfile -u`',
+            msg='multilib.pfdb unexpectedly rewritten by `pkgfile -u`',
         )
 
         self.assertNotEqual(
             inodes_before['testing'],
             inodes_after['testing'],
-            msg='testing.files unexpectedly NOT rewritten by `pkgfile -u`',
+            msg='testing.pfdb unexpectedly NOT rewritten by `pkgfile -u`',
         )
 
     def testUpdateSkipsBadServer(self):

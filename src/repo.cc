@@ -160,7 +160,7 @@ int AlpmConfig::LoadFromFile(const char* filename, AlpmConfig* alpm_config) {
 }
 
 std::optional<std::string> RepoNameFromCacheFile(std::string_view filename) {
-  static constexpr std::string_view kSuffix = ".files";
+  static constexpr std::string_view kSuffix = ".pfdb";
 
   if (!filename.ends_with(kSuffix) || filename.size() == kSuffix.size()) {
     return std::nullopt;

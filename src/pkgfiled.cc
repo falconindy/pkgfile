@@ -29,7 +29,17 @@ namespace fs = std::filesystem;
 
 namespace {
 
+// The extension pacman writes synced repo databases under in the watch path
+// (unrelated to pkgfile's own cache format -- pacman decides this, not us).
 constexpr std::string_view kFilesExt = ".files";
+// The extension pkgfile's own repacked PFDB cache files use.
+constexpr std::string_view kPfdbExt = ".pfdb";
+
+// Maps a `.files`-named entry from the watch path to the `.pfdb`-named cache
+// file pkgfile repacks it into, e.g. "core.files" -> "core.pfdb".
+fs::path CacheFilenameFor(const fs::path& watched_path) {
+  return watched_path.stem().string() + std::string(kPfdbExt);
+}
 
 void BlockSignals(std::initializer_list<int> signums, sigset_t* saved) {
   sigset_t ss;
@@ -176,8 +186,9 @@ class Pkgfiled {
         continue;
       }
 
-      if (!force_update && !NeedsUpdate(pkgfile_cache_ / p.path().filename(),
-                                        p.last_write_time())) {
+      if (!force_update &&
+          !NeedsUpdate(pkgfile_cache_ / CacheFilenameFor(p.path()),
+                       p.last_write_time())) {
         continue;
       }
 
@@ -240,8 +251,8 @@ class Pkgfiled {
         return false;
       }
 
-      return builder->WriteToFile(pkgfile_cache_ / changed_path,
-                                  st.st_mtim.tv_sec);
+      return builder->WriteToFile(
+          pkgfile_cache_ / CacheFilenameFor(changed_path), st.st_mtim.tv_sec);
     };
 
     const auto start_time = std::chrono::system_clock::now();

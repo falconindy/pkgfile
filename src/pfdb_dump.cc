@@ -1,6 +1,6 @@
 // pfdb-dump: a debugging aid for inspecting the pkgfile repo database
 // format ("PFDB", see db_format.hh). Not installed, not covered by any
-// compatibility guarantee -- just a window into what a .files db actually
+// compatibility guarantee -- just a window into what a .pfdb db actually
 // contains, for use while developing or diagnosing pkgfile itself.
 
 #include <sys/stat.h>
@@ -87,10 +87,13 @@ void CmdSummary(const MappedRepo& repo, uint64_t file_size, int64_t mtime) {
   std::cout << std::format("  {:<16} {:>10}  {:>12}\n", "", "count", "bytes");
   PrintSizeRow("byte pool", repo.string_count(), repo.byte_pool_size(),
                file_size);
+  // The string table physically holds one more entry than string_count() --
+  // a trailing sentinel offset (see db_format.hh) -- at 4 bytes each (a raw
+  // offset, no separate length field).
   PrintSizeRow("string table", repo.string_count(),
-               repo.string_count() * sizeof(pkgfile::db::StringRef), file_size);
+               (repo.string_count() + 1) * sizeof(uint32_t), file_size);
   PrintSizeRow("path table", repo.path_count(),
-               repo.path_count() * sizeof(PathNode), file_size);
+               repo.path_count() * pkgfile::db::kPackedPathNodeSize, file_size);
   PrintSizeRow("package table", repo.packages().size(),
                repo.packages().size() * sizeof(Package), file_size);
   PrintSizeRow("package files", total_files, total_files * sizeof(uint32_t),
@@ -98,7 +101,7 @@ void CmdSummary(const MappedRepo& repo, uint64_t file_size, int64_t mtime) {
   PrintSizeRow("basename index", repo.basename_index().size(),
                repo.basename_index().size() * sizeof(BasenameEntry), file_size);
   const uint64_t stored_postings = total_postings - inlined_postings;
-  PrintSizeRow("postings", stored_postings, stored_postings * sizeof(Posting),
+  PrintSizeRow("postings", stored_postings, repo.postings_blob_size(),
                file_size);
 
   std::cout << std::format(
@@ -117,11 +120,12 @@ void CmdSummary(const MappedRepo& repo, uint64_t file_size, int64_t mtime) {
   if (repo.basename_index().size() > 0) {
     std::cout << std::format(
         "{} of {} basenames ({:.1f}%) have a single occurrence and are "
-        "inlined into the index, saving {} bytes that would otherwise sit "
-        "in the postings pool\n",
+        "inlined into the index, saving at least {} bytes that would "
+        "otherwise sit in the postings pool (each pooled posting needs a "
+        "minimum of 2 varint-encoded bytes; most need more)\n",
         inlined_postings, repo.basename_index().size(),
         100.0 * inlined_postings / repo.basename_index().size(),
-        inlined_postings * sizeof(Posting));
+        inlined_postings * 2);
   }
 }
 
@@ -182,8 +186,9 @@ int CmdPostings(const MappedRepo& repo, std::string_view basename) {
     return 1;
   }
 
-  pkgfile::db::Posting scratch;
-  for (const auto& posting : repo.PostingsFor(*entry, &scratch)) {
+  pkgfile::db::Posting single;
+  std::vector<pkgfile::db::Posting> scratch;
+  for (const auto& posting : repo.PostingsFor(*entry, &single, &scratch)) {
     const auto& pkg = repo.packages()[posting.pkg];
     std::cout << std::format(
         "{} {:<40} {}\n", pkgfile::db::IsDirOf(posting.path) ? "d" : "f",
@@ -215,7 +220,7 @@ void CmdStrings(const MappedRepo& repo) {
 }
 
 void Usage(const char* argv0) {
-  std::cerr << std::format(R"(usage: {} <file.files> [command] [arg]
+  std::cerr << std::format(R"(usage: {} <file.pfdb> [command] [arg]
 
 Debugging aid for inspecting a pkgfile repo database (PFDB). Not for
 scripting against -- the format and this tool's output can both change

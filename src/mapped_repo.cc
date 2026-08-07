@@ -9,17 +9,24 @@ namespace pkgfile::db {
 
 namespace {
 
-// Returns true if [offset, offset+count*sizeof(T)) fits within a file of
+// Returns true if [offset, offset+count*elem_size) fits within a file of
 // `file_size` bytes, guarding every mmap'd access below against a truncated
-// or corrupt database file.
-template <typename T>
-bool FitsWithin(uint64_t offset, uint64_t count, uint64_t file_size) {
+// or corrupt database file. Takes an explicit element size rather than a
+// template parameter so it also covers the packed path table, whose 6-byte
+// on-disk element doesn't correspond to any builtin type.
+bool FitsWithinBytes(uint64_t offset, uint64_t count, uint64_t elem_size,
+                     uint64_t file_size) {
   if (offset > file_size) {
     return false;
   }
-  const uint64_t bytes = count * sizeof(T);
-  return bytes / sizeof(T) == count &&  // overflow check
+  const uint64_t bytes = count * elem_size;
+  return (elem_size == 0 || bytes / elem_size == count) &&  // overflow check
          file_size - offset >= bytes;
+}
+
+template <typename T>
+bool FitsWithin(uint64_t offset, uint64_t count, uint64_t file_size) {
+  return FitsWithinBytes(offset, count, sizeof(T), file_size);
 }
 
 }  // namespace
@@ -65,19 +72,30 @@ std::unique_ptr<MappedRepo> MappedRepo::Open(const std::string& path,
     return nullptr;
   }
 
+  // The string table physically holds one more entry than
+  // string_table_count (a trailing sentinel offset -- see the field's doc
+  // comment in db_format.hh); guard the +1 explicitly rather than let a
+  // maximally-corrupt count (UINT64_MAX) wrap it back to something small
+  // enough to spuriously pass the FitsWithin check below.
+  if (header->string_table_count == UINT64_MAX) {
+    *error = OpenError::kTruncated;
+    return nullptr;
+  }
+  const uint64_t string_table_span_count = header->string_table_count + 1;
+
   if (!FitsWithin<char>(header->byte_pool_offset, header->byte_pool_size,
                         file_size) ||
-      !FitsWithin<StringRef>(header->string_table_offset,
-                             header->string_table_count, file_size) ||
-      !FitsWithin<PathNode>(header->path_table_offset, header->path_table_count,
-                            file_size) ||
+      !FitsWithin<uint32_t>(header->string_table_offset,
+                            string_table_span_count, file_size) ||
+      !FitsWithinBytes(header->path_table_offset, header->path_table_count,
+                       kPackedPathNodeSize, file_size) ||
       !FitsWithin<Package>(header->package_table_offset,
                            header->package_table_count, file_size) ||
       !FitsWithin<uint32_t>(header->package_files_offset,
                             header->package_files_count, file_size) ||
       !FitsWithin<BasenameEntry>(header->basename_index_offset,
                                  header->basename_index_count, file_size) ||
-      !FitsWithin<Posting>(header->postings_offset, header->postings_count,
+      !FitsWithin<uint8_t>(header->postings_offset, header->postings_count,
                            file_size)) {
     *error = OpenError::kTruncated;
     return nullptr;
@@ -100,15 +118,23 @@ std::string_view MappedRepo::ResolveString(StringId id) const {
   if (id >= header_->string_table_count) {
     return {};
   }
-  const StringRef ref = PtrAt<StringRef>(header_->string_table_offset)[id];
-  // offset/length come straight from the file; check as uint64_t so a
-  // corrupt pair summing past UINT32_MAX can't wrap back into range.
-  if (uint64_t{ref.offset} + ref.length > header_->byte_pool_size) {
+  // The table holds one extra trailing-sentinel entry beyond
+  // string_table_count (see db_format.hh), so offsets[id+1] is always a
+  // valid index here -- Open() already checked the table fits
+  // string_table_count+1 entries.
+  const uint32_t* offsets = PtrAt<uint32_t>(header_->string_table_offset);
+  const uint32_t start = offsets[id];
+  const uint32_t end = offsets[id + 1];
+  // start/end come straight from the file, so a corrupt pair could claim a
+  // range outside the byte pool, or an end before its own start (which,
+  // read as a length below, would wrap around to a huge unsigned value).
+  if (start > header_->byte_pool_size || end > header_->byte_pool_size ||
+      end < start) {
     return {};
   }
   return {reinterpret_cast<const char*>(PtrAt<char>(header_->byte_pool_offset) +
-                                        ref.offset),
-          ref.length};
+                                        start),
+          end - start};
 }
 
 namespace {
@@ -123,7 +149,7 @@ void MappedRepo::ResolvePathInto(uint32_t tagged_path, std::string* out,
                                  PathCache* cache) const {
   const bool is_dir = IsDirOf(tagged_path);
   const PathId leaf = PathIdOf(tagged_path);
-  const PathNode& leaf_node = PathNodeAt(leaf);
+  const PathNode leaf_node = PathNodeAt(leaf);
 
   // Fast path: the previous call in this cache resolved a file with the
   // same immediate parent. Every ancestor beyond that parent is therefore
@@ -148,9 +174,12 @@ void MappedRepo::ResolvePathInto(uint32_t tagged_path, std::string* out,
   size_t length = is_dir ? 1 : 0;
   bool overflowed = false;
 
-  const PathNode* node = &leaf_node;
+  // PathNodeAt() unpacks into a temporary (see its declaration), so this
+  // walks by value rather than chasing a pointer the way a direct reference
+  // into the mapping would allow.
+  PathNode node = leaf_node;
   for (PathId id = leaf;;) {
-    const std::string_view name = ResolveString(node->name);
+    const std::string_view name = ResolveString(node.name);
     length += 1 + name.size();
     if (depth < kMaxInlineDepth) {
       components[depth] = name;
@@ -159,11 +188,11 @@ void MappedRepo::ResolvePathInto(uint32_t tagged_path, std::string* out,
     }
     ++depth;
 
-    id = node->parent;
+    id = node.parent;
     if (id == kRootPath) {
       break;
     }
-    node = &PathNodeAt(id);
+    node = PathNodeAt(id);
   }
 
   if (overflowed) {
@@ -247,8 +276,9 @@ const Package* MappedRepo::FindPackageByName(std::string_view name) const {
   return &*iter;
 }
 
-std::span<const Posting> MappedRepo::PostingsFor(const BasenameEntry& entry,
-                                                 Posting* single) const {
+std::span<const Posting> MappedRepo::PostingsFor(
+    const BasenameEntry& entry, Posting* single,
+    std::vector<Posting>* scratch) const {
   if (HasInlinePosting(entry)) {
     const PkgId pkg = InlinePkgOf(entry);
     const PathId path = PathIdOf(InlineTaggedPathOf(entry));
@@ -260,19 +290,23 @@ std::span<const Posting> MappedRepo::PostingsFor(const BasenameEntry& entry,
     return {single, 1};
   }
 
-  const uint64_t table_count = header_->postings_count;
-  const uint64_t start = std::min<uint64_t>(entry.postings_start, table_count);
-  const uint64_t count =
-      std::min<uint64_t>(entry.postings_count, table_count - start);
-  const Posting* postings = PtrAt<Posting>(header_->postings_offset) + start;
+  // entry.postings_start is a byte offset into the blob (its high bit is
+  // clear here, since HasInlinePosting() was false), not a Posting index --
+  // see the format comment on BasenameEntry in db_format.hh.
+  const uint64_t blob_size = header_->postings_count;
+  const uint64_t start = std::min<uint64_t>(entry.postings_start, blob_size);
+  if (!DecodePostingsDelta(PtrAt<uint8_t>(header_->postings_offset), blob_size,
+                           start, entry.postings_count, scratch)) {
+    return {};
+  }
 
-  for (uint64_t i = 0; i < count; ++i) {
-    if (postings[i].pkg >= header_->package_table_count ||
-        PathIdOf(postings[i].path) >= header_->path_table_count) {
+  for (const Posting& p : *scratch) {
+    if (p.pkg >= header_->package_table_count ||
+        PathIdOf(p.path) >= header_->path_table_count) {
       return {};
     }
   }
-  return {postings, count};
+  return *scratch;
 }
 
 const BasenameEntry* MappedRepo::FindBasename(std::string_view name) const {

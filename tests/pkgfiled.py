@@ -63,7 +63,7 @@ class TestPkgfiled(pkgfile_test.TestCase):
 
     def CachedRepos(self):
         """Set of repo names currently present in the pkgfile cache."""
-        return {p.name.split('.files')[0] for p in self.pkgfilecache.glob('*.files*')}
+        return {p.name.split('.pfdb')[0] for p in self.pkgfilecache.glob('*.pfdb*')}
 
     def VersionMarkerPath(self):
         return Path(self.pkgfilecache, '.db_version')
@@ -155,7 +155,7 @@ class TestPkgfiled(pkgfile_test.TestCase):
         # repacked repo file, but stamp its mtime ahead of the source .files
         # in the watch dir, so a plain mtime comparison would consider it
         # already up to date and skip it.
-        cached_repo = Path(self.pkgfilecache, 'testing.files')
+        cached_repo = Path(self.pkgfilecache, 'testing.pfdb')
         cached_repo.write_bytes(b'not a real pfdb')
         future = time.time() + 3600
         os.utime(cached_repo, (future, future))

@@ -24,8 +24,8 @@ struct AlpmConfig {
 };
 
 // Returns the repo name a pkgfile cache database file belongs to, e.g.
-// "core.files" -> "core", or std::nullopt if the filename doesn't have a
-// ".files" suffix.
+// "core.pfdb" -> "core", or std::nullopt if the filename doesn't have a
+// ".pfdb" suffix.
 std::optional<std::string> RepoNameFromCacheFile(std::string_view filename);
 
 // vim: set ts=2 sw=2 et:

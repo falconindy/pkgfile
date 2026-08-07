@@ -201,7 +201,7 @@ int Updater::DownloadQueueRequest(DownloadJob* job) {
     job->curl = curl_easy_init();
     job->server_iter = job->repo.servers.begin();
 
-    job->diskfile = cachedir_ + "/" + job->repo.name + ".files";
+    job->diskfile = cachedir_ + "/" + job->repo.name + ".pfdb";
     curl_easy_setopt(job->curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(job->curl, CURLOPT_FILETIME, 1L);
     curl_easy_setopt(job->curl, CURLOPT_WRITEFUNCTION, WriteHandler);
