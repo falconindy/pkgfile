@@ -174,6 +174,23 @@ std::unique_ptr<DbBuilder> DbBuilder::FromArchive(
 bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
   const StringId repo_name_id = InternString(reponame_);
 
+  // The packed path table's 24-bit fields cap both how many distinct paths
+  // and how many distinct strings this repo can hold -- see
+  // kMaxPackedPathCount in db_format.hh. Checked after interning the repo
+  // name above (its own last possible addition to strings_), so the bound
+  // covers everything that's about to be serialized. Real repos are nowhere
+  // close (Arch's `extra` sits at roughly 2.5x headroom under this as of
+  // writing), so this is a hard error rather than something worth degrading
+  // gracefully for.
+  if (paths_.size() > kMaxPackedPathCount ||
+      strings_.size() > kMaxPackedPathCount) {
+    std::cerr << std::format(
+        "error: repo exceeds the packed path-table capacity ({} paths, {} "
+        "strings, limit {})\n",
+        paths_.size(), strings_.size(), kMaxPackedPathCount);
+    return false;
+  }
+
   // Sort packages by name, and remap every reference to a package's original
   // (insertion-order) index to its new, sorted PkgId so that list mode can
   // binary search the package table.
@@ -217,7 +234,10 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
             [&](StringId a, StringId b) { return strings_[a] < strings_[b]; });
 
   std::vector<BasenameEntry> basename_index;
-  std::vector<Posting> postings_pool;
+  // Delta+varint-encoded pooled postings, keyed by byte offset rather than
+  // index -- see the format comment on BasenameEntry and
+  // EncodePostingsDelta in db_format.hh.
+  std::string postings_blob;
   basename_index.reserve(basenames.size());
 
   for (const StringId basename_id : basenames) {
@@ -240,25 +260,36 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
           postings[0].path,
       });
     } else {
+      // postings_blob.size() must fit in kPostingsStartMask's 31 bits, same
+      // as the old index-based offset did implicitly (a repo would need a
+      // ~2GB postings blob to hit this; nowhere close to any real repo).
+      if (postings_blob.size() > kPostingsStartMask) {
+        std::cerr << std::format("error: postings pool exceeds {} bytes\n",
+                                 kPostingsStartMask);
+        return false;
+      }
       basename_index.push_back(BasenameEntry{
           basename_id,
-          static_cast<uint32_t>(postings_pool.size()),
+          static_cast<uint32_t>(postings_blob.size()),
           static_cast<uint32_t>(postings.size()),
       });
-      postings_pool.insert(postings_pool.end(), postings.begin(),
-                           postings.end());
+      EncodePostingsDelta(&postings_blob, postings);
     }
   }
 
-  // Byte pool + string table, in original StringId order.
+  // Byte pool + string table, in original StringId order. The string table
+  // stores only each string's starting offset into the byte pool; its
+  // length is implicit from the next entry's offset (or, for the last
+  // string, this trailing sentinel), since the byte pool below is built by
+  // pure concatenation in this same order.
   std::string byte_pool;
-  std::vector<StringRef> string_table;
-  string_table.reserve(strings_.size());
+  std::vector<uint32_t> string_table;
+  string_table.reserve(strings_.size() + 1);
   for (const auto& s : strings_) {
-    string_table.push_back(StringRef{static_cast<uint32_t>(byte_pool.size()),
-                                     static_cast<uint32_t>(s.size())});
+    string_table.push_back(static_cast<uint32_t>(byte_pool.size()));
     byte_pool += s;
   }
+  string_table.push_back(static_cast<uint32_t>(byte_pool.size()));
 
   std::string buf;
   buf.resize(sizeof(Header), '\0');
@@ -275,12 +306,27 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
   AppendAligned(&buf, byte_pool.data(), byte_pool.size(), 8);
 
   header.string_table_offset = buf.size();
-  header.string_table_count = string_table.size();
+  // strings_.size(), not string_table.size() -- the table physically holds
+  // one extra trailing-sentinel entry (see the field's doc comment in
+  // db_format.hh), which string_table_count deliberately excludes.
+  header.string_table_count = strings_.size();
   AppendAligned(&buf, string_table.data(), string_table.size(), 8);
+
+  // Pack the path trie into kPackedPathNodeSize-byte nodes (see
+  // db_format.hh); paths_.size() was already checked against
+  // kMaxPackedPathCount above.
+  std::string packed_paths;
+  packed_paths.reserve(paths_.size() * kPackedPathNodeSize);
+  for (const PathNode& node : paths_) {
+    uint8_t packed[kPackedPathNodeSize];
+    PackPathNode24(packed, node.parent, node.name);
+    packed_paths.append(reinterpret_cast<const char*>(packed),
+                        kPackedPathNodeSize);
+  }
 
   header.path_table_offset = buf.size();
   header.path_table_count = paths_.size();
-  AppendAligned(&buf, paths_.data(), paths_.size(), 8);
+  AppendAligned(&buf, packed_paths.data(), packed_paths.size(), 8);
 
   header.package_table_offset = buf.size();
   header.package_table_count = package_table.size();
@@ -295,8 +341,10 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
   AppendAligned(&buf, basename_index.data(), basename_index.size(), 8);
 
   header.postings_offset = buf.size();
-  header.postings_count = postings_pool.size();
-  AppendAligned(&buf, postings_pool.data(), postings_pool.size(), 8);
+  // Byte length of the blob, not a Posting count -- see the field's doc
+  // comment in db_format.hh.
+  header.postings_count = postings_blob.size();
+  AppendAligned(&buf, postings_blob.data(), postings_blob.size(), 8);
 
   buf.replace(0, sizeof(Header), reinterpret_cast<const char*>(&header),
               sizeof(Header));

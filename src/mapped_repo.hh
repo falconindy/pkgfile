@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 #include "archive_io.hh"
 #include "db_format.hh"
@@ -99,12 +100,19 @@ class MappedRepo {
   // instead of indexing out of the mapping. The sentinel's own `parent` is
   // kRootPath, so a trie walk that hits it terminates immediately rather
   // than chasing a bad or cyclic reference any further.
-  const PathNode& PathNodeAt(PathId id) const {
+  //
+  // Returned by value: the on-disk path table packs each node into 6 bytes
+  // (see kPackedPathNodeSize in db_format.hh), so there's nothing in the
+  // mapping shaped like a PathNode to hand back a reference into -- this
+  // unpacks into a temporary instead.
+  PathNode PathNodeAt(PathId id) const {
     static constexpr PathNode kInvalid{kRootPath, 0};
     if (id >= header_->path_table_count) {
       return kInvalid;
     }
-    const PathNode& node = PtrAt<PathNode>(header_->path_table_offset)[id];
+    const uint8_t* packed = PtrAt<uint8_t>(header_->path_table_offset) +
+                            static_cast<uint64_t>(id) * kPackedPathNodeSize;
+    const PathNode node = UnpackPathNode24(packed);
     if (node.parent != kRootPath && node.parent >= id) {
       return kInvalid;
     }
@@ -120,6 +128,11 @@ class MappedRepo {
   // backing them. Exposed for introspection tools (see pfdb_dump.cc).
   size_t string_count() const { return header_->string_table_count; }
   uint64_t byte_pool_size() const { return header_->byte_pool_size; }
+
+  // The byte length of the delta+varint-encoded postings pool (see
+  // db_format.hh) -- not a Posting count. Exposed for introspection tools
+  // (see pfdb_dump.cc).
+  uint64_t postings_blob_size() const { return header_->postings_count; }
 
   std::span<const Package> packages() const {
     return {PtrAt<Package>(header_->package_table_offset),
@@ -153,9 +166,12 @@ class MappedRepo {
   // Returns every (package, path) occurrence of `entry`'s basename. If
   // there's exactly one, it's inlined in `entry` itself (see db_format.hh)
   // and gets materialized into `*single`; the returned span points at
-  // `single` in that case, or into the shared postings pool otherwise, so
-  // callers must keep `single` alive for as long as the returned span is
-  // used.
+  // `single` in that case. Otherwise the pooled postings are decoded
+  // (delta+varint on disk -- see db_format.hh) into `*scratch` (cleared
+  // first) and the span points into that instead. Either way, callers must
+  // keep both `single` and `scratch` alive for as long as the returned span
+  // is used; pass the same `scratch` across a sequence of calls to reuse its
+  // buffer rather than paying for a fresh allocation each time.
   //
   // Bounds-checked, including the pkg/path each Posting carries -- callers
   // index packages() with a Posting's pkg field directly, so a corrupt
@@ -165,7 +181,8 @@ class MappedRepo {
   // same (small) slice. Returns an empty span if anything in it is invalid,
   // rather than a partially-valid one.
   std::span<const Posting> PostingsFor(const BasenameEntry& entry,
-                                       Posting* single) const;
+                                       Posting* single,
+                                       std::vector<Posting>* scratch) const;
 
   // Binary-searches the basename index for an exact, case-sensitive match.
   // Returns nullptr if no file in this repo has this basename.

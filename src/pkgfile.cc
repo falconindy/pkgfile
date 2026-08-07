@@ -323,7 +323,7 @@ bool Pkgfile::PathMatches(const db::MappedRepo& repo, uint32_t tagged_path,
       return false;
     }
 
-    const db::PathNode& node = repo.PathNodeAt(id);
+    const db::PathNode node = repo.PathNodeAt(id);
     if (repo.ResolveString(node.name) != component) {
       return false;
     }
@@ -375,8 +375,9 @@ void Pkgfile::SearchFullPathIndexed(const db::MappedRepo& repo,
   const filter::Bin is_bin(bins_);
   std::string resolved;
 
-  db::Posting scratch;
-  for (const auto& posting : repo.PostingsFor(*entry, &scratch)) {
+  db::Posting single;
+  std::vector<db::Posting> scratch;
+  for (const auto& posting : repo.PostingsFor(*entry, &single, &scratch)) {
     if (db::IsDirOf(posting.path) != want_dir) {
       continue;
     }
@@ -401,8 +402,10 @@ void Pkgfile::SearchExactIndexed(const db::MappedRepo& repo,
                                  std::string_view query, Result* result) {
   if (query.find('/') == query.npos) {
     if (const auto* entry = repo.FindBasename(query)) {
-      db::Posting scratch;
-      SearchBasenameIndexed(repo, repo.PostingsFor(*entry, &scratch), result);
+      db::Posting single;
+      std::vector<db::Posting> scratch;
+      SearchBasenameIndexed(repo, repo.PostingsFor(*entry, &single, &scratch),
+                            result);
     }
   } else {
     SearchFullPathIndexed(repo, query, result);
@@ -429,6 +432,8 @@ void Pkgfile::ScanCaseInsensitive(const db::MappedRepo& repo,
   const filter::Bin is_bin(bins_);
   std::vector<bool> emitted(repo.packages().size(), false);
   std::string resolved;
+  db::Posting single;
+  std::vector<db::Posting> scratch;
 
   for (const auto& entry : repo.basename_index()) {
     const std::string_view name = repo.ResolveString(entry.name);
@@ -437,8 +442,7 @@ void Pkgfile::ScanCaseInsensitive(const db::MappedRepo& repo,
       continue;
     }
 
-    db::Posting scratch;
-    for (const auto& posting : repo.PostingsFor(entry, &scratch)) {
+    for (const auto& posting : repo.PostingsFor(entry, &single, &scratch)) {
       if (!options_.verbose && emitted[posting.pkg]) {
         continue;
       }

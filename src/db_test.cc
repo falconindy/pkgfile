@@ -97,8 +97,10 @@ TEST_F(DbRoundTripTest, RoundTripsPackagesAndFiles) {
   const auto* basename_entry = repo->FindBasename("bash");
   ASSERT_NE(basename_entry, nullptr);
   EXPECT_FALSE(HasInlinePosting(*basename_entry));
-  Posting bash_scratch;
-  const auto bash_postings = repo->PostingsFor(*basename_entry, &bash_scratch);
+  Posting bash_single;
+  std::vector<Posting> bash_scratch;
+  const auto bash_postings =
+      repo->PostingsFor(*basename_entry, &bash_single, &bash_scratch);
   ASSERT_EQ(bash_postings.size(), 2u);
   bool found_binary = false;
   for (const auto& posting : bash_postings) {
@@ -115,9 +117,10 @@ TEST_F(DbRoundTripTest, RoundTripsPackagesAndFiles) {
   const auto* getfattr_entry = repo->FindBasename("getfattr");
   ASSERT_NE(getfattr_entry, nullptr);
   EXPECT_TRUE(HasInlinePosting(*getfattr_entry));
-  Posting getfattr_scratch;
+  Posting getfattr_single;
+  std::vector<Posting> getfattr_scratch;
   const auto getfattr_postings =
-      repo->PostingsFor(*getfattr_entry, &getfattr_scratch);
+      repo->PostingsFor(*getfattr_entry, &getfattr_single, &getfattr_scratch);
   ASSERT_EQ(getfattr_postings.size(), 1u);
   EXPECT_EQ(
       repo->ResolveString(repo->packages()[getfattr_postings[0].pkg].name),
@@ -128,8 +131,10 @@ TEST_F(DbRoundTripTest, RoundTripsPackagesAndFiles) {
   const auto* usr_entry = repo->FindBasename("usr");
   ASSERT_NE(usr_entry, nullptr);
   EXPECT_FALSE(HasInlinePosting(*usr_entry));
-  Posting usr_scratch;
-  const auto usr_postings = repo->PostingsFor(*usr_entry, &usr_scratch);
+  Posting usr_single;
+  std::vector<Posting> usr_scratch;
+  const auto usr_postings =
+      repo->PostingsFor(*usr_entry, &usr_single, &usr_scratch);
   ASSERT_EQ(usr_postings.size(), 2u);
   for (const auto& posting : usr_postings) {
     EXPECT_TRUE(IsDirOf(posting.path));
@@ -297,9 +302,13 @@ TEST_F(MappedRepoCorruptionTest, ResolveStringRejectsOutOfRangeByteRange) {
   Header header;
   memcpy(&header, bytes.data(), sizeof(header));
 
-  // Claim a byte range that reaches far past the (tiny) byte pool this repo
-  // actually has.
-  PokeAt(&bytes, header.string_table_offset, StringRef{0, 0xFFFFFFFFu});
+  // The string table stores one u32 byte-pool offset per string, plus a
+  // trailing sentinel; string 0's length is offsets[1]-offsets[0]. Poke
+  // offsets[1] (immediately after the table's first entry) to claim a byte
+  // range that reaches far past the (tiny) byte pool this repo actually
+  // has.
+  PokeAt(&bytes, header.string_table_offset + sizeof(uint32_t),
+         uint32_t{0xFFFFFFFFu});
   WriteWholeFile(path_, bytes);
 
   MappedRepo::OpenError error;
@@ -337,11 +346,15 @@ TEST_F(MappedRepoCorruptionTest, PathNodeAtRejectsForwardParent) {
   // parent in any legitimately-built db, since the builder always appends a
   // parent before its children. Point it at a later node instead -- the
   // shape of reference that would otherwise send a trie walk into an
-  // infinite loop on a corrupt file.
-  PathNode original;
-  memcpy(&original, bytes.data() + header.path_table_offset, sizeof(original));
-  PokeAt(&bytes, header.path_table_offset,
-         PathNode{/*parent=*/2, original.name});
+  // infinite loop on a corrupt file. Nodes are packed into
+  // kPackedPathNodeSize raw bytes on disk (see db_format.hh), so pack/unpack
+  // by hand rather than through PokeAt<PathNode>, which assumes its
+  // argument's natural (8-byte) layout.
+  uint8_t packed[kPackedPathNodeSize];
+  memcpy(packed, bytes.data() + header.path_table_offset, kPackedPathNodeSize);
+  const PathNode original = UnpackPathNode24(packed);
+  PackPathNode24(packed, /*parent=*/2, original.name);
+  memcpy(bytes.data() + header.path_table_offset, packed, kPackedPathNodeSize);
   WriteWholeFile(path_, bytes);
 
   MappedRepo::OpenError error;
@@ -445,13 +458,18 @@ TEST_F(MappedRepoCorruptionTest, PostingsForRejectsCorruptPooledEntry) {
   Header header;
   memcpy(&header, bytes.data(), sizeof(header));
 
-  // Corrupt the pkg field of this basename's first pooled Posting so it
-  // points past the package table.
-  const size_t posting_offset =
-      header.postings_offset + postings_start * sizeof(Posting);
-  Posting original;
-  memcpy(&original, bytes.data() + posting_offset, sizeof(original));
-  PokeAt(&bytes, posting_offset, Posting{/*pkg=*/0xFFFFFFFFu, original.path});
+  // The postings pool is delta+varint-encoded (see db_format.hh):
+  // postings_start is a byte offset, and the first posting's pkg delta is
+  // from 0. With only two packages here, that delta fits in a single byte
+  // with no continuation bit, so overwriting just that one byte with
+  // another single-byte (still no continuation bit) varint corrupts only
+  // this posting's decoded pkg, leaving the rest of the blob's byte
+  // alignment untouched. 100 is comfortably past this repo's two-entry
+  // package table.
+  const size_t posting_offset = header.postings_offset + postings_start;
+  ASSERT_LT(static_cast<unsigned char>(bytes[posting_offset]), 0x80)
+      << "test assumption: first posting's pkg delta fits in one byte";
+  bytes[posting_offset] = static_cast<char>(100);
   WriteWholeFile(path_, bytes);
 
   MappedRepo::OpenError error;
@@ -459,8 +477,9 @@ TEST_F(MappedRepoCorruptionTest, PostingsForRejectsCorruptPooledEntry) {
   ASSERT_NE(repo, nullptr);
 
   const BasenameEntry* entry = repo->basename_index().data() + entry_index;
-  Posting scratch;
-  EXPECT_TRUE(repo->PostingsFor(*entry, &scratch).empty());
+  Posting single;
+  std::vector<Posting> scratch;
+  EXPECT_TRUE(repo->PostingsFor(*entry, &single, &scratch).empty());
 }
 
 TEST_F(MappedRepoCorruptionTest, PostingsForRejectsCorruptInlinePkg) {
@@ -502,8 +521,9 @@ TEST_F(MappedRepoCorruptionTest, PostingsForRejectsCorruptInlinePkg) {
 
   const BasenameEntry* entry = repo->basename_index().data() + entry_index;
   ASSERT_TRUE(HasInlinePosting(*entry));
-  Posting scratch;
-  EXPECT_TRUE(repo->PostingsFor(*entry, &scratch).empty());
+  Posting single;
+  std::vector<Posting> scratch;
+  EXPECT_TRUE(repo->PostingsFor(*entry, &single, &scratch).empty());
 }
 
 }  // namespace
