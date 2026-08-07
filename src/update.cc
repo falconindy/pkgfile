@@ -6,10 +6,12 @@
 #include <limits.h>
 #include <math.h>
 #include <string.h>
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
+#include <unistd.h>
 
-#include <algorithm>
 #include <filesystem>
 #include <format>
 #include <iostream>
@@ -158,36 +160,9 @@ void PrintRepackSuccess(const std::string& reponame, double elapsed) {
                            elapsed);
 }
 
-int WaitForRepacking(std::vector<pkgfile::DownloadJob>* jobs,
-                     bool show_message) {
-  if (show_message) {
-    int running = std::count_if(
-        jobs->begin(), jobs->end(), [](const pkgfile::DownloadJob& job) {
-          // The future won't be valid if the repo was up to date.
-          if (!job.worker.valid()) {
-            return false;
-          }
-
-          return job.worker.wait_for(chrono::seconds::zero()) !=
-                 std::future_status::ready;
-        });
-
-    if (running > 0) {
-      std::cout << std::format(
-          ":: waiting for {} repo{} to finish repacking...\n", running,
-          running == 1 ? "" : "s");
-    }
-  }
-
-  return std::count_if(jobs->begin(), jobs->end(),
-                       [](pkgfile::DownloadJob& job) {
-                         return job.worker.valid() && !job.worker.get();
-                       });
-}
-
 // curl's xfer info callback: reports download progress for one repo's
-// transfer. Always runs on the main thread (inside curl_multi_perform), so
-// no synchronization concerns on this side -- ProgressDisplay handles the
+// transfer. Runs on the event loop thread (inside curl_multi_socket_action),
+// so no synchronization concerns on this side -- ProgressDisplay handles the
 // rest, since repack progress does come from other threads.
 int XferInfoCallback(void* clientp, curl_off_t dltotal, curl_off_t dlnow,
                      curl_off_t, curl_off_t) {
@@ -197,6 +172,14 @@ int XferInfoCallback(void* clientp, curl_off_t dltotal, curl_off_t dlnow,
   }
   return 0;
 }
+
+// Aggregate state for one Update() call, kept alive by the shared_ptr
+// captured in each of its jobs' on_done callbacks.
+struct UpdateState {
+  int remaining;
+  int ret = 0;
+  std::set<std::string> known_repos;
+};
 
 }  // namespace
 
@@ -208,7 +191,7 @@ DownloadJob::~DownloadJob() {
   }
 }
 
-int Updater::DownloadQueueRequest(CURLM* multi, DownloadJob* job) {
+int Updater::DownloadQueueRequest(DownloadJob* job) {
   if (job->curl == nullptr) {
     if (job->repo.servers.empty()) {
       std::cerr << std::format("error: no servers configured for repo {}\n",
@@ -240,7 +223,7 @@ int Updater::DownloadQueueRequest(CURLM* multi, DownloadJob* job) {
       return -1;
     }
   } else {
-    curl_multi_remove_handle(multi, job->curl);
+    curl_multi_remove_handle(curl_multi_, job->curl);
     lseek(job->tmpfile.fd, 0, SEEK_SET);
     job->server_iter++;
   }
@@ -268,7 +251,7 @@ int Updater::DownloadQueueRequest(CURLM* multi, DownloadJob* job) {
   }
 
   job->dl_time_start = now();
-  curl_multi_add_handle(multi, job->curl);
+  curl_multi_add_handle(curl_multi_, job->curl);
 
   return 0;
 }
@@ -346,131 +329,284 @@ void Updater::TidyCacheDir(const std::set<std::string>& known_repos) {
   }
 }
 
-void Updater::DownloadWaitLoop(CURLM* multi) {
-  int active_handles;
-
-  do {
-    int nfd, rc = curl_multi_wait(multi, nullptr, 0, 1000, &nfd);
-    if (rc != CURLM_OK) {
-      std::cerr << std::format("error: curl_multi_wait failed ({})\n", rc);
-      break;
-    }
-
-    if (nfd < 0) {
-      std::cerr << "error: poll error, possible network problem\n";
-      break;
-    }
-
-    rc = curl_multi_perform(multi, &active_handles);
-    if (rc != CURLM_OK) {
-      std::cerr << std::format("error: curl_multi_perform failed ({})\n", rc);
-      break;
-    }
-
-    while (DownloadCheckComplete(multi, active_handles) == 0);
-  } while (active_handles > 0);
+void Updater::CleanupCurl(DownloadJob* job) {
+  if (job->curl != nullptr) {
+    curl_multi_remove_handle(curl_multi_, job->curl);
+    curl_easy_cleanup(job->curl);
+    job->curl = nullptr;
+  }
 }
 
-int Updater::DownloadCheckComplete(CURLM* multi, int remaining) {
-  int msgs_left;
+void Updater::FinishJob(DownloadJob* job) {
+  CleanupCurl(job);
 
-  CURLMsg* msg = curl_multi_info_read(multi, &msgs_left);
-  if (msg == nullptr) {
-    return -1;
+  auto on_done = std::move(job->on_done);
+  Repo repo = std::move(job->repo);
+  DownloadResult result = job->dl_result;
+
+  jobs_.remove_if([job](const DownloadJob& j) { return &j == job; });
+  // `job` is now dangling; nothing below may touch it.
+
+  if (on_done) {
+    on_done(repo, result);
+  }
+}
+
+void Updater::HandleDownloadComplete(DownloadJob* job, CURLMsg* msg) {
+  long uptodate = 0;
+  long resp = 0;
+  char* effective_url = nullptr;
+  time_t remote_mtime = 0;
+
+  curl_easy_getinfo(msg->easy_handle, CURLINFO_CONDITION_UNMET, &uptodate);
+  curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &resp);
+  curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL, &effective_url);
+  curl_easy_getinfo(msg->easy_handle, CURLINFO_FILETIME_T, &remote_mtime);
+
+  if (uptodate) {
+    if (job->progress != nullptr) {
+      if (!job->progress->IsInteractive()) {
+        std::cout << std::format("  {} is up to date\n", job->repo.name);
+      }
+      job->progress->FinishDownload(job->progress_index,
+                                    ProgressDisplay::Stage::kSkipped);
+      job->progress->FinishRepack(job->progress_index,
+                                  ProgressDisplay::Stage::kSkipped);
+    }
+    job->dl_result = DownloadResult::UPTODATE;
+    FinishJob(job);
+    return;
   }
 
-  if (msg->msg == CURLMSG_DONE) {
-    long uptodate, resp;
-    char* effective_url;
-    DownloadJob* job;
-    time_t remote_mtime;
-
-    curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &job);
-    curl_easy_getinfo(msg->easy_handle, CURLINFO_CONDITION_UNMET, &uptodate);
-    curl_easy_getinfo(msg->easy_handle, CURLINFO_RESPONSE_CODE, &resp);
-    curl_easy_getinfo(msg->easy_handle, CURLINFO_EFFECTIVE_URL, &effective_url);
-    curl_easy_getinfo(msg->easy_handle, CURLINFO_FILETIME_T, &remote_mtime);
-
-    if (uptodate) {
-      if (job->progress != nullptr) {
-        if (!job->progress->IsInteractive()) {
-          std::cout << std::format("  {} is up to date\n", job->repo.name);
-        }
-        job->progress->FinishDownload(job->progress_index,
-                                      ProgressDisplay::Stage::kSkipped);
-        job->progress->FinishRepack(job->progress_index,
-                                    ProgressDisplay::Stage::kSkipped);
-      }
-      job->dl_result = DownloadResult::UPTODATE;
-      return 0;
+  // was it a success?
+  if (msg->data.result != CURLE_OK || resp >= 400) {
+    if (*job->errmsg) {
+      std::cerr << std::format("warning: download failed: {}: {}\n",
+                               effective_url, job->errmsg);
+    } else {
+      std::cerr << std::format("warning: download failed: {} [error {}]\n",
+                               effective_url, resp);
     }
 
-    // was it a success?
-    if (msg->data.result != CURLE_OK || resp >= 400) {
+    if (DownloadQueueRequest(job) != 0) {
+      // No more servers left to retry: this repo is done for good.
       job->dl_result = DownloadResult::ERROR;
-      if (*job->errmsg) {
-        std::cerr << std::format("warning: download failed: {}: {}\n",
-                                 effective_url, job->errmsg);
-      } else {
-        std::cerr << std::format("warning: download failed: {} [error {}]\n",
-                                 effective_url, resp);
-      }
-
-      const int r = DownloadQueueRequest(multi, job);
-      if (r != 0 && job->progress != nullptr) {
-        // No more servers left to retry: this repo is done for good.
+      if (job->progress != nullptr) {
         job->progress->FinishDownload(job->progress_index,
                                       ProgressDisplay::Stage::kFailed);
         job->progress->FinishRepack(job->progress_index,
                                     ProgressDisplay::Stage::kFailed);
       }
-      return r;
+      FinishJob(job);
     }
+    return;
+  }
 
-    job->tmpfile.size = lseek(job->tmpfile.fd, 0, SEEK_CUR);
-    lseek(job->tmpfile.fd, 0, SEEK_SET);
+  job->tmpfile.size = lseek(job->tmpfile.fd, 0, SEEK_CUR);
+  lseek(job->tmpfile.fd, 0, SEEK_SET);
 
-    struct timeval times[2] = {
-        {remote_mtime, 0},
-        {remote_mtime, 0},
-    };
-    futimes(job->tmpfile.fd, times);
+  struct timeval times[2] = {
+      {remote_mtime, 0},
+      {remote_mtime, 0},
+  };
+  futimes(job->tmpfile.fd, times);
 
-    if (job->progress != nullptr) {
-      const double elapsed =
-          chrono::duration<double>(now() - job->dl_time_start).count();
-      if (!job->progress->IsInteractive()) {
-        PrintDownloadSuccess(job, remaining, elapsed);
-      }
-      job->progress->FinishDownload(job->progress_index,
-                                    ProgressDisplay::Stage::kDone, elapsed);
+  if (job->progress != nullptr) {
+    const double elapsed =
+        chrono::duration<double>(now() - job->dl_time_start).count();
+    if (!job->progress->IsInteractive()) {
+      PrintDownloadSuccess(job, curl_running_handles_, elapsed);
     }
-    job->worker = std::async(std::launch::async,
-                             [this, job] { return RepackRepoData(job); });
-    job->dl_result = DownloadResult::OK;
+    job->progress->FinishDownload(job->progress_index,
+                                  ProgressDisplay::Stage::kDone, elapsed);
+  }
+
+  // The curl transfer is done; release it now rather than waiting for the
+  // repack (which may take a while) to finish.
+  CleanupCurl(job);
+  StartRepack(job);
+}
+
+void Updater::DrainCurlMessages() {
+  CURLMsg* msg;
+  int msgs_left;
+  while ((msg = curl_multi_info_read(curl_multi_, &msgs_left)) != nullptr) {
+    if (msg->msg != CURLMSG_DONE) {
+      continue;
+    }
+    DownloadJob* job = nullptr;
+    curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &job);
+    HandleDownloadComplete(job, msg);
+  }
+}
+
+void Updater::StartRepack(DownloadJob* job) {
+  job->worker = std::async(std::launch::async, [this, job] {
+    const bool ok = RepackRepoData(job);
+    // Wake the event loop so it reaps this job's future without polling.
+    // The eventfd counter, not the write count, carries the notification,
+    // so a failed write here (ENOMEM-class only; the fd is always valid)
+    // just costs a poll-free wakeup we don't get -- nothing to recover.
+    uint64_t one = 1;
+    (void)!write(repack_eventfd_, &one, sizeof(one));
+    return ok;
+  });
+}
+
+void Updater::ReapFinishedRepacks() {
+  // Snapshot which jobs are ready before finishing any of them: FinishJob()
+  // erases from jobs_, which would invalidate an in-progress iteration.
+  std::vector<DownloadJob*> ready;
+  for (auto& job : jobs_) {
+    if (job.worker.valid() && job.worker.wait_for(chrono::seconds::zero()) ==
+                                  std::future_status::ready) {
+      ready.push_back(&job);
+    }
+  }
+
+  for (DownloadJob* job : ready) {
+    const bool repack_ok = job->worker.get();
+    job->dl_result = repack_ok ? DownloadResult::OK : DownloadResult::ERROR;
+    FinishJob(job);
+  }
+}
+
+int Updater::SocketCallback(CURL*, curl_socket_t s, int action, void* userp,
+                            void* socketp) {
+  auto* self = static_cast<Updater*>(userp);
+  auto* io_source = static_cast<sd_event_source*>(socketp);
+
+  if (action == CURL_POLL_REMOVE) {
+    if (io_source != nullptr) {
+      sd_event_source_unref(io_source);
+      curl_multi_assign(self->curl_multi_, s, nullptr);
+    }
+    return 0;
+  }
+
+  uint32_t events = 0;
+  if (action == CURL_POLL_IN || action == CURL_POLL_INOUT) {
+    events |= EPOLLIN;
+  }
+  if (action == CURL_POLL_OUT || action == CURL_POLL_INOUT) {
+    events |= EPOLLOUT;
+  }
+
+  if (io_source == nullptr) {
+    sd_event_source* source = nullptr;
+    sd_event_add_io(self->event_, &source, s, events, &Updater::OnSocketReady,
+                    self);
+    curl_multi_assign(self->curl_multi_, s, source);
+  } else {
+    sd_event_source_set_io_events(io_source, events);
   }
 
   return 0;
 }
 
-int Updater::Update(const std::string& alpm_config_file, bool force) {
-  int r, ret = 0;
+int Updater::OnSocketReady(sd_event_source*, int fd, uint32_t revents,
+                           void* userdata) {
+  auto* self = static_cast<Updater*>(userdata);
 
+  int ev_bitmask = 0;
+  if (revents & EPOLLIN) {
+    ev_bitmask |= CURL_CSELECT_IN;
+  }
+  if (revents & EPOLLOUT) {
+    ev_bitmask |= CURL_CSELECT_OUT;
+  }
+  if (revents & (EPOLLERR | EPOLLHUP)) {
+    ev_bitmask |= CURL_CSELECT_ERR;
+  }
+
+  curl_multi_socket_action(self->curl_multi_, fd, ev_bitmask,
+                           &self->curl_running_handles_);
+  self->DrainCurlMessages();
+
+  return 0;
+}
+
+int Updater::TimerCallback(CURLM*, long timeout_ms, void* userp) {
+  auto* self = static_cast<Updater*>(userp);
+
+  if (timeout_ms < 0) {
+    if (self->curl_timer_source_ != nullptr) {
+      sd_event_source_set_enabled(self->curl_timer_source_, SD_EVENT_OFF);
+    }
+    return 0;
+  }
+
+  uint64_t usec_now = 0;
+  sd_event_now(self->event_, CLOCK_MONOTONIC, &usec_now);
+  const uint64_t deadline = usec_now + static_cast<uint64_t>(timeout_ms) * 1000;
+
+  if (self->curl_timer_source_ == nullptr) {
+    sd_event_add_time(self->event_, &self->curl_timer_source_, CLOCK_MONOTONIC,
+                      deadline, 0, &Updater::OnTimerFired, self);
+  } else {
+    sd_event_source_set_time(self->curl_timer_source_, deadline);
+  }
+  sd_event_source_set_enabled(self->curl_timer_source_, SD_EVENT_ONESHOT);
+
+  return 0;
+}
+
+int Updater::OnTimerFired(sd_event_source*, uint64_t, void* userdata) {
+  auto* self = static_cast<Updater*>(userdata);
+  curl_multi_socket_action(self->curl_multi_, CURL_SOCKET_TIMEOUT, 0,
+                           &self->curl_running_handles_);
+  self->DrainCurlMessages();
+  return 0;
+}
+
+int Updater::OnRepackEventFd(sd_event_source*, int fd, uint32_t,
+                             void* userdata) {
+  auto* self = static_cast<Updater*>(userdata);
+  uint64_t count;
+  // Just draining the counter to clear readability; the count itself
+  // doesn't matter since ReapFinishedRepacks() scans every job.
+  (void)!read(fd, &count, sizeof(count));
+  self->ReapFinishedRepacks();
+  return 0;
+}
+
+void Updater::EnsureCurlEventSources(sd_event* event) {
+  if (event_ != nullptr) {
+    return;
+  }
+  event_ = event;
+
+  curl_multi_setopt(curl_multi_, CURLMOPT_SOCKETFUNCTION,
+                    &Updater::SocketCallback);
+  curl_multi_setopt(curl_multi_, CURLMOPT_SOCKETDATA, this);
+  curl_multi_setopt(curl_multi_, CURLMOPT_TIMERFUNCTION,
+                    &Updater::TimerCallback);
+  curl_multi_setopt(curl_multi_, CURLMOPT_TIMERDATA, this);
+
+  repack_eventfd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  sd_event_add_io(event_, &repack_eventfd_source_, repack_eventfd_, EPOLLIN,
+                  &Updater::OnRepackEventFd, this);
+}
+
+void Updater::Update(sd_event* event, const std::string& alpm_config_file,
+                     bool force, std::function<void(int)> on_done) {
   AlpmConfig alpm_config;
-  ret = AlpmConfig::LoadFromFile(alpm_config_file.c_str(), &alpm_config);
-  if (ret < 0) {
-    return 1;
+  if (AlpmConfig::LoadFromFile(alpm_config_file.c_str(), &alpm_config) < 0) {
+    on_done(1);
+    return;
   }
 
   if (alpm_config.repos.empty()) {
     std::cerr << std::format("error: no repos found in {}\n", alpm_config_file);
-    return 1;
+    on_done(1);
+    return;
   }
 
   if (access(cachedir_.c_str(), W_OK)) {
     std::cerr << std::format("error: unable to write to {}: {}\n", cachedir_,
                              strerror(errno));
-    return 1;
+    on_done(1);
+    return;
   }
 
   std::cout << std::format(":: Updating {} repos...\n",
@@ -485,84 +621,65 @@ int Updater::Update(const std::string& alpm_config_file, bool force) {
   // ensure all our DBs are 0644
   umask(0022);
 
-  auto& repos = alpm_config.repos;
-
   std::vector<std::string> repo_names;
-  repo_names.reserve(repos.size());
-  for (const auto& repo : repos) {
+  repo_names.reserve(alpm_config.repos.size());
+  for (const auto& repo : alpm_config.repos) {
     repo_names.push_back(repo.name);
   }
   progress_ = std::make_unique<ProgressDisplay>(std::move(repo_names));
 
-  // One DownloadJob per repo, holding all state for this update run.
-  // References into `repos` stay valid: AlpmConfig::LoadFromFile already
-  // populated it and nothing resizes it afterwards.
-  std::vector<DownloadJob> jobs;
-  jobs.reserve(repos.size());
-  for (const auto& repo : repos) {
-    jobs.emplace_back(repo);
+  auto state = std::make_shared<UpdateState>();
+  state->remaining = static_cast<int>(alpm_config.repos.size());
+  for (const auto& repo : alpm_config.repos) {
+    state->known_repos.insert(repo.name);
   }
 
-  // prime the handle by adding a URL from each repo
-  for (size_t i = 0; i < jobs.size(); ++i) {
-    DownloadJob& job = jobs[i];
+  EnsureCurlEventSources(event);
+
+  size_t i = 0;
+  for (const auto& repo : alpm_config.repos) {
+    jobs_.emplace_back(repo);
+    DownloadJob& job = jobs_.back();
     job.arch = alpm_config.architecture;
     job.force = force;
     job.progress = progress_.get();
-    job.progress_index = i;
-    r = DownloadQueueRequest(curl_multi_, &job);
-    if (r != 0) {
-      ret = r;
+    job.progress_index = i++;
+    job.on_done = [this, state, on_done](const Repo&, DownloadResult result) {
+      if (result == DownloadResult::ERROR) {
+        state->ret = 1;
+      }
+      if (--state->remaining == 0) {
+        progress_->Finish();
+        TidyCacheDir(state->known_repos);
+        if (!Database::WriteDatabaseVersion(cachedir_)) {
+          std::cerr << "warning: failed to write database version marker\n";
+        }
+        on_done(state->ret);
+      }
+    };
+
+    if (DownloadQueueRequest(&job) != 0) {
+      job.dl_result = DownloadResult::ERROR;
+      FinishJob(&job);
     }
   }
-
-  DownloadWaitLoop(curl_multi_);
-
-  // remove handles, check for errors
-  for (auto& job : jobs) {
-    curl_multi_remove_handle(curl_multi_, job.curl);
-    curl_easy_cleanup(job.curl);
-
-    switch (job.dl_result) {
-      case DownloadResult::OK:
-      case DownloadResult::UPTODATE:
-        break;
-      case DownloadResult::ERROR:
-        ret = 1;
-        break;
-      default:
-        fprintf(stderr, "BUG: unhandled job->dl_result=%d\n",
-                static_cast<int>(job.dl_result));
-        break;
-    }
-  }
-
-  if (WaitForRepacking(&jobs, !progress_->IsInteractive()) != 0) {
-    ret = 1;
-  }
-
-  progress_->Finish();
-
-  std::set<std::string> known_repos;
-  for (const auto& repo : alpm_config.repos) {
-    known_repos.insert(repo.name);
-  }
-
-  TidyCacheDir(known_repos);
-
-  if (!Database::WriteDatabaseVersion(cachedir_)) {
-    std::cerr << "warning: failed to write database version marker\n";
-  }
-
-  return ret;
 }
 
-Updater::Updater(std::string cachedir) : cachedir_(cachedir) {
+Updater::Updater(std::string cachedir) : cachedir_(std::move(cachedir)) {
   curl_global_init(CURL_GLOBAL_ALL);
   curl_multi_ = curl_multi_init();
 }
 
 Updater::~Updater() {
+  if (curl_timer_source_ != nullptr) {
+    sd_event_source_unref(curl_timer_source_);
+  }
+  if (repack_eventfd_source_ != nullptr) {
+    sd_event_source_unref(repack_eventfd_source_);
+  }
+  if (repack_eventfd_ >= 0) {
+    close(repack_eventfd_);
+  }
   curl_multi_cleanup(curl_multi_);
   curl_global_cleanup();
 }

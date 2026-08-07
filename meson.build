@@ -69,7 +69,7 @@ libcommon = static_library(
     src/queue.hh
   '''.split(),
     ),
-    dependencies: [libpcre, libarchive, libcurl, pthreads, stdcppfs],
+    dependencies: [libpcre, libarchive, libcurl, libsystemd, pthreads, stdcppfs],
     install: false,
 )
 

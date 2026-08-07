@@ -705,8 +705,24 @@ int Pkgfile::RunList(const Database& database, std::string_view reponame,
 
 int Pkgfile::Run(const std::vector<std::string>& args) {
   if (options_.mode & MODE_UPDATE) {
-    return Updater(options_.cachedir)
-        .Update(options_.cfgfile, options_.mode == MODE_UPDATE_FORCE);
+    sd_event* event = nullptr;
+    sd_event_new(&event);
+
+    // Updater only registers work on `event`; it never runs the loop
+    // itself, so we own pumping it until the update's completion callback
+    // fires.
+    Updater updater(options_.cachedir);
+    int ret = 0;
+    updater.Update(event, options_.cfgfile, options_.mode == MODE_UPDATE_FORCE,
+                   [&ret, event](int result) {
+                     ret = result;
+                     sd_event_exit(event, 0);
+                   });
+
+    sd_event_loop(event);
+    sd_event_unref(event);
+
+    return ret;
   }
 
   if (args.empty()) {
