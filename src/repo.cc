@@ -129,11 +129,13 @@ int parse_one_file(const char* filename, std::string* section,
       } else if (key == kInclude) {
         parse_include(value, section, alpm_config);
       } else if (in_options && key == kArchitecture) {
-        if (value != kAuto) {
-          // More recent pacman allows alternative architectures, space
-          // delimited. In this case, take only the first value.
-          auto [arch, rest] = split_keyval(value, ' ');
+        // More recent pacman allows alternative architectures, space
+        // delimited, e.g. "auto x86_64_v3" or "x86_64 x86_64_v3". In
+        // either case, take only the first value.
+        auto [arch, rest] = split_keyval(value, ' ');
+        arch = trim(arch);
 
+        if (arch != kAuto) {
           alpm_config->architecture.assign(arch);
         }
       }
