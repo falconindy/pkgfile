@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <string>
@@ -58,8 +59,11 @@ class DbBuilder {
 
   std::string reponame_;
 
-  std::vector<std::string> strings_;
-  std::unordered_map<std::string, StringId> string_lookup_;
+  // A deque (rather than vector) so that a string's address, once interned,
+  // never moves -- string_lookup_ below keys on views into these elements
+  // instead of paying for a second copy of every interned string's bytes.
+  std::deque<std::string> strings_;
+  std::unordered_map<std::string_view, StringId> string_lookup_;
 
   std::vector<PathNode> paths_;
   std::unordered_map<uint64_t, PathId> path_lookup_;
@@ -71,10 +75,22 @@ class DbBuilder {
   };
   std::vector<PendingPackage> packages_;
 
-  // Basename StringId -> every (package, path) occurrence of it. Packages are
-  // referenced by their index into `packages_` until WriteToFile() remaps
-  // them to their final, name-sorted PkgId.
-  std::unordered_map<StringId, std::vector<Posting>> basename_postings_;
+  // Every (package, path) occurrence of every basename, threaded into a
+  // singly linked list per basename instead of a separate vector<Posting>
+  // per basename: real repos have millions of basenames with exactly one
+  // occurrence each (see db_format.hh), and a `vector` per key means a
+  // separate heap allocation for each of them. Packages are referenced by
+  // their index into `packages_` until WriteToFile() remaps them to their
+  // final, name-sorted PkgId.
+  struct PendingPosting {
+    Posting posting;
+    uint32_t prev;  // index into pending_postings_, or kNoPosting
+  };
+  static constexpr uint32_t kNoPosting = 0xFFFFFFFFu;
+  std::vector<PendingPosting> pending_postings_;
+  // Basename StringId -> index into pending_postings_ of its most recently
+  // added occurrence (the head of that basename's list).
+  std::unordered_map<StringId, uint32_t> basename_heads_;
 };
 
 }  // namespace pkgfile::db

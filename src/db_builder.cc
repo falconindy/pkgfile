@@ -41,14 +41,20 @@ ParsePkgNameVersion(std::string_view entryname) {
   return std::pair(entryname.substr(0, pkgver), entryname.substr(pkgver + 1));
 }
 
-// Appends raw bytes of `value` to `buf`, then pads `buf` out to `align` bytes.
-template <typename T>
-void AppendAligned(std::string* buf, const T* data, size_t count,
-                   size_t align) {
-  if (count > 0) {
-    buf->append(reinterpret_cast<const char*>(data), count * sizeof(T));
+// Writes every byte of `data`, retrying on EINTR/short writes.
+bool WriteAll(int fd, const char* data, size_t remaining) {
+  while (remaining > 0) {
+    const ssize_t n = write(fd, data, remaining);
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return false;
+    }
+    data += n;
+    remaining -= n;
   }
-  buf->resize(AlignUp(buf->size(), align), '\0');
+  return true;
 }
 
 }  // namespace
@@ -56,13 +62,14 @@ void AppendAligned(std::string* buf, const T* data, size_t count,
 DbBuilder::DbBuilder(std::string reponame) : reponame_(std::move(reponame)) {}
 
 StringId DbBuilder::InternString(std::string_view s) {
-  if (auto iter = string_lookup_.find(std::string(s));
-      iter != string_lookup_.end()) {
+  if (auto iter = string_lookup_.find(s); iter != string_lookup_.end()) {
     return iter->second;
   }
 
   const StringId id = static_cast<StringId>(strings_.size());
   strings_.emplace_back(s);
+  // strings_ is a deque, so this view into the just-inserted element stays
+  // valid for the string's lifetime even as strings_ keeps growing.
   string_lookup_.emplace(strings_.back(), id);
   return id;
 }
@@ -113,7 +120,11 @@ void DbBuilder::AddPackage(
     const uint32_t tagged = TagPath(leaf, is_dir);
     pkg.tagged_files.push_back(tagged);
 
-    basename_postings_[paths_[leaf].name].push_back(Posting{raw_index, tagged});
+    const auto iter =
+        basename_heads_.try_emplace(paths_[leaf].name, kNoPosting).first;
+    pending_postings_.push_back(
+        PendingPosting{Posting{raw_index, tagged}, iter->second});
+    iter->second = static_cast<uint32_t>(pending_postings_.size() - 1);
   }
 
   packages_.push_back(std::move(pkg));
@@ -174,6 +185,12 @@ std::unique_ptr<DbBuilder> DbBuilder::FromArchive(
 bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
   const StringId repo_name_id = InternString(reponame_);
 
+  // Build-time-only indices: everything below reads the data they pointed
+  // into (strings_, paths_), never the indices themselves, so drop them now
+  // rather than carrying their hash tables past the last point they're used.
+  std::unordered_map<std::string_view, StringId>().swap(string_lookup_);
+  std::unordered_map<uint64_t, PathId>().swap(path_lookup_);
+
   // Sort packages by name, and remap every reference to a package's original
   // (insertion-order) index to its new, sorted PkgId so that list mode can
   // binary search the package table.
@@ -205,12 +222,13 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
     package_files_pool.insert(package_files_pool.end(),
                               pkg.tagged_files.begin(), pkg.tagged_files.end());
   }
+  std::vector<PendingPackage>().swap(packages_);
 
   // Sort distinct basenames by their text so the index can be binary
   // searched, remapping postings to final PkgIds along the way.
   std::vector<StringId> basenames;
-  basenames.reserve(basename_postings_.size());
-  for (const auto& [id, postings] : basename_postings_) {
+  basenames.reserve(basename_heads_.size());
+  for (const auto& [id, head] : basename_heads_) {
     basenames.push_back(id);
   }
   std::sort(basenames.begin(), basenames.end(),
@@ -220,10 +238,16 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
   std::vector<Posting> postings_pool;
   basename_index.reserve(basenames.size());
 
+  // Reused across every basename instead of a fresh heap allocation per one:
+  // capped by the largest number of occurrences any single basename has.
+  std::vector<Posting> postings;
   for (const StringId basename_id : basenames) {
-    std::vector<Posting> postings = basename_postings_[basename_id];
-    for (Posting& p : postings) {
+    postings.clear();
+    for (uint32_t idx = basename_heads_[basename_id]; idx != kNoPosting;
+         idx = pending_postings_[idx].prev) {
+      Posting p = pending_postings_[idx].posting;
       p.pkg = old_to_new[p.pkg];
+      postings.push_back(p);
     }
     std::sort(postings.begin(), postings.end(),
               [](const Posting& a, const Posting& b) {
@@ -249,57 +273,8 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
                            postings.end());
     }
   }
-
-  // Byte pool + string table, in original StringId order.
-  std::string byte_pool;
-  std::vector<StringRef> string_table;
-  string_table.reserve(strings_.size());
-  for (const auto& s : strings_) {
-    string_table.push_back(StringRef{static_cast<uint32_t>(byte_pool.size()),
-                                     static_cast<uint32_t>(s.size())});
-    byte_pool += s;
-  }
-
-  std::string buf;
-  buf.resize(sizeof(Header), '\0');
-
-  Header header{};
-  memcpy(header.magic, kMagic, sizeof(kMagic));
-  header.version = kVersion;
-  header.byte_order_guard = kByteOrderGuard;
-  header.repo_name = repo_name_id;
-  header.package_count = static_cast<uint32_t>(package_table.size());
-
-  header.byte_pool_offset = buf.size();
-  header.byte_pool_size = byte_pool.size();
-  AppendAligned(&buf, byte_pool.data(), byte_pool.size(), 8);
-
-  header.string_table_offset = buf.size();
-  header.string_table_count = string_table.size();
-  AppendAligned(&buf, string_table.data(), string_table.size(), 8);
-
-  header.path_table_offset = buf.size();
-  header.path_table_count = paths_.size();
-  AppendAligned(&buf, paths_.data(), paths_.size(), 8);
-
-  header.package_table_offset = buf.size();
-  header.package_table_count = package_table.size();
-  AppendAligned(&buf, package_table.data(), package_table.size(), 8);
-
-  header.package_files_offset = buf.size();
-  header.package_files_count = package_files_pool.size();
-  AppendAligned(&buf, package_files_pool.data(), package_files_pool.size(), 8);
-
-  header.basename_index_offset = buf.size();
-  header.basename_index_count = basename_index.size();
-  AppendAligned(&buf, basename_index.data(), basename_index.size(), 8);
-
-  header.postings_offset = buf.size();
-  header.postings_count = postings_pool.size();
-  AppendAligned(&buf, postings_pool.data(), postings_pool.size(), 8);
-
-  buf.replace(0, sizeof(Header), reinterpret_cast<const char*>(&header),
-              sizeof(Header));
+  std::vector<PendingPosting>().swap(pending_postings_);
+  std::unordered_map<StringId, uint32_t>().swap(basename_heads_);
 
   const std::string tmppath = path + "~";
   const int fd = open(tmppath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -309,22 +284,98 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
     return false;
   }
 
-  const char* data = buf.data();
-  size_t remaining = buf.size();
-  while (remaining > 0) {
-    const ssize_t n = write(fd, data, remaining);
-    if (n < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      std::cerr << std::format("error: failed to write {}: {}\n", tmppath,
-                               strerror(errno));
-      close(fd);
-      unlink(tmppath.c_str());
+  auto fail = [&] {
+    std::cerr << std::format("error: failed to write {}: {}\n", tmppath,
+                             strerror(errno));
+    close(fd);
+    unlink(tmppath.c_str());
+    return false;
+  };
+
+  Header header{};
+  memcpy(header.magic, kMagic, sizeof(kMagic));
+  header.version = kVersion;
+  header.byte_order_guard = kByteOrderGuard;
+  header.repo_name = repo_name_id;
+  header.package_count = static_cast<uint32_t>(package_table.size());
+
+  // The header goes at the very start of the file but isn't known in full
+  // (it holds every section's offset) until every section below has been
+  // written, so reserve its space now and come back to fill it in once
+  // `header` itself is complete.
+  if (!WriteAll(fd, reinterpret_cast<const char*>(&header), sizeof(header))) {
+    return fail();
+  }
+
+  size_t offset = sizeof(Header);
+  static constexpr char kZeros[8] = {};
+
+  // Writes `count * sizeof(T)` bytes of `data`, records the section's offset
+  // and count into `header`'s `*_offset`/`*_count` fields, then zero-pads out
+  // to 8 bytes so every section (all of which are POD arrays) stays naturally
+  // aligned for the mmap'd reader.
+  auto write_section = [&](uint64_t& header_offset, uint64_t& header_count,
+                           const auto* data, size_t count) {
+    using T = std::remove_pointer_t<decltype(data)>;
+    header_offset = offset;
+    header_count = count;
+
+    const size_t bytes = count * sizeof(T);
+    if (bytes > 0 &&
+        !WriteAll(fd, reinterpret_cast<const char*>(data), bytes)) {
       return false;
     }
-    data += n;
-    remaining -= n;
+    const size_t pad = AlignUp(bytes, 8) - bytes;
+    if (pad > 0 && !WriteAll(fd, kZeros, pad)) {
+      return false;
+    }
+    offset += bytes + pad;
+    return true;
+  };
+
+  // Byte pool + string table, in original StringId order. Written directly
+  // from strings_ rather than concatenated into an intermediate buffer
+  // first, so peak memory never holds a second full copy of every interned
+  // string's bytes.
+  std::vector<StringRef> string_table;
+  string_table.reserve(strings_.size());
+
+  header.byte_pool_offset = offset;
+  size_t pool_size = 0;
+  for (const auto& s : strings_) {
+    string_table.push_back(StringRef{static_cast<uint32_t>(pool_size),
+                                     static_cast<uint32_t>(s.size())});
+    if (!s.empty() && !WriteAll(fd, s.data(), s.size())) {
+      return fail();
+    }
+    pool_size += s.size();
+  }
+  header.byte_pool_size = pool_size;
+  const size_t pool_pad = AlignUp(pool_size, 8) - pool_size;
+  if (pool_pad > 0 && !WriteAll(fd, kZeros, pool_pad)) {
+    return fail();
+  }
+  offset += pool_size + pool_pad;
+  decltype(strings_)().swap(strings_);
+
+  if (!write_section(header.string_table_offset, header.string_table_count,
+                     string_table.data(), string_table.size()) ||
+      !write_section(header.path_table_offset, header.path_table_count,
+                     paths_.data(), paths_.size()) ||
+      !write_section(header.package_table_offset, header.package_table_count,
+                     package_table.data(), package_table.size()) ||
+      !write_section(header.package_files_offset, header.package_files_count,
+                     package_files_pool.data(), package_files_pool.size()) ||
+      !write_section(header.basename_index_offset, header.basename_index_count,
+                     basename_index.data(), basename_index.size()) ||
+      !write_section(header.postings_offset, header.postings_count,
+                     postings_pool.data(), postings_pool.size())) {
+    return fail();
+  }
+
+  if (lseek(fd, 0, SEEK_SET) != 0 ||
+      !WriteAll(fd, reinterpret_cast<const char*>(&header), sizeof(header))) {
+    return fail();
   }
 
   const struct timeval times[2] = {
