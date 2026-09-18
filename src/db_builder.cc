@@ -62,16 +62,12 @@ bool WriteAll(int fd, const char* data, size_t remaining) {
 DbBuilder::DbBuilder(std::string reponame) : reponame_(std::move(reponame)) {}
 
 StringId DbBuilder::InternString(std::string_view s) {
-  if (auto iter = string_lookup_.find(s); iter != string_lookup_.end()) {
-    return iter->second;
-  }
-
-  const StringId id = static_cast<StringId>(strings_.size());
-  strings_.emplace_back(s);
-  // strings_ is a deque, so this view into the just-inserted element stays
-  // valid for the string's lifetime even as strings_ keeps growing.
-  string_lookup_.emplace(strings_.back(), id);
-  return id;
+  return string_lookup_.GetOrInsert(s, [&] {
+    const StringId id = static_cast<StringId>(strings_.size());
+    const std::string_view interned = string_arena_.Add(s);
+    strings_.push_back(interned);
+    return std::pair{id, interned};
+  });
 }
 
 PathId DbBuilder::InternPath(std::string_view path) {
@@ -185,7 +181,7 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
   // Build-time-only indices: everything below reads the data they pointed
   // into (strings_, paths_), never the indices themselves, so drop them now
   // rather than carrying their hash tables past the last point they're used.
-  std::unordered_map<std::string_view, StringId>().swap(string_lookup_);
+  string_lookup_ = StringIndex();
   path_lookup_ = PathIndex();
 
   // Sort packages by name, and remap every reference to a package's original
@@ -354,6 +350,7 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
   }
   offset += pool_size + pool_pad;
   decltype(strings_)().swap(strings_);
+  string_arena_ = StringArena();
 
   if (!write_section(header.string_table_offset, header.string_table_count,
                      string_table.data(), string_table.size()) ||

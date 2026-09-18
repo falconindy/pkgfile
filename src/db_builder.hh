@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <deque>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <string>
@@ -59,11 +59,122 @@ class DbBuilder {
 
   std::string reponame_;
 
-  // A deque (rather than vector) so that a string's address, once interned,
-  // never moves -- string_lookup_ below keys on views into these elements
-  // instead of paying for a second copy of every interned string's bytes.
-  std::deque<std::string> strings_;
-  std::unordered_map<std::string_view, StringId> string_lookup_;
+  // Bump-allocated storage for every interned string's bytes. Unlike a
+  // deque<string>/vector<string>, this costs no per-string heap allocation
+  // and no per-string object overhead (sizeof(std::string) is 32 bytes in
+  // libstdc++, more than most path components) -- just the raw bytes,
+  // packed into large chunks. A string_view returned by Add() stays valid
+  // for the arena's lifetime: chunks, once allocated, never move or get
+  // reused.
+  class StringArena {
+   public:
+    std::string_view Add(std::string_view s) {
+      if (s.size() > kChunkSize) {
+        // Rare (longer than a whole chunk): give it its own allocation
+        // rather than complicating the common bump-allocation path below.
+        auto chunk = std::make_unique<char[]>(s.size());
+        memcpy(chunk.get(), s.data(), s.size());
+        const std::string_view view(chunk.get(), s.size());
+        chunks_.push_back(std::move(chunk));
+        return view;
+      }
+
+      if (used_ + s.size() > current_size_) {
+        chunks_.push_back(std::make_unique<char[]>(kChunkSize));
+        current_ = chunks_.back().get();
+        current_size_ = kChunkSize;
+        used_ = 0;
+      }
+
+      char* dst = current_ + used_;
+      memcpy(dst, s.data(), s.size());
+      used_ += s.size();
+      return std::string_view(dst, s.size());
+    }
+
+   private:
+    static constexpr size_t kChunkSize = 1 << 20;  // 1 MiB
+
+    std::vector<std::unique_ptr<char[]>> chunks_;
+    char* current_ = nullptr;
+    size_t current_size_ = 0;
+    size_t used_ = 0;
+  };
+  StringArena string_arena_;
+
+  // Order-preserving StringId -> content: element i is the string that
+  // InternString() assigned id i, as a view into string_arena_.
+  std::vector<std::string_view> strings_;
+
+  // Open-addressing map from string content to StringId, used only while
+  // interning strings in InternString(). Same rationale as PathIndex below:
+  // real repos intern millions of strings, so a flat array beats
+  // std::unordered_map's per-entry heap node at that scale.
+  class StringIndex {
+   public:
+    // Returns the StringId already stored for `key`, calling `make_id()` to
+    // intern it (copying it into stable storage) and assign a new one if
+    // `key` hasn't been seen before. `make_id` must return the new
+    // (StringId, interned view) pair and must not touch this StringIndex
+    // (no reentrant calls).
+    template <typename MakeId>
+    StringId GetOrInsert(std::string_view key, MakeId make_id) {
+      if (slots_.empty()) {
+        Grow(kInitialCapacity);
+      }
+
+      size_t i = Probe(key);
+      if (slots_[i].occupied) {
+        return slots_[i].value;
+      }
+
+      const auto [id, interned] = make_id();
+      if (++size_ > slots_.size() * 7 / 10) {
+        Grow(slots_.size() + slots_.size() / 2);
+        i = Probe(interned);
+      }
+      slots_[i] = Slot{interned, id, true};
+      return id;
+    }
+
+   private:
+    struct Slot {
+      std::string_view key;
+      StringId value = 0;
+      bool occupied = false;
+    };
+    static constexpr size_t kInitialCapacity = 16;
+
+    // Capacity isn't a power of 2 (see PathIndex below for why), so indexing
+    // uses `%` rather than a bitmask.
+    size_t Probe(std::string_view key) const {
+      const size_t cap = slots_.size();
+      size_t i = std::hash<std::string_view>{}(key) % cap;
+      while (slots_[i].occupied && slots_[i].key != key) {
+        i = (i + 1) % cap;
+      }
+      return i;
+    }
+
+    void Grow(size_t new_capacity) {
+      std::vector<Slot> old = std::move(slots_);
+      slots_.assign(new_capacity, Slot{});
+      for (const Slot& s : old) {
+        if (!s.occupied) {
+          continue;
+        }
+        size_t i = std::hash<std::string_view>{}(s.key) % new_capacity;
+        while (slots_[i].occupied) {
+          i = (i + 1) % new_capacity;
+        }
+        slots_[i] = s;
+      }
+    }
+
+    std::vector<Slot> slots_;
+    size_t size_ = 0;
+  };
+  StringIndex string_lookup_;
 
   std::vector<PathNode> paths_;
 
