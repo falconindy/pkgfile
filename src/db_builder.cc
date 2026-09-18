@@ -87,14 +87,11 @@ PathId DbBuilder::InternPath(std::string_view path) {
     const StringId name_id = InternString(component);
     const uint64_t key = (static_cast<uint64_t>(parent) << 32) | name_id;
 
-    if (auto iter = path_lookup_.find(key); iter != path_lookup_.end()) {
-      parent = iter->second;
-    } else {
+    parent = path_lookup_.GetOrInsert(key, [&] {
       const PathId this_id = static_cast<PathId>(paths_.size());
       paths_.push_back(PathNode{parent, name_id});
-      path_lookup_.emplace(key, this_id);
-      parent = this_id;
-    }
+      return this_id;
+    });
 
     if (slash == path.npos) {
       break;
@@ -189,7 +186,7 @@ bool DbBuilder::WriteToFile(const std::string& path, int64_t mtime) {
   // into (strings_, paths_), never the indices themselves, so drop them now
   // rather than carrying their hash tables past the last point they're used.
   std::unordered_map<std::string_view, StringId>().swap(string_lookup_);
-  std::unordered_map<uint64_t, PathId>().swap(path_lookup_);
+  path_lookup_ = PathIndex();
 
   // Sort packages by name, and remap every reference to a package's original
   // (insertion-order) index to its new, sorted PkgId so that list mode can
