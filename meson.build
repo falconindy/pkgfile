@@ -1,7 +1,7 @@
 project(
     'pkgfile',
     'cpp',
-    version: '26',
+    version: '27',
     license: 'MIT',
     meson_version: '>=0.56',
     default_options: ['cpp_std=c++23', 'warning_level=3', 'prefix=/usr'],
