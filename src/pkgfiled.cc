@@ -33,6 +33,7 @@ constexpr std::string_view kFilesExt = ".files";
 
 void BlockSignals(std::initializer_list<int> signums, sigset_t* saved) {
   sigset_t ss;
+  sigemptyset(&ss);
   for (auto signum : signums) {
     sigaddset(&ss, signum);
   }
