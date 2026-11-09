@@ -241,6 +241,15 @@ int Updater::DownloadQueueRequest(CURLM* multi, DownloadJob* job) {
     }
   } else {
     curl_multi_remove_handle(multi, job->curl);
+    // Discard whatever the failed attempt wrote (possibly a partial archive or
+    // an HTTP error body) so a shorter response from the next server doesn't
+    // leave stale trailing bytes for the archive reader to pick up.
+    if (ftruncate(job->tmpfile.fd, 0) < 0) {
+      std::cerr << std::format(
+          "error: failed to truncate temporary file for download: {}\n",
+          strerror(errno));
+      return -1;
+    }
     lseek(job->tmpfile.fd, 0, SEEK_SET);
     job->server_iter++;
   }
